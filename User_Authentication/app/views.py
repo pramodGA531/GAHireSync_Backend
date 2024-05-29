@@ -1,8 +1,8 @@
 # from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import UserSerializer, LoginSerializer
+from .serializers import UserSerializer, LoginSerializer, JobPostingSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import CustomUser
+from .models import CustomUser,JobPostings
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -79,4 +79,19 @@ class UserViewSet(viewsets.ModelViewSet):
         # Custom logic before deleting instance
         return super().destroy(request, *args, **kwargs)
 
+
+class JobPostingView(APIView):
+    permission_classes =[IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self, request):
+        job_postings = JobPostings.objects.all()
+        serializer = JobPostingSerializer(job_postings, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, *args, **kwargs):
+        serializer = JobPostingSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(username=request.user)  # Assign the user to the `username` field
+            return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

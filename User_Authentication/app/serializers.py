@@ -1,5 +1,5 @@
 from rest_framework.serializers import ModelSerializer,Serializer
-from .models import CustomUser
+from .models import CustomUser , JobPostings
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
@@ -30,3 +30,32 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
 
         return user
+    
+# class UsernameAsPK(serializers.PrimaryKeyRelatedField):
+#     def to_internal_value(self, data):
+#         try:
+#             user = CustomUser.objects.get(username=data)
+#             return user
+#         except CustomUser.DoesNotExist:
+#             raise serializers.ValidationError("User with username '{}' does not exist.".format(data))
+
+
+# class JobPostingSerializer(serializers.ModelSerializer):
+#     username = UsernameAsPK(queryset=CustomUser.objects.all())
+#     class Meta:
+#         model = JobPostings
+#         fields = ["username","jobDescription","primary_skills","secondary_skills","years_of_experience","ctc","rounds_of_interview","interviewers","job_location"]
+    
+#     def create(self, validated_data):
+#         return JobPostings.objects.create(**validated_data)
+class JobPostingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostings
+        fields = [
+            "jobDescription", "primary_skills", "secondary_skills",
+            "years_of_experience", "ctc", "rounds_of_interview", "interviewers", "job_location"
+        ]
+
+    def create(self, validated_data):
+        # User will be assigned in the view
+        return JobPostings.objects.create(**validated_data)
