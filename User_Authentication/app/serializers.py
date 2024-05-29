@@ -52,7 +52,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobPostings
         fields = [
-            "jobDescription", "primary_skills", "secondary_skills",
+            "job_description", "primary_skills", "secondary_skills",
             "years_of_experience", "ctc", "rounds_of_interview", "interviewers", "job_location"
         ]
 

@@ -47,7 +47,7 @@ class CustomUser(AbstractUser):
 
 class JobPostings(models.Model):
     username = models.ForeignKey(CustomUser , on_delete=models.CASCADE, limit_choices_to={"role" : "client"})
-    jobDescription = models.TextField()
+    job_description = models.TextField()
     primary_skills = ArrayField(models.CharField(max_length=50))
     secondary_skills = ArrayField(models.CharField(max_length=50), blank=True, null=True)
     years_of_experience = models.IntegerField()
