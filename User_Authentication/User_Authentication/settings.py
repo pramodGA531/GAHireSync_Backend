@@ -16,11 +16,14 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+import os
+from dotenv import load_dotenv
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure--i@&@75_%2$g33a&dz_a8_5%f!+=hu@k5g7#!3#gwq%+g&p2=1'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -92,11 +95,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'Recruitment_application',  # Replace 'mydatabase' with the name of your PostgreSQL database
-        'USER': 'postgres',      # Replace 'myuser' with your PostgreSQL username
-        'PASSWORD': 'K@lki123',  # Replace 'mypassword' with your PostgreSQL password
-        'HOST': 'localhost',
-        'PORT': '5432',        # Set the port for your PostgreSQL database
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
     }
 }
 
