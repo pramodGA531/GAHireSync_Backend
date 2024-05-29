@@ -46,15 +46,24 @@ class CustomUser(AbstractUser):
 
 
 class JobPostings(models.Model):
-    username = models.ForeignKey(CustomUser , on_delete=models.CASCADE, limit_choices_to={"role" : "client"})
+    username = models.ForeignKey(CustomUser , on_delete = models.CASCADE ,limit_choices_to= {"role" :"client"} ,default = 1)
     job_description = models.TextField()
-    primary_skills = ArrayField(models.CharField(max_length=50))
-    secondary_skills = ArrayField(models.CharField(max_length=50), blank=True, null=True)
+    primary_skills = models.TextField()
+    secondary_skills = models.TextField(blank = True, null=True)
     years_of_experience = models.IntegerField()
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
-    interviewers = ArrayField(models.CharField(max_length=50))  # Assuming a list of interviewers
+    interviewers = models.TextField()
     job_location = models.CharField(max_length=100)
+
+    def get_primary_skills_list(self):
+        return self.primary_skills.split(',') if self.primary_skills else []
+
+    def get_secondary_skills_list(self):
+        return self.secondary_skills.split(',') if self.secondary_skills else []
+    
+    def get_interviewers(self):
+        return self.interviewers.split(',') if self.interviewers else []
 
     def __str__(self):
         return self.job_description
