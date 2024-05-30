@@ -1,6 +1,6 @@
 # from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import UserSerializer, LoginSerializer, JobPostingSerializer
+from .serializers import UserSerializer, LoginSerializer, JobPostingSerializer, GetAllJobPostsSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import CustomUser,JobPostings
 from rest_framework.views import APIView
@@ -84,9 +84,9 @@ class JobPostingView(APIView):
     permission_classes =[IsAuthenticated]
     authentication_classes = [TokenAuthentication]
     def get(self, request):
-        job_postings = JobPostings.objects.all()
+        job_postings = JobPostings.objects.filter(username = request.user)
         serializer = JobPostingSerializer(job_postings, many=True)
-        return Response(serializer.data)
+        return Response({"data":serializer.data}, status= status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         serializer = JobPostingSerializer(data=request.data)
@@ -94,4 +94,20 @@ class JobPostingView(APIView):
             serializer.save(username=request.user)  # Assign the user to the `username` field
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GetAllJobPosts(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self, request):
+        # print(request.role)
+        user = CustomUser.objects.get(username = request.user)
+        if(user.role == "manager"):
+            job_postings = JobPostings.objects.all()
+            print(job_postings)
+            serializer = GetAllJobPostsSerializer(job_postings,many = True)
+            print(serializer.data)
+            return Response({"data":serializer.data},status=status.HTTP_200_OK)
+        else:
+            return Response({"error":"Only manager can see the details"}, status=status.HTTP_401_UNAUTHORIZED)
 

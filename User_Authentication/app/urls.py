@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, LoginView, SignupView, User_view, JobPostingView
+from .views import UserViewSet, LoginView, SignupView, User_view, JobPostingView, GetAllJobPosts
 
 router = DefaultRouter()
 router.register(r'CustomUser',UserViewSet)
@@ -11,4 +11,5 @@ urlpatterns = [
     path('signup/', SignupView.as_view(), name='signup'),
     path('user_view/', User_view.as_view() ),
     path('job_posting/', JobPostingView.as_view()),
+    path('get_all_job_posts/', GetAllJobPosts.as_view()),
 ]

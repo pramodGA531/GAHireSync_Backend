@@ -29,12 +29,14 @@ class CustomUser(AbstractUser):
     CANDIDATE = 'candidate'
     RECRUITER = 'recruiter'
     CLIENT = 'client'
+    MANAGER = 'manager'
 
     ROLE_CHOICES = [
         (ADMIN, 'admin'),
         (CANDIDATE , 'candidate'),
         (RECRUITER, 'recruiter'),
         (CLIENT , 'client'),
+        (MANAGER , 'manager'),
     ]
 
     email = models.EmailField(unique=True)
@@ -50,7 +52,7 @@ class JobPostings(models.Model):
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank = True, null=True)
-    years_of_experience = models.IntegerField()
+    years_of_experience = models.IntegerField(default=0)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
     interviewers = models.TextField()
