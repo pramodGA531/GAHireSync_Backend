@@ -54,13 +54,11 @@ class GetAllJobPostsSerializer(serializers.ModelSerializer):
         return obj.username.username
     
 class TandC_Serializer(serializers.ModelSerializer):
-    username = serializers.SerializerMethodField()
+    username = serializers.CharField(source='username.username', read_only=True)
+
     class Meta:
         model = ManagerDetails
         fields = ['username', 'terms_and_conditions']
 
     def create(self, validated_data):
         return ManagerDetails.objects.create(**validated_data)
-    
-    def get_username(self, obj):
-        return obj.username.username

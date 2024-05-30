@@ -104,7 +104,6 @@ class GetAllJobPosts(APIView):
         user = CustomUser.objects.get(username = request.user)
         if(user.role == "manager"):
             job_postings = JobPostings.objects.all()
-            print(job_postings)
             serializer = GetAllJobPostsSerializer(job_postings,many = True)
             print(serializer.data)
             return Response({"data":serializer.data},status=status.HTTP_200_OK)
@@ -112,6 +111,20 @@ class GetAllJobPosts(APIView):
             return Response({"error":"Only manager can see the details"}, status=status.HTTP_401_UNAUTHORIZED)
 
         
+class TandC_for_client(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self, request):
+        user = CustomUser.objects.get(username = request.user)
+        if(user.role == 'client'):
+            Manager = ManagerDetails.objects.all()
+            serializer = TandC_Serializer(Manager,many= True)
+            print(serializer)
+            print(serializer.data)
+            return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error":"Only client can see the Terms and conditions"}, status=status.HTTP_401_UNAUTHORIZED)
+
 class TandC(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
