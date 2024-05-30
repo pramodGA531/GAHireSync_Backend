@@ -9,8 +9,18 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
+from django.core.mail import send_mail
 
 # Create your views here.
+
+def send_email(sender, subject, message,receipents_list):
+    send_mail(
+        subject,
+        message,
+        sender,
+        [receipents_list],
+        fail_silently=False
+    )
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -31,6 +41,11 @@ class LoginView(APIView):
 class SignupView(APIView):
     permission_classes = [AllowAny]
     def post(self, request, *args, **kwargs):
+        data = request.data
+        if data['role'] == "manager":
+            user = CustomUser.objects.filter(role = "manager")
+            if user:
+                return Response({"error":"only one manager is allowed"}, status=status.HTTP_400_BAD_REQUEST)
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -92,6 +107,7 @@ class JobPostingView(APIView):
         serializer = JobPostingSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(username=request.user)  # Assign the user to the `username` field
+            subject =  'Job added by {request.user}'
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -149,3 +165,5 @@ class TandC(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
