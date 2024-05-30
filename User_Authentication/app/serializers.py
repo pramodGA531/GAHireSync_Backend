@@ -1,5 +1,5 @@
 from rest_framework.serializers import ModelSerializer,Serializer
-from .models import CustomUser , JobPostings
+from .models import CustomUser , JobPostings , ManagerDetails
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
@@ -50,5 +50,17 @@ class GetAllJobPostsSerializer(serializers.ModelSerializer):
         model = JobPostings
         fields = '__all__'
 
+    def get_username(self, obj):
+        return obj.username.username
+    
+class TandC_Serializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+    class Meta:
+        model = ManagerDetails
+        fields = ['username', 'terms_and_conditions']
+
+    def create(self, validated_data):
+        return ManagerDetails.objects.create(**validated_data)
+    
     def get_username(self, obj):
         return obj.username.username

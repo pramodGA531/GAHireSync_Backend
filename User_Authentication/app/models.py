@@ -48,7 +48,7 @@ class CustomUser(AbstractUser):
 
 
 class JobPostings(models.Model):
-    username = models.ForeignKey(CustomUser , on_delete = models.CASCADE ,limit_choices_to= {"role" :"client"} ,default = 1)
+    username = models.ForeignKey(CustomUser , on_delete = models.CASCADE ,limit_choices_to= {"role" :"client"} )
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank = True, null=True)
@@ -69,3 +69,10 @@ class JobPostings(models.Model):
 
     def __str__(self):
         return self.job_description
+
+
+class ManagerDetails(models.Model):
+    username = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"manager"})
+    terms_and_conditions = models.TextField(default='')
+
+    

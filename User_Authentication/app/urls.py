@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, LoginView, SignupView, User_view, JobPostingView, GetAllJobPosts
+from .views import UserViewSet, LoginView, SignupView, User_view, JobPostingView, GetAllJobPosts, TandC
 
 router = DefaultRouter()
 router.register(r'CustomUser',UserViewSet)
@@ -12,4 +12,5 @@ urlpatterns = [
     path('user_view/', User_view.as_view() ),
     path('job_posting/', JobPostingView.as_view()),
     path('get_all_job_posts/', GetAllJobPosts.as_view()),
+    path('t_and_c/',TandC.as_view()),
 ]

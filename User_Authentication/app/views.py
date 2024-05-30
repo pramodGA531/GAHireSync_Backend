@@ -1,8 +1,8 @@
 # from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import UserSerializer, LoginSerializer, JobPostingSerializer, GetAllJobPostsSerializer
+from .serializers import UserSerializer, LoginSerializer, JobPostingSerializer, GetAllJobPostsSerializer, TandC_Serializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import CustomUser,JobPostings
+from .models import CustomUser,JobPostings, ManagerDetails
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -111,3 +111,28 @@ class GetAllJobPosts(APIView):
         else:
             return Response({"error":"Only manager can see the details"}, status=status.HTTP_401_UNAUTHORIZED)
 
+        
+class TandC(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+
+    def get(self, request):
+        try:
+            user = ManagerDetails.objects.get(username=request.user)
+            serializer = TandC_Serializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ManagerDetails.DoesNotExist:
+            return Response({"error": "ManagerDetails not found for this user"}, status=status.HTTP_404_NOT_FOUND)
+    
+    def put(self, request, *args, **kwargs):
+        try:
+            user = ManagerDetails.objects.get(username=request.user)
+        except ManagerDetails.DoesNotExist:
+            # If ManagerDetails does not exist, create a new one
+            user = ManagerDetails.objects.create(username=request.user)
+
+        serializer = TandC_Serializer(user, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
