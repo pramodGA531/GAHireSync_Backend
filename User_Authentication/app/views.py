@@ -10,6 +10,9 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
 from django.core.mail import send_mail
+from django.contrib.auth.tokens import default_token_generator
+import random
+
 
 # Create your views here.
 
@@ -107,7 +110,14 @@ class JobPostingView(APIView):
         serializer = JobPostingSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(username=request.user)  # Assign the user to the `username` field
-            subject =  'Job added by {request.user}'
+            subject =  f'Job added by {request.user}'
+            message = f'These are the Job posts details \n {serializer.data}'
+            client= CustomUser.objects.get(username = request.user)
+            client_email = client.email
+            sender_email = CustomUser.objects.get(role = "manager").email
+            send_email(sender = client_email, subject=subject, message=message, receipents_list=sender_email)
+            print(client_email)
+            
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -167,3 +177,27 @@ class TandC(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
+
+# def send_verification_email(token ,email):
+    
+#     # uid = urlsafe_base64_encode(force_bytes(user.pk))
+    
+#     send_mail(
+#         "Verify your email",
+#          f"this is you otp : {token}",
+#         "mrsaibalaji112@gmail.com",
+#         [email],
+#         fail_silently=False,
+#     )
+#     return token
+
+class Authenticating_mail(APIView):
+    def post(self, request):
+        token = random.randint(1000,9999)
+        try:
+            send_email(sender='mrsaibalaji112@gmail.com',subject="email authentication",message= f'This is your OTP {token}',receipents_list=request.data['email'])
+            print("mail sent successfully")
+        except Exception as e:
+            print(e,"this is the error")
+        # print(request.data['email'])
+        return Response({"token":token})
