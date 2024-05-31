@@ -16,9 +16,7 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
 from django.core.mail import send_mail
-from django.contrib.auth.tokens import default_token_generator
 import random
-
 
 # Create your views here.
 
@@ -127,14 +125,7 @@ class JobPostingView(APIView):
         serializer = JobPostingSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(username=request.user)  # Assign the user to the `username` field
-            subject =  f'Job added by {request.user}'
-            message = f'These are the Job posts details \n {serializer.data}'
-            client= CustomUser.objects.get(username = request.user)
-            client_email = client.email
-            sender_email = CustomUser.objects.get(role = "manager").email
-            send_email(sender = client_email, subject=subject, message=message, receipents_list=sender_email)
-            print(client_email)
-            
+            subject =  'Job added by {request.user}'
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
