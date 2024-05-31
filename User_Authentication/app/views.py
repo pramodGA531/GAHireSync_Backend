@@ -1,8 +1,14 @@
 # from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import UserSerializer, LoginSerializer, JobPostingSerializer, GetAllJobPostsSerializer, TandC_Serializer
+from .serializers import (
+    UserSerializer,
+    LoginSerializer,
+    JobPostingSerializer,
+    GetAllJobPostsSerializer,
+    TandC_Serializer,
+)
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import CustomUser,JobPostings, ManagerDetails
+from .models import CustomUser, JobPostings, ManagerDetails
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -27,22 +33,29 @@ def send_email(sender, subject, message,receipents_list):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
-        serializer = LoginSerializer(data = request.data)
+        serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            username = serializer.validated_data['username']
-            password = serializer.validated_data['password']
+            username = serializer.validated_data["username"]
+            password = serializer.validated_data["password"]
             user = authenticate(username=username, password=password)
             if user:
                 token, _ = Token.objects.get_or_create(user=user)
                 role = user.role
-                return Response({"token":str(token), 'role':role} , status=status.HTTP_200_OK)
+                return Response(
+                    {"token": str(token), "role": role}, status=status.HTTP_200_OK
+                )
             else:
-                return Response({'error': 'Invalid username or password'}, status=status.HTTP_401_UNAUTHORIZED)
-            
+                return Response(
+                    {"error": "Invalid username or password"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
 
 class SignupView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         data = request.data
         if data['role'] == "manager":
@@ -53,27 +66,30 @@ class SignupView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             token, _ = Token.objects.get_or_create(user=user)
-            return Response({'token': str(token), 'role': user.role}, status=status.HTTP_201_CREATED)
+            return Response(
+                {"token": str(token), "role": user.role}, status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
 class User_view(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
 
-    def get(self,request , *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         user = request.user
         user_data = {
-            'id' : user.id ,
-            'username': user.username,
-            'email' : user.email, 
-            'role' : user.role
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
         }
-        return Response(user_data , status= status.HTTP_200_OK)
-    
-    def patch(self,request):
+        return Response(user_data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
         pass
 
-            
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
@@ -99,12 +115,13 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class JobPostingView(APIView):
-    permission_classes =[IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
+
     def get(self, request):
-        job_postings = JobPostings.objects.filter(username = request.user)
+        job_postings = JobPostings.objects.filter(username=request.user)
         serializer = JobPostingSerializer(job_postings, many=True)
-        return Response({"data":serializer.data}, status= status.HTTP_200_OK)
+        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         serializer = JobPostingSerializer(data=request.data)
@@ -125,31 +142,40 @@ class JobPostingView(APIView):
 class GetAllJobPosts(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
+
     def get(self, request):
         # print(request.role)
-        user = CustomUser.objects.get(username = request.user)
-        if(user.role == "manager"):
+        user = CustomUser.objects.get(username=request.user)
+        if user.role == "manager":
             job_postings = JobPostings.objects.all()
-            serializer = GetAllJobPostsSerializer(job_postings,many = True)
+            serializer = GetAllJobPostsSerializer(job_postings, many=True)
             print(serializer.data)
-            return Response({"data":serializer.data},status=status.HTTP_200_OK)
+            return Response({"data": serializer.data}, status=status.HTTP_200_OK)
         else:
-            return Response({"error":"Only manager can see the details"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"error": "Only manager can see the details"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
-        
+
 class TandC_for_client(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
+
     def get(self, request):
-        user = CustomUser.objects.get(username = request.user)
-        if(user.role == 'client'):
+        user = CustomUser.objects.get(username=request.user)
+        if user.role == "client":
             Manager = ManagerDetails.objects.all()
-            serializer = TandC_Serializer(Manager,many= True)
+            serializer = TandC_Serializer(Manager, many=True)
             print(serializer)
             print(serializer.data)
-            return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+            return Response({"data": serializer.data}, status=status.HTTP_200_OK)
         else:
-            return Response({"error":"Only client can see the Terms and conditions"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"error": "Only client can see the Terms and conditions"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
 
 class TandC(APIView):
     permission_classes = [IsAuthenticated]
@@ -161,8 +187,11 @@ class TandC(APIView):
             serializer = TandC_Serializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except ManagerDetails.DoesNotExist:
-            return Response({"error": "ManagerDetails not found for this user"}, status=status.HTTP_404_NOT_FOUND)
-    
+            return Response(
+                {"error": "ManagerDetails not found for this user"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
     def put(self, request, *args, **kwargs):
         try:
             user = ManagerDetails.objects.get(username=request.user)
@@ -176,20 +205,6 @@ class TandC(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-
-
-# def send_verification_email(token ,email):
-    
-#     # uid = urlsafe_base64_encode(force_bytes(user.pk))
-    
-#     send_mail(
-#         "Verify your email",
-#          f"this is you otp : {token}",
-#         "mrsaibalaji112@gmail.com",
-#         [email],
-#         fail_silently=False,
-#     )
-#     return token
 
 class Authenticating_mail(APIView):
     def post(self, request):
