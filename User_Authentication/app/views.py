@@ -7,6 +7,8 @@ from .serializers import (
     GetAllJobPostsSerializer,
     TandC_Serializer,
 )
+from User_Authentication import settings
+import uuid
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import CustomUser, JobPostings, ManagerDetails
 from rest_framework.views import APIView
@@ -14,6 +16,7 @@ from django.contrib.auth import authenticate
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.models import Token
+from django.shortcuts import get_object_or_404
 from rest_framework.authentication import TokenAuthentication
 from django.core.mail import send_mail
 import random
@@ -59,16 +62,45 @@ class SignupView(APIView):
         if data['role'] == "manager":
             user = CustomUser.objects.filter(role = "manager")
             if user:
+                print("only one user is allowed as manager")
                 return Response({"error":"only one manager is allowed"}, status=status.HTTP_400_BAD_REQUEST)
+        email_token = str(uuid.uuid4())
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
+            print(data['role'])
             user = serializer.save()
+            user.email_token = email_token
+            print(user.email_token,"is the email token")
+            send_email(subject="Email Verification for RMS ",
+                        message=f"This is the link to verify your account, please click on this link http://localhost:3000/verify/?token={email_token}",
+                        sender = settings.EMAIL_HOST_USER,
+                        receipents_list=data['email']
+                        )
+            user.save()
             token, _ = Token.objects.get_or_create(user=user)
             return Response(
-                {"token": str(token), "role": user.role}, status=status.HTTP_201_CREATED
+                {"token": str(token),"is_verified":user.is_verified, "role": user.role}, status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
+class Verify_email(APIView):
+    def get(self, request, token):
+        # print("token is ", request.data,"and the token is ", token)
+        try:
+            print("entered here")
+            user = CustomUser.objects.get(email_token=token)
+            # user.is_verified = True
+            # user.save()
+            if not user.is_verified:
+                user.is_verified = True
+                user.save()
+                return Response({"message": "Email verification successful.","role":user.role}, status=status.HTTP_200_OK)
+            else:
+                return Response({"message": "Email already verified."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
 
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
 
 class User_view(APIView):
     permission_classes = [IsAuthenticated]
@@ -124,8 +156,15 @@ class JobPostingView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = JobPostingSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(username=request.user)  # Assign the user to the `username` field
-            subject =  'Job added by {request.user}'
+            serializer.save(username=request.user) 
+             # Assign the user to the `username` field
+            manager = CustomUser.objects.get(role="manager")
+            manager_email= manager.email
+            subject =  f'Job added by {request.user}'
+            message = f'your Client {request.user} added new Job posts.. go and check it \n this is link go and join \n '
+            sender = settings.EMAIL_HOST_USER
+            receipents_list = manager_email
+            send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -200,10 +239,26 @@ class TandC(APIView):
 class Authenticating_mail(APIView):
     def post(self, request):
         token = random.randint(1000,9999)
-        try:
-            send_email(sender='mrsaibalaji112@gmail.com',subject="email authentication",message= f'This is your OTP {token}',receipents_list=request.data['email'])
-            print("mail sent successfully")
-        except Exception as e:
-            print(e,"this is the error")
-        # print(request.data['email'])
-        return Response({"token":token})
+        user = CustomUser.objects.filter(email = request.data['email'])
+        if CustomUser.DoesNotExist:
+            try:
+                send_email(sender='mrsaibalaji112@gmail.com',subject="email authentication",message= f'This is your OTP {token}',receipents_list=request.data['email'])
+                print("mail sent successfully")
+            except Exception as e:
+                print(e,"this is the error")
+            # print(request.data['email'])
+            return Response({"token":token})
+        else:
+            print("entered here")
+            return Response({"error":"email is already present"})
+
+
+class verify_email(APIView):
+    def post(self, request):
+        user = CustomUser.objects.get(email_token = request.token)
+        if CustomUser.DoesNotExist:
+            return Response({"message" : "your account is not yet created"})
+        user.is_verified = True
+        user.save()
+        return Response({"message":"Your account is verified"})
+        

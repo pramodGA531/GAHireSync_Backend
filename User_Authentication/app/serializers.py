@@ -2,8 +2,6 @@ from rest_framework.serializers import ModelSerializer, Serializer
 from .models import CustomUser, JobPostings, ManagerDetails
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-
-
 # from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
@@ -34,6 +32,7 @@ class UserSerializer(serializers.ModelSerializer):
             username=validated_data["username"],
             role=role,
         )
+        
         user.set_password(validated_data["password"])
         user.save()
 

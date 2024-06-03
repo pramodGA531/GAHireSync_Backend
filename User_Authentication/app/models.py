@@ -44,7 +44,7 @@ class CustomUser(AbstractUser):
 
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default="user")
-
+    email_token = models.CharField(max_length=20 , null=False, default='')
     is_verified = models.BooleanField(default=False)
 
     def __str__(self):
