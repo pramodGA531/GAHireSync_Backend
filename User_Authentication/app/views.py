@@ -10,7 +10,7 @@ from .serializers import (
 from User_Authentication import settings
 import uuid
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import CustomUser, JobPostings, ManagerDetails
+from .models import CustomUser, JobPostings, TermsAndConditions
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -195,10 +195,9 @@ class TandC_for_client(APIView):
     def get(self, request):
         user = CustomUser.objects.get(username=request.user)
         if user.role == "client":
-            Manager = ManagerDetails.objects.all()
+            Manager = TermsAndConditions.objects.all()
             serializer = TandC_Serializer(Manager, many=True)
-            print(serializer)
-            print(serializer.data)
+            
             return Response({"data": serializer.data}, status=status.HTTP_200_OK)
         else:
             return Response(
@@ -213,52 +212,42 @@ class TandC(APIView):
 
     def get(self, request):
         try:
-            user = ManagerDetails.objects.get(username=request.user)
+            user = TermsAndConditions.objects.get(username=request.user)
             serializer = TandC_Serializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except ManagerDetails.DoesNotExist:
+        except TermsAndConditions.DoesNotExist:
             return Response(
-                {"error": "ManagerDetails not found for this user"},
+                {"error": "TermsAndConditions not found for this user"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
     def put(self, request, *args, **kwargs):
         try:
-            user = ManagerDetails.objects.get(username=request.user)
-        except ManagerDetails.DoesNotExist:
-            # If ManagerDetails does not exist, create a new one
-            user = ManagerDetails.objects.create(username=request.user)
+            user = TermsAndConditions.objects.get(username=request.user)
+        except TermsAndConditions.DoesNotExist:
+            # If TermsAndConditions does not exist, create a new one
+            user = TermsAndConditions.objects.create(username=request.user)
 
         serializer = TandC_Serializer(user, data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ParticularJob(APIView):
     
-
-class Authenticating_mail(APIView):
-    def post(self, request):
-        token = random.randint(1000,9999)
-        user = CustomUser.objects.filter(email = request.data['email'])
-        if CustomUser.DoesNotExist:
+    permission_classes=[IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self,request,id):
+        user = CustomUser.objects.get(username = request.user)
+        if user.role == 'manager':
             try:
-                send_email(sender='mrsaibalaji112@gmail.com',subject="email authentication",message= f'This is your OTP {token}',receipents_list=request.data['email'])
-                print("mail sent successfully")
-            except Exception as e:
-                print(e,"this is the error")
-            # print(request.data['email'])
-            return Response({"token":token})
+                job_details = JobPostings.objects.get(id=id)
+            except JobPostings.DoesNotExist:
+                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = GetAllJobPostsSerializer(job_details)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            print("entered here")
-            return Response({"error":"email is already present"})
-
-
-class verify_email(APIView):
-    def post(self, request):
-        user = CustomUser.objects.get(email_token = request.token)
-        if CustomUser.DoesNotExist:
-            return Response({"message" : "your account is not yet created"})
-        user.is_verified = True
-        user.save()
-        return Response({"message":"Your account is verified"})
+            return Response({"warning":"only manager can see this page"})
         

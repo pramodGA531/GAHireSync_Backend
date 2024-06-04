@@ -77,7 +77,7 @@ class JobPostings(models.Model):
         return self.job_description
 
 
-class ManagerDetails(models.Model):
+class TermsAndConditions(models.Model):
     username = models.OneToOneField(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"}
     )
