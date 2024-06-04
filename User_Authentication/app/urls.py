@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, LoginView, SignupView, User_view, JobPostingView, GetAllJobPosts, TandC, TandC_for_client,  Verify_email,ParticularJob
+from .views import *
 
 router = DefaultRouter()
 router.register(r"CustomUser", UserViewSet)
@@ -16,6 +16,7 @@ urlpatterns = [
     path("t_and_c_for_client/", TandC_for_client.as_view()),
     path("verify_email/<str:token>/",Verify_email.as_view(), name='verify_email'),
     path("particular_job/<str:id>/",ParticularJob.as_view()),
-    
-    # path('verify-email/',Authenticating_mail.as_view()),
+    path("get_all_staff/",GetStaff.as_view()),
+    path("select_staf/",SelectStaff.as_view()),
+    path("get_name/",GetName.as_view()),
 ]

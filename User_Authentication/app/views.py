@@ -6,6 +6,7 @@ from .serializers import (
     JobPostingSerializer,
     GetAllJobPostsSerializer,
     TandC_Serializer,
+    GetStaffSerializer
 )
 from User_Authentication import settings
 import uuid
@@ -235,7 +236,7 @@ class TandC(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ParticularJob(APIView):
-    
+
     permission_classes=[IsAuthenticated]
     authentication_classes = [TokenAuthentication]
     def get(self,request,id):
@@ -250,4 +251,44 @@ class ParticularJob(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             return Response({"warning":"only manager can see this page"})
-        
+    
+class GetStaff(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self, request):
+        role = "recruiter"
+        staff= CustomUser.objects.filter(role=role)
+        print(staff)
+        serializer = GetStaffSerializer(staff, many=True)
+        return Response(serializer.data)
+
+class SelectStaff(APIView):
+    # permission_classes  = [IsAuthenticated]
+    # authentication_classes = [TokenAuthentication]
+    def post(self, request):
+        # print(request.data['id'])
+        print(request.data.get("client"))
+        client = request.data.get("client")
+        try:
+            id = request.data.get("id")
+            print(id)
+            obj = JobPostings.objects.get(id=id)
+            print(obj)
+            print("entered here")
+            serializer = JobPostingSerializer(obj)
+            user = CustomUser.objects.get(username = client)
+            obj.is_assigned = user
+            obj.save()
+            # obj.save()
+
+            return Response({"success":serializer.data})
+        except Exception as e:
+            print(e)
+            return Response({"error":"there is an error"})
+
+class GetName(APIView):
+    def post(self, request):
+        user = CustomUser.objects.get(id=request.data.get("id")).username
+        return Response({"name":user})
+
+    

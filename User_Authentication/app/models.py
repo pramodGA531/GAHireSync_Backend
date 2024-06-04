@@ -52,6 +52,7 @@ class CustomUser(AbstractUser):
 
 
 class JobPostings(models.Model):
+    id = models.AutoField(primary_key=True)
     username = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
@@ -63,6 +64,8 @@ class JobPostings(models.Model):
     rounds_of_interview = models.IntegerField()
     interviewers = models.TextField()
     job_location = models.CharField(max_length=100)
+    is_approved = models.BooleanField(default=False)
+    is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []

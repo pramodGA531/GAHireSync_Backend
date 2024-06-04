@@ -83,3 +83,11 @@ class TandC_Serializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return TermsAndConditions.objects.create(**validated_data)
+
+
+class GetStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = '__all__'
+
+        
