@@ -187,6 +187,32 @@ class JobPostingView(APIView):
             send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class EditJobPostView(APIView):
+    def put(self, request,pk):        
+        try:
+            job_post = JobPostings.objects.get(pk=pk)
+            print(job_post.username)
+            receiver_email = CustomUser.objects.get(username = job_post.username).email
+            print(receiver_email)
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job post does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = JobPostingSerializer(instance=job_post, data=request.data)
+        if serializer.is_valid():
+            serializer.save( username = job_post.username)
+            # manager = CustomUser.objects.get(role="manager")
+            # manager_email = manager.email
+            subject = f'Job edited by {request.user}'
+            message = f'Your Manager {request.user} has updated your job post. Go and check it!\nThis is the link to see: '
+            sender = settings.EMAIL_HOST_USER
+            # print(manager_email)
+            receipients_list = receiver_email
+            send_email(sender=sender, subject=subject, message=message , receipents_list=receipients_list)
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class GetAllJobPosts(APIView):
