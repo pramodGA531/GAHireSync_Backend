@@ -1,5 +1,5 @@
 from rest_framework.serializers import ModelSerializer, Serializer
-from .models import CustomUser, JobPostings, TermsAndConditions
+from .models import *
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 # from rest_framework import serializers
@@ -92,3 +92,10 @@ class GetStaffSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
         
+class ResumeUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CandidateResume
+        fields = ['id','resume','sender','receiver','job_id','message']
+
+    def create(self, validated_data):
+        return CandidateResume.objects.create(**validated_data)

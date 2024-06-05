@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import *
+from django.conf.urls.static import static
 
 router = DefaultRouter()
 router.register(r"CustomUser", UserViewSet)
@@ -22,4 +23,5 @@ urlpatterns = [
     path("jobposts_for_staff/",GetJobsForStaff.as_view()),
     path("particular_job_staff/<str:id>/",ParticularJobForStaff.as_view()),
     path("verify_resend_email/",Resend_verify_email.as_view()),
-]
+    path("recruiter/upload_resume/",UploadResume.as_view()),
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

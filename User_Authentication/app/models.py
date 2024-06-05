@@ -87,4 +87,15 @@ class TermsAndConditions(models.Model):
     terms_and_conditions = models.TextField(default="")
 
 class CandidateResume(models.Model):
-    pass
+    resume = models.FileField(upload_to='Resumes/')
+    job_id = models.ForeignKey(JobPostings,related_name="job_id",on_delete=models.CASCADE)
+    candidate_name = models.CharField(max_length=40, null=True, default='')
+    candidate_email = models.EmailField( null=True, default='')
+    candidate_phone = models.IntegerField(null=True, default=0)
+    other_details = models.CharField(max_length=100, null=True, default='')
+    sender = models.ForeignKey(CustomUser,related_name="sender", on_delete = models.CASCADE, default='',null=True,limit_choices_to={"role":"recruiter"})
+    receiver = models.ForeignKey(CustomUser,related_name="receiver", on_delete = models.CASCADE, default='',null=True,limit_choices_to={"role":"client"})
+    message = models.TextField(null=True)
+
+    def __str__(self):
+        return self.candidate_name

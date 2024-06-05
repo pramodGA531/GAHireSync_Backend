@@ -1,13 +1,6 @@
 # from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import (
-    UserSerializer,
-    LoginSerializer,
-    JobPostingSerializer,
-    GetAllJobPostsSerializer,
-    TandC_Serializer,
-    GetStaffSerializer
-)
+from .serializers import *
 from User_Authentication import settings
 import uuid
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -20,6 +13,7 @@ from rest_framework.authtoken.models import Token
 from django.shortcuts import get_object_or_404
 from rest_framework.authentication import TokenAuthentication
 from django.core.mail import send_mail
+from rest_framework.parsers import MultiPartParser, FormParser
 
 # Create your views here.
 
@@ -341,3 +335,50 @@ class ParticularJobForStaff(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             return Response({"warning":"only recruiter can see this page"})
+        
+class UploadResume(APIView):
+
+    # def post(self, request):
+    #     sender = CustomUser.objects.get(id = request.data['sender_id']).username
+    #     receiver = CustomUser.objects.get(id= request.data['receiver_id']).username
+    #     serializer = ResumeUploadSerializer(data=request.data)
+    #     if serializer.is_valid():
+    #         return Response({"success":"Resume Upload Successfully"})
+    #     return Response({"error":"There is an error in uploading resume"})
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def post(self, request, *args, **kwargs):
+
+        sender = CustomUser.objects.get(username = request.user).id
+        print(sender,"is the sender")
+        job_id = request.data.get('job_id')
+        receiver_name = JobPostings.objects.get(id=job_id).username
+        receiver = CustomUser.objects.get(username = receiver_name).id
+        print(receiver)
+        resumes = [request.FILES[key] for key in request.FILES if 'resumes[' in key]
+        feedbacks = [request.data[key] for key in request.data if 'feedbacks[' in key]
+        if not job_id or not resumes or not feedbacks:
+            print("entered here")
+            return Response({'error': 'Missing data'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        response_data = []
+
+        for resume, feedback in zip(resumes, feedbacks):
+            data = {
+               'job_id': job_id,
+                'resume': resume,
+                'message': feedback,
+                'sender': sender,
+                'receiver': receiver,
+            }
+            
+            file_serializer = ResumeUploadSerializer(data=data)
+            if file_serializer.is_valid():
+                file_serializer.save()
+                response_data.append(file_serializer.data)
+            else:
+                print(file_serializer.errors)
+                return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
