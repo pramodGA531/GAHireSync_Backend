@@ -9,11 +9,11 @@ from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.authtoken.models import Token
-from django.shortcuts import get_object_or_404
-from rest_framework.authentication import TokenAuthentication
+# from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.core.mail import send_mail
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # Create your views here.
 
@@ -36,10 +36,13 @@ class LoginView(APIView):
             password = serializer.validated_data["password"]
             user = authenticate(username=username, password=password)
             if user:
-                token, _ = Token.objects.get_or_create(user=user)
+                
                 role = user.role
                 is_verified = user.is_verified
                 print(is_verified)
+                refresh = RefreshToken.for_user(user)
+                token = str(refresh.access_token)
+
                 return Response(
                     {"token": str(token), "role": role, "is_verified" : is_verified}, status=status.HTTP_200_OK
                 )
@@ -73,9 +76,11 @@ class SignupView(APIView):
                         receipents_list=data['email']
                         )
             user.save()
-            token, _ = Token.objects.get_or_create(user=user)
+            refresh = RefreshToken.for_user(user)
+            token = str(refresh.access_token)
+
             return Response(
-                {"token": str(token),"is_verified":user.is_verified, "role": user.role}, status=status.HTTP_201_CREATED
+                {"token": token,"is_verified":user.is_verified, "role": user.role}, status=status.HTTP_201_CREATED
             )
         return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -119,7 +124,7 @@ class Resend_verify_email(APIView):
 
 class User_view(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
 
     def get(self, request, *args, **kwargs):
         user = request.user
@@ -161,7 +166,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class JobPostingView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
 
     def get(self, request):
         job_postings = JobPostings.objects.filter(username=request.user)
@@ -186,7 +191,7 @@ class JobPostingView(APIView):
 
 class GetAllJobPosts(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
 
     def get(self, request):
         # print(request.role)
@@ -205,7 +210,7 @@ class GetAllJobPosts(APIView):
 
 class TandC_for_client(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
 
     def get(self, request):
         user = CustomUser.objects.get(username=request.user)
@@ -223,7 +228,7 @@ class TandC_for_client(APIView):
 
 class TandC(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
 
     def get(self, request):
         try:
@@ -252,7 +257,7 @@ class TandC(APIView):
 class ParticularJob(APIView):
 
     permission_classes=[IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     def get(self,request,id):
         user = CustomUser.objects.get(username = request.user)
         if user.role == 'manager':
@@ -268,7 +273,7 @@ class ParticularJob(APIView):
     
 class GetStaff(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     def get(self, request):
         role = "recruiter"
         staff= CustomUser.objects.filter(role=role)
@@ -278,7 +283,7 @@ class GetStaff(APIView):
 
 class SelectStaff(APIView):
     permission_classes  = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     def post(self, request):
         # print(request.data['id'])
         print(request.data.get("client"))
@@ -307,7 +312,7 @@ class GetName(APIView):
     
 class GetJobsForStaff(APIView):
     permission_classes= [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     def get(self,request):
         print(request.user)
         try:
@@ -321,7 +326,7 @@ class GetJobsForStaff(APIView):
     
 class ParticularJobForStaff(APIView):
     permission_classes=[IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     def get(self,request,id):
         user = CustomUser.objects.get(username = request.user)
         if user.role == 'recruiter':
@@ -346,7 +351,7 @@ class UploadResume(APIView):
     #     return Response({"error":"There is an error in uploading resume"})
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     def post(self, request, *args, **kwargs):
 
         sender = CustomUser.objects.get(username = request.user).id
@@ -385,7 +390,7 @@ class UploadResume(APIView):
 
 class ResumeUploadView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, *args, **kwargs):
