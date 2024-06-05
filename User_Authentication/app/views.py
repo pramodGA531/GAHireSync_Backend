@@ -20,7 +20,6 @@ from rest_framework.authtoken.models import Token
 from django.shortcuts import get_object_or_404
 from rest_framework.authentication import TokenAuthentication
 from django.core.mail import send_mail
-import random
 
 # Create your views here.
 
@@ -45,8 +44,10 @@ class LoginView(APIView):
             if user:
                 token, _ = Token.objects.get_or_create(user=user)
                 role = user.role
+                is_verified = user.is_verified
+                print(is_verified)
                 return Response(
-                    {"token": str(token), "role": role}, status=status.HTTP_200_OK
+                    {"token": str(token), "role": role, "is_verified" : is_verified}, status=status.HTTP_200_OK
                 )
             else:
                 return Response(
@@ -83,15 +84,15 @@ class SignupView(APIView):
                 {"token": str(token),"is_verified":user.is_verified, "role": user.role}, status=status.HTTP_201_CREATED
             )
         return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
+
 class Verify_email(APIView):
     def get(self, request, token):
         # print("token is ", request.data,"and the token is ", token)
         try:
             print("entered here")
             user = CustomUser.objects.get(email_token=token)
-            # user.is_verified = True
-            # user.save()
             if not user.is_verified:
                 user.is_verified = True
                 user.save()
@@ -101,6 +102,25 @@ class Verify_email(APIView):
         except Exception as e:
 
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+class Resend_verify_email(APIView):
+    def post(self, request):
+        print(request.data["username"])
+        try:
+            email_token = str(uuid.uuid4())
+            sender_email = settings.EMAIL_HOST_USER
+            message = f"Now you can verify this email by clicking this link  http://localhost:3000/verify/?token={email_token}"
+            subject = "Verication for RMS portal"
+            user = CustomUser.objects.get(username=request.data['username'])
+            receipents_list = user.email
+            user.email_token = email_token
+            print(email_token)
+            print(user.email_token)
+            user.save()
+            send_email(sender=sender_email, message=message, subject=subject, receipents_list=receipents_list)
+            return Response({"success":"email sent successfully"},status=status.HTTP_202_ACCEPTED)
+        except Exception as e:
+            return Response({'error':str(e)}, status=status.HTTP_406_NOT_ACCEPTABLE)
         
 
 class User_view(APIView):
@@ -263,8 +283,8 @@ class GetStaff(APIView):
         return Response(serializer.data)
 
 class SelectStaff(APIView):
-    # permission_classes  = [IsAuthenticated]
-    # authentication_classes = [TokenAuthentication]
+    permission_classes  = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
     def post(self, request):
         # print(request.data['id'])
         print(request.data.get("client"))
@@ -290,5 +310,34 @@ class GetName(APIView):
     def post(self, request):
         user = CustomUser.objects.get(id=request.data.get("id")).username
         return Response({"name":user})
-
     
+class GetJobsForStaff(APIView):
+    permission_classes= [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self,request):
+        print(request.user)
+        try:
+            userid = CustomUser.objects.get(username=request.user).id
+            jobs = JobPostings.objects.filter(is_assigned = userid)
+            serializer = JobPostingSerializer(jobs,many = True)
+            return Response({"data":serializer.data})
+        except Exception as e:
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+    
+    
+class ParticularJobForStaff(APIView):
+
+    permission_classes=[IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    def get(self,request,id):
+        user = CustomUser.objects.get(username = request.user)
+        if user.role == 'recruiter':
+            try:
+                job_details = JobPostings.objects.get(id=id)
+            except JobPostings.DoesNotExist:
+                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = GetAllJobPostsSerializer(job_details)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response({"warning":"only recruiter can see this page"})
