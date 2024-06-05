@@ -22,7 +22,7 @@ class LoginSerializer(Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["username", "email", "password", "role", "resume"]
+        fields = ["username", "email", "password", "role", "resume", "is_verified"]
         extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, validated_data):
@@ -44,6 +44,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobPostings
         fields = [
+            "id",
             "job_description",
             "primary_skills",
             "secondary_skills",

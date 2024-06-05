@@ -20,4 +20,7 @@ urlpatterns = [
     path("select_staf/",SelectStaff.as_view()),
     path("get_name/",GetName.as_view()),
     path("upload_resume/", ResumeUploadView.as_view(), name='upload_resume'),
+    path("jobposts_for_staff/",GetJobsForStaff.as_view()),
+    path("particular_job_staff/<str:id>/",ParticularJobForStaff.as_view()),
+    path("verify_resend_email/",Resend_verify_email.as_view()),
 ]
