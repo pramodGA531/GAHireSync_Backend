@@ -22,7 +22,7 @@ class LoginSerializer(Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["username", "email", "password", "role"]
+        fields = ["username", "email", "password", "role", "resume"]
         extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, validated_data):
@@ -37,6 +37,7 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
 
         return user
+    
 
 
 class JobPostingSerializer(serializers.ModelSerializer):
@@ -91,3 +92,7 @@ class GetStaffSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
         
+class ResumeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['resume']

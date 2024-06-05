@@ -8,10 +8,12 @@ from .serializers import (
     TandC_Serializer,
     GetStaffSerializer
 )
+from rest_framework.parsers import MultiPartParser, FormParser
+from .serializers import ResumeSerializer
 from User_Authentication import settings
 import uuid
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import CustomUser, JobPostings, TermsAndConditions
+from .models import CustomUser, JobPostings, TermsAndConditions, Resume
 from rest_framework.views import APIView
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -291,4 +293,21 @@ class GetName(APIView):
         user = CustomUser.objects.get(id=request.data.get("id")).username
         return Response({"name":user})
 
-    
+class ResumeUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        print(request)
+        if user.role != 'candidate':
+            return Response({"error": "Only candidates can upload resumes"}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = ResumeSerializer(data=request.data, partial=True)
+        if serializer.is_valid():
+
+            serializer.save()
+            
+            return Response({"message": "Resume uploaded successfully"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

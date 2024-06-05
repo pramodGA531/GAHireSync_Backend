@@ -19,4 +19,5 @@ urlpatterns = [
     path("get_all_staff/",GetStaff.as_view()),
     path("select_staf/",SelectStaff.as_view()),
     path("get_name/",GetName.as_view()),
+    path("upload_resume/", ResumeUploadView.as_view(), name='upload_resume'),
 ]
