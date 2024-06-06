@@ -14,6 +14,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.core.mail import send_mail
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.db.models import Count
 
 # Create your views here.
 
@@ -474,3 +475,20 @@ class ApproveJob(APIView):
         except Exception as e:
             print(e)
             return Response({"error":"check your internet connection/email"})
+
+class ReceivedData(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request):
+        job_counts = CandidateResume.objects.values('job_id').annotate(job_count=Count('job_id'))
+        print(job_counts)
+        response_data = [{'job_id': job['job_id'], 'job_count': job['job_count']} for job in job_counts]
+        return Response(response_data)
+        
+class JobResume(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request , id):
+        objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
+        serializer = ResumeUploadSerializer(objects, many = True)
+        return Response(serializer.data)
