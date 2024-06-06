@@ -23,7 +23,11 @@ urlpatterns = [
     path("upload_resume/", ResumeUploadView.as_view(), name='upload_resume'),
     path("jobposts_for_staff/",GetJobsForStaff.as_view()),
     path("particular_job_staff/<str:id>/",ParticularJobForStaff.as_view()),
+    path("particular_job_client/<str:id>/",ParticularJobForClient.as_view()),
     path("verify_resend_email/",Resend_verify_email.as_view()),
     path("recruiter/upload_resume/",UploadResume.as_view()),
     path("edit_particular_job/<str:pk>/",EditJobPostView.as_view()),
+    path('not_approval_jobs/',NotApprovalJobs.as_view()),
+    path('client/approve_job/<str:key>/',ApproveJob.as_view()),
+    
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
