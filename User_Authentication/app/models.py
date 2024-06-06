@@ -57,6 +57,7 @@ class JobPostings(models.Model):
     username = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
+    job_title = models.CharField(max_length=255,default='')
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank=True, null=True)
@@ -65,6 +66,16 @@ class JobPostings(models.Model):
     rounds_of_interview = models.IntegerField()
     interviewers = models.TextField()
     job_location = models.CharField(max_length=100)
+    job_type = models.CharField(max_length=100,default='')
+    job_level = models.CharField(max_length=100, default='')
+    qualifications = models.TextField(default='')
+    timings = models.CharField(max_length=100,default='')
+    other_benefits = models.TextField(default='')
+    working_days_per_week = models.IntegerField(default=5)
+    interview_process = models.CharField(max_length=255, default='')
+    decision_maker = models.CharField(max_length=100, default='')
+    bond = models.TextField(max_length=255, default='')
+    rotational_shift = models.BooleanField()
     is_approved = models.BooleanField(default=True)
     is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
 
