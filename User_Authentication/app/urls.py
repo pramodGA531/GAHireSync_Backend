@@ -30,5 +30,6 @@ urlpatterns = [
     path('not_approval_jobs/',NotApprovalJobs.as_view()),
     path('client/approve_job/<str:key>/',ApproveJob.as_view()),
     path('client/received_data/',ReceivedData.as_view()),
-    path('client/job_resume/<str:id>/',JobResume.as_view()), 
+    path('client/job_resume/<str:id>/',JobResume.as_view()),
+    path('update_details/',User_view.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

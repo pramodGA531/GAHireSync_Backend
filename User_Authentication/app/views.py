@@ -137,8 +137,14 @@ class User_view(APIView):
         }
         return Response(user_data, status=status.HTTP_200_OK)
 
-    def patch(self, request):
-        pass
+    def put(self, request):
+        user = request.user
+        obj = CustomUser.objects.get(username = user)
+        for qun,ans in request.data:
+            obj.qun = ans
+        obj.save()
+        print(request.data)
+        return Response({"success":"This is the success message"})
 
 
 class UserViewSet(viewsets.ModelViewSet):

@@ -61,7 +61,7 @@ class JobPostings(models.Model):
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank=True, null=True)
-    years_of_experience = models.IntegerField(default=0)
+    years_of_experience = models.IntegerField()
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
     interviewers = models.TextField()
@@ -90,7 +90,7 @@ class JobPostings(models.Model):
         return self.interviewers.split(",") if self.interviewers else []
 
     def __str__(self):
-        return self.job_description
+        return self.job_title
 
 
 class TermsAndConditions(models.Model):
