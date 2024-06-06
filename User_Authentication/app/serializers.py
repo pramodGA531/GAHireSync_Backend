@@ -45,6 +45,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
         model = JobPostings
         fields = [
             "id",
+            "job_title",
             "job_description",
             "primary_skills",
             "secondary_skills",
@@ -53,6 +54,16 @@ class JobPostingSerializer(serializers.ModelSerializer):
             "rounds_of_interview",
             "interviewers",
             "job_location",
+            "job_type",
+            "job_level",
+            "qualifications",
+            "timings",
+            "other_benefits",
+            "working_days_per_week",
+            "interview_process",
+            "decision_maker",
+            "bond",
+            "rotational_shift",
         ]
 
     def create(self, validated_data):
