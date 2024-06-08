@@ -100,18 +100,51 @@ class TermsAndConditions(models.Model):
     terms_and_conditions = models.TextField(default="")
 
 class CandidateResume(models.Model):
+    PERMANENT = 'permanent'
+    CONTRACT = 'contract'
+    WORKING = 'working'
+    NOT_WORKING = 'not_working'
+    SERVING_NOTICE = 'serving_notice'
+    EMPLOYMENT_TYPE_CHOICES = [
+        (PERMANENT, 'Permanent'),
+        (CONTRACT, 'Contract'),
+    ]
+
+    JOB_STATUS = [
+        (WORKING , 'working'),
+        (NOT_WORKING, 'not_working'),
+        (SERVING_NOTICE , 'serving_notice'),
+    ]
+
     resume = models.FileField(upload_to='Resumes/')
-    job_id = models.ForeignKey(JobPostings,related_name="job_id",on_delete=models.CASCADE)
+    job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
     candidate_name = models.CharField(max_length=40, null=True, default='')
-    candidate_email = models.EmailField( null=True, default='')
-    candidate_phone = models.IntegerField(null=True, default=0)
-    other_details = models.CharField(max_length=100, null=True, default='')
-    sender = models.ForeignKey(CustomUser,related_name="sender", on_delete = models.CASCADE, default='',null=True,limit_choices_to={"role":"recruiter"})
-    receiver = models.ForeignKey(CustomUser,related_name="receiver", on_delete = models.CASCADE, default='',null=True,limit_choices_to={"role":"client"})
-    message = models.TextField(null=True)
+    candidate_email = models.EmailField(null=True, default='')
+    contact_number = models.CharField(max_length=15, null=True, default='')  # Changed to CharField to support international phone numbers
+    alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
+    other_details = models.CharField(max_length=100, null=True, blank=True, default='')  # Made it optional with blank=True
+    sender = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
+    receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
+    message = models.TextField(null=True, blank=True)  # Made it optional with blank=True
+    current_organisation = models.CharField(max_length=100, null=True, default='')
+    current_job_location = models.CharField(max_length=100, null=True, default='')
+    current_job_type = models.CharField(max_length=50, choices=EMPLOYMENT_TYPE_CHOICES, default=PERMANENT)
+    date_of_birth = models.DateField(null=True)
+    total_years_of_experience = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Total years of experience can be in decimal
+    years_of_experience_in_cloud = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Years of experience in cloud can be in decimal
+    skillset = models.JSONField(null=True, blank=True)  # Skillset can be stored as text
+    job_status = models.CharField(max_length=20, null=True, choices=JOB_STATUS)
+    current_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Current CTC can be in decimal
+    expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Expected CTC can be in decimal
+    notice_period = models.CharField(max_length=50, null=True, blank=True)  # Notice period can be stored as text
+    joining_days_required = models.IntegerField(null=True, blank=True)  # Number of days required for joining
+    highest_qualification = models.CharField(max_length=100, null=True, blank=True)   # Alternate contact number can be stored as text
+    is_accepted = models.BooleanField(default=False)
+    is_rejected = models.BooleanField(default=False)
+    on_hold = models.BooleanField(default=False)
 
     def __str__(self):
-        return self.candidate_name
+        return f"{self.candidate_name}'s Resume"
 
 class Resume(models.Model):
     id = models.AutoField(primary_key=True)

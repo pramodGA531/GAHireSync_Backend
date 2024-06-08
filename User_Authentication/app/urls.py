@@ -20,6 +20,7 @@ urlpatterns = [
     path("get_all_staff/",GetStaff.as_view()),
     path("select_staf/",SelectStaff.as_view()),
     path("get_name/",GetName.as_view()),
+    path('candidates_data/<str:id>/',UploadResume.as_view()),
     path("upload_resume/", ResumeUploadView.as_view(), name='upload_resume'),
     path("jobposts_for_staff/",GetJobsForStaff.as_view()),
     path("particular_job_staff/<str:id>/",ParticularJobForStaff.as_view()),
@@ -31,5 +32,6 @@ urlpatterns = [
     path('client/approve_job/<str:key>/',ApproveJob.as_view()),
     path('client/received_data/',ReceivedData.as_view()),
     path('client/job_resume/<str:id>/',JobResume.as_view()),
+    path('client/candidate/save_response/<str:id>/',CandidateDataResponse.as_view()),
     path('update_details/',User_view.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

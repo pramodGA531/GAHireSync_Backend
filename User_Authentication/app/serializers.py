@@ -81,12 +81,6 @@ class GetAllJobPostsSerializer(serializers.ModelSerializer):
     def get_username(self, obj):
         return obj.username.username
 
-# class ParticularJobPostSerializer(serializers.ModelSerializer):
-#     username = serializers.SerializerMethodField()
-#     class Meta:
-#         model = JobPostings
-#         fields
-
 class TandC_Serializer(serializers.ModelSerializer):
     username = serializers.CharField(source="username.username", read_only=True)
 
@@ -107,7 +101,10 @@ class GetStaffSerializer(serializers.ModelSerializer):
 class ResumeUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateResume
-        fields = ['id','resume','sender','receiver','job_id','message']
+        fields = ['id','resume','sender','receiver','job_id','candidate_name','contact_number',
+                  'alternate_contact_number','current_organisation','current_job_location','current_job_type','date_of_birth',  
+                  'total_years_of_experience','years_of_experience_in_cloud','skillset','current_ctc',
+                  'expected_ctc','notice_period','joining_days_required','highest_qualification']
 
     def create(self, validated_data):
         return CandidateResume.objects.create(**validated_data)
@@ -116,3 +113,6 @@ class ResumeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['resume']
+
+    def create(self, validated_data):
+        return Resume.objects.create(**validated_data)

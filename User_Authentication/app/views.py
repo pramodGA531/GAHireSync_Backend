@@ -3,6 +3,7 @@ from rest_framework import viewsets
 from .serializers import *
 from User_Authentication import settings
 import uuid
+import json
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import CustomUser, JobPostings, TermsAndConditions, Resume
 from rest_framework.views import APIView
@@ -14,7 +15,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.core.mail import send_mail
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models import Count
+from django.db.models import Count,F
 
 # Create your views here.
 
@@ -45,7 +46,7 @@ class LoginView(APIView):
                 token = str(refresh.access_token)
 
                 return Response(
-                    {"token": str(token), "role": role, "is_verified" : is_verified}, status=status.HTTP_200_OK
+                    {"token": str(token), "role": role,"is_verified" : is_verified}, status=status.HTTP_200_OK
                 )
             else:
                 return Response(
@@ -77,11 +78,11 @@ class SignupView(APIView):
                         receipents_list=data['email']
                         )
             user.save()
-            refresh = RefreshToken.for_user(user)
+            refresh = (RefreshToken.for_user(user))
             token = str(refresh.access_token)
 
             return Response(
-                {"token": token,"is_verified":user.is_verified, "role": user.role}, status=status.HTTP_201_CREATED
+                {"token": token,"is_verified":user.is_verified,"role": user.role}, status=status.HTTP_201_CREATED
             )
         return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -387,52 +388,71 @@ class ParticularJobForClient(APIView):
         
 class UploadResume(APIView):
 
-    # def post(self, request):
-    #     sender = CustomUser.objects.get(id = request.data['sender_id']).username
-    #     receiver = CustomUser.objects.get(id= request.data['receiver_id']).username
-    #     serializer = ResumeUploadSerializer(data=request.data)
-    #     if serializer.is_valid():
-    #         return Response({"success":"Resume Upload Successfully"})
-    #     return Response({"error":"There is an error in uploading resume"})
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
-    def post(self, request, *args, **kwargs):
-
-        sender = CustomUser.objects.get(username = request.user).id
-        print(sender,"is the sender")
-        job_id = request.data.get('job_id')
-        receiver_name = JobPostings.objects.get(id=job_id).username
-        receiver = CustomUser.objects.get(username = receiver_name).id
-        print(receiver)
-        resumes = [request.FILES[key] for key in request.FILES if 'resumes[' in key]
-        feedbacks = [request.data[key] for key in request.data if 'feedbacks[' in key]
-        if not job_id or not resumes or not feedbacks:
-            print("entered here")
-            return Response({'error': 'Missing data'}, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request,id,  *args, **kwargs):
+        sender = User.objects.get(username=request.user).id
+        job_id = id
         
-        response_data = []
+        if not job_id or job_id == 'undefined':
+            print("entered 1")
+            return Response({'error': 'Job ID is missing or invalid'}, status=status.HTTP_400_BAD_REQUEST)
 
-        for resume, feedback in zip(resumes, feedbacks):
-            data = {
-               'job_id': job_id,
-                'resume': resume,
-                'message': feedback,
-                'sender': sender,
-                'receiver': receiver,
-            }
-            
-            file_serializer = ResumeUploadSerializer(data=data)
-            if file_serializer.is_valid():
-                file_serializer.save()
-                response_data.append(file_serializer.data)
-            else:
-                print(file_serializer.errors)
-                return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            receiver_name = JobPostings.objects.get(id=job_id).username
+            receiver = User.objects.get(username=receiver_name).id
+        except JobPostings.DoesNotExist:
+            return Response({'error': 'Job posting not found'}, status=status.HTTP_404_NOT_FOUND)
+        except User.DoesNotExist:
+            return Response({'error': 'Receiver not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(response_data, status=status.HTTP_201_CREATED)
+        resume = request.FILES.get('resume')
+        if not resume:
+            print("entered 2")
+            return Response({'error': 'Resume file is missing'}, status=status.HTTP_400_BAD_REQUEST)
+        print(request.data.get('skillset'))
+        print(request.data)
+        try:
+            skillset = json.loads(request.data.get('skillset'))
+        except json.JSONDecodeError:
+            print("entered 3")
+            return Response({'error': 'Invalid skillset data'}, status=status.HTTP_400_BAD_REQUEST)
 
+        data = {
+            'job_id': job_id,
+            'resume': resume,
+            'candidate_name': request.data.get('candidate_name'),
+            'candidate_email': request.data.get('candidate_email'),
+            'candidate_phone': request.data.get('candidate_phone'),
+            'other_details': request.data.get('other_details'),
+            'sender': sender,
+            'receiver': receiver,
+            'message': request.data.get('message'),
+            'current_organisation': request.data.get('current_organisation'),
+            'current_job_type': request.data.get('current_job_type'),
+            'alternate_candidate_phone': request.data.get('alternate_candidate_phone'),
+            'date_of_birth': request.data.get('date_of_birth'),
+            'total_years_of_experience': request.data.get('total_years_of_experience'),
+            'years_of_experience_in_cloud': request.data.get('years_of_experience_in_cloud'),
+            'skillset': skillset,
+            'current_ctc': request.data.get('current_ctc'),
+            'expected_ctc': request.data.get('expected_ctc'),
+            'notice_period': request.data.get('notice_period'),
+            'joining_days_required': request.data.get('joining_days_required'),
+            'highest_qualification': request.data.get('highest_qualification'),
+            'contact_number': request.data.get('contact_number'),
+            'alternate_contact_number': request.data.get('alternate_contact_number')
+        }
 
+        file_serializer = ResumeUploadSerializer(data=data)
+        if file_serializer.is_valid():
+            file_serializer.save()
+            return Response(file_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            print("entered 4",file_serializer.errors) 
+            return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
 class ResumeUploadView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -495,6 +515,30 @@ class JobResume(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
     def get(self, request , id):
-        objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
+        objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id).filter(is_accepted = False).filter(is_rejected = False).filter(on_hold = False)
         serializer = ResumeUploadSerializer(objects, many = True)
         return Response(serializer.data)
+
+class CandidateDataResponse(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def post(self, request,id):
+        try:
+            obj = CandidateResume.objects.get(id = id)
+            response = request.data.get('response')
+            if(response == 'Accept'):
+                obj.is_accepted = True
+            if(response == 'Reject'):
+                obj.is_rejected = True
+                feedback = request.data.get('feedback')
+                obj.message = feedback
+            if(response == 'Hold'):
+                obj.on_hold = True
+            obj.save()
+            print(obj.is_accepted, "object saved")
+            objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id).filter(is_accepted = False).filter(is_rejected = False).filter(on_hold = False)
+            file_serializer = ResumeUploadSerializer(objects , many = True)
+            return Response({"success":"Your response saved successfully","data":file_serializer.data})  
+        except Exception as e:
+            print(e)
+            return Response({"error":str(e)})    
