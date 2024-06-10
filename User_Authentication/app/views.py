@@ -515,7 +515,8 @@ class JobResume(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
     def get(self, request , id):
-        objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id).filter(is_accepted = False).filter(is_rejected = False).filter(on_hold = False)
+        # objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id).filter(is_accepted = False).filter(is_rejected = False).filter(on_hold = False)
+        objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
         serializer = ResumeUploadSerializer(objects, many = True)
         return Response(serializer.data)
 
@@ -536,9 +537,33 @@ class CandidateDataResponse(APIView):
                 obj.on_hold = True
             obj.save()
             print(obj.is_accepted, "object saved")
-            objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id).filter(is_accepted = False).filter(is_rejected = False).filter(on_hold = False)
+            objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
             file_serializer = ResumeUploadSerializer(objects , many = True)
             return Response({"success":"Your response saved successfully","data":file_serializer.data})  
         except Exception as e:
             print(e)
             return Response({"error":str(e)})    
+        
+class ViewedCandidateResume(APIView):
+    def put(self, request, id):
+        try:
+            obj = CandidateResume.objects.get(id = id)
+            obj.is_viewed = True
+            obj.save()
+            return Response({"success":"edited successfully"}, status= status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":"there is an error"})
+
+class FeedbackResume(APIView):
+    def put(self, request, id):
+        try:
+            obj = CandidateResume.objects.get(id = id)
+            obj.message = request.data.get('feedback')
+            print(request.data)
+            obj.save()
+            print("entereed")
+            return Response({"success":"edited successfully"}, status= status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":"there is an error"})

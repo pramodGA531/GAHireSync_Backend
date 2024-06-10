@@ -142,6 +142,7 @@ class CandidateResume(models.Model):
     is_accepted = models.BooleanField(default=False)
     is_rejected = models.BooleanField(default=False)
     on_hold = models.BooleanField(default=False)
+    is_viewed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.candidate_name}'s Resume"
