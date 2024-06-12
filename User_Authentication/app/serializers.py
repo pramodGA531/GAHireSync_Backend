@@ -116,3 +116,8 @@ class ResumeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return Resume.objects.create(**validated_data)
+    
+class JobTitleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostings
+        fields = ['job_title']

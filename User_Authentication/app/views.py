@@ -532,13 +532,19 @@ class CandidateDataResponse(APIView):
             response = request.data.get('response')
             if(response == 'Accept'):
                 obj.is_accepted = True
+                obj.is_rejected = False
+                obj.on_hold = False
                 obj.status = 'accepted'
             if(response == 'Reject'):
+                obj.is_accepted = False
                 obj.is_rejected = True
+                obj.on_hold = False
                 feedback = request.data.get('feedback')
                 obj.message = feedback
                 obj.status = 'rejected'
             if(response == 'Hold'):
+                obj.is_accepted = False
+                obj.is_rejected = False
                 obj.on_hold = True
                 obj.status = 'hole'
             obj.save()
@@ -551,6 +557,8 @@ class CandidateDataResponse(APIView):
             return Response({"error":str(e)})    
         
 class ViewedCandidateResume(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     def put(self, request, id):
         try:
             obj = CandidateResume.objects.get(id = id)
@@ -562,6 +570,8 @@ class ViewedCandidateResume(APIView):
             return Response({"error":"there is an error"})
 
 class FeedbackResume(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     def put(self, request, id):
         try:
             obj = CandidateResume.objects.get(id = id)
@@ -575,6 +585,8 @@ class FeedbackResume(APIView):
             return Response({"error":"there is an error"})
 
 class ViewApplication(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     def get(self,request):
         user = CustomUser.objects.get(username = request.user)
         if(user.role == 'recruiter'):
@@ -591,4 +603,30 @@ class ViewApplication(APIView):
             serializer = ResumeUploadSerializer(objects,many = True)
             return Response({"data":serializer.data},status= status.HTTP_200_OK)
 
-        
+class ParticularApplication(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request, id):
+        obj = CandidateResume.objects.get(id = id)
+        serializer = ResumeUploadSerializer(obj)
+        return Response({"data":serializer.data},status=status.HTTP_200_OK) 
+
+class SearchJobTitles(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request):
+        print(request.GET.get('search',''))
+        search_term = request.GET.get('search',"")
+        if search_term:
+            job_titles = JobPostings.objects.filter(job_title__icontains = search_term).values_list('job_title',flat=True).distinct()
+            jobs = []
+            for job_title in job_titles:
+                job= JobPostings.objects.get(job_title = job_title)
+                if job:
+                    jobs.append(job)
+            serializer = JobPostingSerializer(jobs, many = True)
+            # serializer = JobTitleSerializer(job_titles , many = True)
+            print(serializer.data)
+            return Response({"data":serializer.data, "titles":job_titles}, status=status.HTTP_200_OK)
+        return Response([])
+    

@@ -57,7 +57,7 @@ class JobPostings(models.Model):
     username = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
-    job_title = models.CharField(max_length=255,default='')
+    job_title = models.CharField(max_length=255,default='',unique=True)
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank=True, null=True)
@@ -120,11 +120,21 @@ class CandidateResume(models.Model):
     REJECTED =  'rejected'
     HOLD =  'hold'
     PENDING =   'pending'
+    ROUND1 = 'round1'
+    ROUND2 = 'round2'
+    ROUND3 = 'round3'
+    ROUND4 = 'round4'
+    ROUND5 = 'round5'
+
+
     APPLICATION_STATUS =[
         (ACCEPTED , 'accepted'),
         (REJECTED, 'rejected'),
         (HOLD,'hold'),
         (PENDING, 'pending'),
+        (ROUND1, 'round1'),
+        (ROUND2, 'round2'),
+        (ROUND3, 'round3'),
     ]
 
     resume = models.FileField(upload_to='Resumes/')

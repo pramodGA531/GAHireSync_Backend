@@ -37,5 +37,7 @@ urlpatterns = [
     path('client/CandidateResume/is_viewed/<str:id>/', ViewedCandidateResume.as_view()),
     path('client/CandidateResume/set_feedback/<str:id>/', FeedbackResume.as_view()),
     path('recruiter/applications/',ViewApplication.as_view()),
+    path('particular_application/<str:id>/',ParticularApplication.as_view()),
+    path('job_titles/',SearchJobTitles.as_view()),
     
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
