@@ -1,7 +1,7 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
-
+import decimal
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, role=None, **extra_fields):
@@ -50,7 +50,39 @@ class CustomUser(AbstractUser):
     
     def __str__(self):
         return self.username
-
+    
+def currencyInIndiaFormat(n):
+  d = decimal.Decimal(str(n))
+  if d.as_tuple().exponent < -2:
+    s = str(n)
+  else:
+    s = '{0:.2f}'.format(n)
+  l = len(s)
+  i = l-1
+  res = ''
+  flag = 0
+  k = 0
+  while i>=0:
+    if flag==0:
+      res = res + s[i]
+      if s[i]=='.':
+        flag = 1
+    elif flag==1:
+      k = k + 1
+      res = res + s[i]
+      if k==3 and i-1>=0:
+        res = res + ','
+        flag = 2
+        k = 0
+    else:
+      k = k + 1
+      res = res + s[i]
+      if k==2 and i-1>=0:
+        res = res + ','
+        flag = 2
+        k = 0
+    i = i - 1
+  return res[::-1]
 
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
@@ -88,6 +120,9 @@ class JobPostings(models.Model):
 
     def get_interviewers(self):
         return self.interviewers.split(",") if self.interviewers else []
+
+    def get_currency(self):
+       return currencyInIndiaFormat(self.ctc)
 
     def __str__(self):
         return self.job_title
