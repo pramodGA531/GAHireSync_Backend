@@ -178,7 +178,9 @@ class JobPostingView(APIView):
 
     def get(self, request):
         job_postings = JobPostings.objects.filter(username=request.user)
+        print(job_postings)
         serializer = JobPostingSerializer(job_postings, many=True)
+
         return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
@@ -194,6 +196,7 @@ class JobPostingView(APIView):
             receipents_list = manager_email
             send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
+        print(serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class EditJobPostView(APIView):
@@ -396,7 +399,6 @@ class UploadResume(APIView):
         job_id = id
         
         if not job_id or job_id == 'undefined':
-            print("entered 1")
             return Response({'error': 'Job ID is missing or invalid'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -409,14 +411,13 @@ class UploadResume(APIView):
 
         resume = request.FILES.get('resume')
         if not resume:
-            print("entered 2")
             return Response({'error': 'Resume file is missing'}, status=status.HTTP_400_BAD_REQUEST)
         print(request.data.get('skillset'))
         print(request.data)
         try:
             skillset = json.loads(request.data.get('skillset'))
         except json.JSONDecodeError:
-            print("entered 3")
+            # print("entered 3")
             return Response({'error': 'Invalid skillset data'}, status=status.HTTP_400_BAD_REQUEST)
 
         data = {
@@ -442,7 +443,9 @@ class UploadResume(APIView):
             'joining_days_required': request.data.get('joining_days_required'),
             'highest_qualification': request.data.get('highest_qualification'),
             'contact_number': request.data.get('contact_number'),
-            'alternate_contact_number': request.data.get('alternate_contact_number')
+            'alternate_contact_number': request.data.get('alternate_contact_number'),
+            'is_viewed':False,
+            'status':'pending',
         }
 
         file_serializer = ResumeUploadSerializer(data=data)
@@ -450,7 +453,7 @@ class UploadResume(APIView):
             file_serializer.save()
             return Response(file_serializer.data, status=status.HTTP_201_CREATED)
         else:
-            print("entered 4",file_serializer.errors) 
+            # print("entered 4",file_serializer.errors) 
             return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
 class ResumeUploadView(APIView):
@@ -529,12 +532,15 @@ class CandidateDataResponse(APIView):
             response = request.data.get('response')
             if(response == 'Accept'):
                 obj.is_accepted = True
+                obj.status = 'accepted'
             if(response == 'Reject'):
                 obj.is_rejected = True
                 feedback = request.data.get('feedback')
                 obj.message = feedback
+                obj.status = 'rejected'
             if(response == 'Hold'):
                 obj.on_hold = True
+                obj.status = 'hole'
             obj.save()
             print(obj.is_accepted, "object saved")
             objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
@@ -567,3 +573,22 @@ class FeedbackResume(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":"there is an error"})
+
+class ViewApplication(APIView):
+    def get(self,request):
+        user = CustomUser.objects.get(username = request.user)
+        if(user.role == 'recruiter'):
+            objects = CandidateResume.objects.filter(sender = request.user)
+            serializer = ResumeUploadSerializer(objects, many=True)
+            print(serializer.data)
+            return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+        if(user.role == 'manager'):
+            objects = CandidateResume.objects.all()
+            serializer = ResumeUploadSerializer(objects,many = True)
+            return Response({"data":serializer.data},status= status.HTTP_200_OK)
+        if(user.role=='client'):
+            objects = CandidateResume.objects.filter(receiver= request.user)
+            serializer = ResumeUploadSerializer(objects,many = True)
+            return Response({"data":serializer.data},status= status.HTTP_200_OK)
+
+        

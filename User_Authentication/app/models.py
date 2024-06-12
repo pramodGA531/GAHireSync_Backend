@@ -116,6 +116,17 @@ class CandidateResume(models.Model):
         (SERVING_NOTICE , 'serving_notice'),
     ]
 
+    ACCEPTED = 'accepted'
+    REJECTED =  'rejected'
+    HOLD =  'hold'
+    PENDING =   'pending'
+    APPLICATION_STATUS =[
+        (ACCEPTED , 'accepted'),
+        (REJECTED, 'rejected'),
+        (HOLD,'hold'),
+        (PENDING, 'pending'),
+    ]
+
     resume = models.FileField(upload_to='Resumes/')
     job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
     candidate_name = models.CharField(max_length=40, null=True, default='')
@@ -143,6 +154,7 @@ class CandidateResume(models.Model):
     is_rejected = models.BooleanField(default=False)
     on_hold = models.BooleanField(default=False)
     is_viewed = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=APPLICATION_STATUS,null=True )
 
     def __str__(self):
         return f"{self.candidate_name}'s Resume"

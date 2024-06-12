@@ -104,7 +104,7 @@ class ResumeUploadSerializer(serializers.ModelSerializer):
         fields = ['id','resume','sender','receiver','job_id','candidate_name','contact_number',
                   'alternate_contact_number','current_organisation','current_job_location','current_job_type','date_of_birth',  
                   'total_years_of_experience','years_of_experience_in_cloud','skillset','current_ctc',
-                  'expected_ctc','notice_period','joining_days_required','highest_qualification']
+                  'expected_ctc','notice_period','joining_days_required','highest_qualification','is_viewed','status']   
 
     def create(self, validated_data):
         return CandidateResume.objects.create(**validated_data)
