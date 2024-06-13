@@ -39,8 +39,32 @@ class UserSerializer(serializers.ModelSerializer):
         return user
     
 
+# class JobPostSerializer(serializers.ModelSerializer):
+   
+
+#     class Meta:
+#         model = JobPost
+#         fields = '__all__'
+
+#     def validate(self, data):
+#         rounds_of_interview = data.get('rounds_of_interview', 0)
+#         interviewers = data.get('interviewers', [])
+#         interviewer_emails = data.get('interviewer_emails', [])
+
+#         if rounds_of_interview != len(interviewers) or rounds_of_interview != len(interviewer_emails):
+#             raise serializers.ValidationError("Number of rounds, interviewers, and interviewer emails must match.")
+        
+#         return data
 
 class JobPostingSerializer(serializers.ModelSerializer):
+    interviewers = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        allow_empty=True
+    )
+    interviewer_emails = serializers.ListField(
+        child=serializers.EmailField(),
+        allow_empty=True
+    )
     class Meta:
         model = JobPostings
         fields = [
@@ -53,6 +77,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
             "ctc",
             "rounds_of_interview",
             "interviewers",
+            "interviewer_emails",
             "job_location",
             "job_type",
             "job_level",
@@ -69,6 +94,16 @@ class JobPostingSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # User will be assigned in the view
         return JobPostings.objects.create(**validated_data)
+
+    def validate(self, data):
+        rounds_of_interview = data.get('rounds_of_interview', 0)
+        interviewers = data.get('interviewers', [])
+        interviewer_emails = data.get('interviewer_emails', [])
+
+        if rounds_of_interview != len(interviewers) or rounds_of_interview != len(interviewer_emails):
+            raise serializers.ValidationError("Number of rounds, interviewers, and interviewer emails must match.")
+        
+        return data
 
 
 class GetAllJobPostsSerializer(serializers.ModelSerializer):

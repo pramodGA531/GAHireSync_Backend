@@ -184,6 +184,7 @@ class JobPostingView(APIView):
         return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
+        print(request.data)
         serializer = JobPostingSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(username=request.user) 
@@ -197,7 +198,7 @@ class JobPostingView(APIView):
             send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
             return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
         print(serializer.errors)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error" : serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
 class EditJobPostView(APIView):
     def put(self, request,pk):        

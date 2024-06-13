@@ -65,6 +65,7 @@ class JobPostings(models.Model):
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
     interviewers = models.TextField()
+    interviewer_emails = models.TextField(default='')
     job_location = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100,default='')
     job_level = models.CharField(max_length=100, default='')
