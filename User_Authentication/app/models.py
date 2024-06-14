@@ -127,6 +127,61 @@ class JobPostings(models.Model):
 
     def __str__(self):
         return self.job_title
+    
+class JobPostingEdited(models.Model):
+
+    PENDING = 'pending'
+    REJECTED = 'rejected'
+    APPROVED = 'approved'
+
+    STATUS = [
+       (PENDING,'pending'),
+       (REJECTED,'rejected'),
+       (APPROVED,'approved'),
+    ]
+    id= models.ForeignKey(JobPostings,on_delete=models.CASCADE)
+    username = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
+    )
+    job_title = models.CharField(max_length=255,default='',unique=True,primary_key=True)
+    job_description = models.TextField()
+    primary_skills = models.TextField()
+    secondary_skills = models.TextField(blank=True, null=True)
+    years_of_experience = models.IntegerField()
+    ctc = models.CharField(max_length=50)
+    rounds_of_interview = models.IntegerField()
+    interviewers = models.TextField()
+    interviewer_emails = models.TextField(default='')
+    job_location = models.CharField(max_length=100)
+    job_type = models.CharField(max_length=100,default='')
+    job_level = models.CharField(max_length=100, default='')
+    qualifications = models.TextField(default='')
+    timings = models.CharField(max_length=100,default='')
+    other_benefits = models.TextField(default='')
+    working_days_per_week = models.IntegerField(default=5)
+    interview_process = models.CharField(max_length=255, default='')
+    decision_maker = models.CharField(max_length=100, default='')
+    bond = models.TextField(max_length=255, default='')
+    rotational_shift = models.BooleanField()
+    status = models.CharField(max_length=10, choices=STATUS, default='pending')
+    message = models.TextField(default='')
+    # is_approved = models.BooleanField(default=True)
+    # is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
+
+    def get_primary_skills_list(self):
+        return self.primary_skills.split(",") if self.primary_skills else []
+
+    def get_secondary_skills_list(self):
+        return self.secondary_skills.split(",") if self.secondary_skills else []
+
+    def get_interviewers(self):
+        return self.interviewers.split(",") if self.interviewers else []
+
+    def get_currency(self):
+       return currencyInIndiaFormat(self.ctc)
+
+    def __str__(self):
+        return self.job_title
 
 
 class TermsAndConditions(models.Model):
@@ -187,8 +242,8 @@ class CandidateResume(models.Model):
     current_job_location = models.CharField(max_length=100, null=True, default='')
     current_job_type = models.CharField(max_length=50, choices=EMPLOYMENT_TYPE_CHOICES, default=PERMANENT)
     date_of_birth = models.DateField(null=True)
-    total_years_of_experience = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Total years of experience can be in decimal
-    years_of_experience_in_cloud = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Years of experience in cloud can be in decimal
+    total_years_of_experience = models.IntegerField( null=True, blank=True)  # Total years of experience can be in decimal
+    # years_of_experience_in_cloud = models.Field(max_digits=5, decimal_places=2, null=True, blank=True)  # Years of experience in cloud can be in decimal
     skillset = models.JSONField(null=True, blank=True)  # Skillset can be stored as text
     job_status = models.CharField(max_length=20, null=True, choices=JOB_STATUS)
     current_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Current CTC can be in decimal

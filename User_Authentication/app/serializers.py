@@ -94,23 +94,61 @@ class JobPostingSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # User will be assigned in the view
         return JobPostings.objects.create(**validated_data)
+    
+class EditJobSerializer(serializers.ModelSerializer):
+    interviewers = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        allow_empty=True
+    )
+    interviewer_emails = serializers.ListField(
+        child=serializers.EmailField(),
+        allow_empty=True
+    )
+    class Meta:
+        model = JobPostingEdited
+        fields = [
+            "id",
+            "job_title",
+            "job_description",
+            "primary_skills",
+            "secondary_skills",
+            "years_of_experience",
+            "ctc",
+            "rounds_of_interview",
+            "interviewers",
+            "interviewer_emails",
+            "job_location",
+            "job_type",
+            "job_level",
+            "qualifications",
+            "timings",
+            "other_benefits",
+            "working_days_per_week",
+            "interview_process",
+            "decision_maker",
+            "bond",
+            "rotational_shift",
+            "status",
+        ]
 
-    def validate(self, data):
-        rounds_of_interview = data.get('rounds_of_interview', 0)
-        interviewers = data.get('interviewers', [])
-        interviewer_emails = data.get('interviewer_emails', [])
-
-        if rounds_of_interview != len(interviewers) or rounds_of_interview != len(interviewer_emails):
-            raise serializers.ValidationError("Number of rounds, interviewers, and interviewer emails must match.")
-        
-        return data
-
+        def create(self, validated_data):
+            return JobPostingEdited.objects.create(**validated_data)
 
 class GetAllJobPostsSerializer(serializers.ModelSerializer):
     username = serializers.SerializerMethodField()
 
     class Meta:
         model = JobPostings
+        fields = "__all__"
+
+    def get_username(self, obj):
+        return obj.username.username
+    
+class GetAllJobPostEditSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobPostingEdited
         fields = "__all__"
 
     def get_username(self, obj):
@@ -136,9 +174,9 @@ class GetStaffSerializer(serializers.ModelSerializer):
 class ResumeUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateResume
-        fields = ['id','resume','sender','receiver','job_id','candidate_name','contact_number',
+        fields = ['id','resume','sender','receiver','job_id','candidate_name', 'candidate_email','contact_number',
                   'alternate_contact_number','current_organisation','current_job_location','current_job_type','date_of_birth',  
-                  'total_years_of_experience','years_of_experience_in_cloud','skillset','current_ctc',
+                  'total_years_of_experience','skillset','current_ctc',
                   'expected_ctc','notice_period','joining_days_required','highest_qualification','is_viewed','status']   
 
     def create(self, validated_data):
@@ -156,3 +194,13 @@ class JobTitleSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobPostings
         fields = ['job_title']
+
+class CandidateApplicationsSerializer(serializers.ModelSerializer):
+    job_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CandidateResume
+        fields = ['id', 'candidate_name', 'candidate_email', 'resume', 'job_title','status']  # Add other fields as necessary
+
+    def get_job_title(self, obj):
+        return obj.job_id.job_title if obj.job_id else None

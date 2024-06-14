@@ -25,11 +25,13 @@ urlpatterns = [
     path("jobposts_for_staff/",GetJobsForStaff.as_view()),
     path("particular_job_staff/<str:id>/",ParticularJobForStaff.as_view()),
     path("particular_job_client/<str:id>/",ParticularJobForClient.as_view()),
+    path("particular_job_edit_client/<str:id>/",ParticularJobEditClient.as_view()),
     path("verify_resend_email/",Resend_verify_email.as_view()),
     path("recruiter/upload_resume/",UploadResume.as_view()),
     path("edit_particular_job/<str:pk>/",EditJobPostView.as_view()),
     path('not_approval_jobs/',NotApprovalJobs.as_view()),
     path('client/approve_job/<str:key>/',ApproveJob.as_view()),
+    path('client/reject_job/<str:key>/',RejectJob.as_view()),
     path('client/received_data/',ReceivedData.as_view()),
     path('client/job_resume/<str:id>/',JobResume.as_view()),
     path('client/candidate/save_response/<str:id>/',CandidateDataResponse.as_view()),
@@ -39,5 +41,6 @@ urlpatterns = [
     path('recruiter/applications/',ViewApplication.as_view()),
     path('particular_application/<str:id>/',ParticularApplication.as_view()),
     path('job_titles/',SearchJobTitles.as_view()),
+    path('candidate/applications/',CandidateApplications.as_view()),
     
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
