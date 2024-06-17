@@ -166,7 +166,7 @@ class JobPostingEdited(models.Model):
     status = models.CharField(max_length=10, choices=STATUS, default='pending')
     message = models.TextField(default='')
     # is_approved = models.BooleanField(default=True)
-    # is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
+    # is_assigned = models.ForeignKey(CustomUser, related_name='assigned_to',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
@@ -216,6 +216,7 @@ class CandidateResume(models.Model):
     ROUND3 = 'round3'
     ROUND4 = 'round4'
     ROUND5 = 'round5'
+    SHORTLISTED = 'shortlisted'
 
 
     APPLICATION_STATUS =[
@@ -226,9 +227,11 @@ class CandidateResume(models.Model):
         (ROUND1, 'round1'),
         (ROUND2, 'round2'),
         (ROUND3, 'round3'),
+        (SHORTLISTED,'shortlisted'),
     ]
 
     resume = models.FileField(upload_to='Resumes/')
+    job_dept = models.CharField(max_length=100, default='')
     job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
     candidate_name = models.CharField(max_length=40, null=True, default='')
     candidate_email = models.EmailField(null=True, default='')
@@ -263,3 +266,14 @@ class CandidateResume(models.Model):
 class Resume(models.Model):
     id = models.AutoField(primary_key=True)
     resume = models.FileField(upload_to='store/resumes/')
+
+class InterviewsSchedule(models.Model):
+    job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
+    resume_id = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
+    recruiter_id = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"},default='')
+    event_description = models.TextField()
+    interview_time = models.DateTimeField(default='')
+    round_num = models.IntegerField()
+
+    def __str__(self):
+       return self.resume_id

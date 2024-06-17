@@ -624,7 +624,7 @@ class CandidateDataResponse(APIView):
             objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = job_id)
             file_serializer = ResumeUploadSerializer(objects , many = True)
             message = ''
-            if(response == 'Accept'):
+            if(response == 'Shortlist'):
                 email = obj.candidate_email
                 full_name = obj.candidate_name
                 last_name = full_name.split()[-1]
@@ -656,7 +656,8 @@ class CandidateDataResponse(APIView):
                     obj.is_accepted = True
                     obj.is_rejected = False
                     obj.on_hold = False
-                    obj.status = 'accepted'
+                    obj.status = 'shortlisted'
+                    print(obj.status,"is the status")
                     obj.save()
 
                     subject = "Your account is created in RMS"
@@ -669,7 +670,7 @@ class CandidateDataResponse(APIView):
                     obj.is_accepted = True
                     obj.is_rejected = False
                     obj.on_hold = False
-                    obj.status = 'accepted'
+                    obj.status = 'shortlisted'
                     obj.save()
                     return Response({"success": "Account already created", "details": serializer.errors,"data":file_serializer.data}, status=status.HTTP_200_OK)
             if(response == 'Reject'):
@@ -775,3 +776,59 @@ class CandidateApplications(APIView):
         serializer = CandidateApplicationsSerializer(objects, many = True)
         print(serializer.data)
         return Response({"success":"true","data":serializer.data})
+
+class InterviewsScheduleList(APIView):
+    def post(self,request):
+        data = request.data
+        try:
+            print(data)
+            serializer = InterviewManageSerializer(data = data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"success":"event successfully added"},status=status.HTTP_201_CREATED)
+            else:
+                print(serializer.errors)
+                return Response({"error":"There is the error in the input"},status= status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            print(e)
+            return Response({"error":e},status=status.HTTP_400_BAD_REQUEST)
+    
+    def get(self,request):
+        user_id = CustomUser.objects.get(username = request.user).id
+        objects = InterviewsSchedule.objects.filter(recruiter_id=user_id)
+        try:
+            serializer = InterviewManageSerializer(objects, many = True)
+            return Response({"success":"serializer.data"},status = status.HTTP_200_OK)
+        except Exception as e:
+            print(serializer.errors)
+            return Response({"error":serializer.errors},status = status.HTTP_400_BAD_REQUEST)
+        
+class JobDetailsForInterviews(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self,request):
+        user_id = CustomUser.objects.get(username = request.user).id
+        jobs = JobPostings.objects.filter(is_assigned = user_id)
+        candidates = CandidateResume.objects.filter(status = 'shortlisted')
+        
+        data = []
+        for job in jobs:
+            json_data={
+                "rounds_of_interview": job.rounds_of_interview,
+                "interviewers" : job.interviewers,
+                "job_title":job.job_title,
+                "id":job.id
+            }
+            data.append(json_data)
+        try:
+            serializer = JobDetailsForInterviewSerializer(data,many = True)
+            candidateSerializer = ResumeUploadSerializer(candidates, many =True)
+            print(candidateSerializer.data)
+            print(serializer.data)
+            return Response({'data':serializer.data,"candidates_data":candidateSerializer.data},status=status.HTTP_200_OK)
+            
+            # return Response({"error":serializer.errors},status= status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+

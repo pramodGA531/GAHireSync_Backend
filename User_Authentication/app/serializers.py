@@ -204,3 +204,17 @@ class CandidateApplicationsSerializer(serializers.ModelSerializer):
 
     def get_job_title(self, obj):
         return obj.job_id.job_title if obj.job_id else None
+    
+
+class InterviewManageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewsSchedule
+        fields = '__all__'
+
+    def create(self,validated_data):
+        return InterviewsSchedule.objects.create(**validated_data)
+    
+class JobDetailsForInterviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostings
+        fields = ['interviewers','job_title','rounds_of_interview','id']
