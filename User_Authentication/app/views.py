@@ -179,25 +179,31 @@ class JobPostingView(APIView):
 
     def get(self, request):
         job_postings = JobPostings.objects.filter(username=request.user)
-        print(job_postings)
         serializer = JobPostingSerializer(job_postings, many=True)
 
         return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
-        print(request.data)
-        serializer = JobPostingSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(username=request.user) 
-             # Assign the user to the `username` field
-            manager = CustomUser.objects.get(role="manager")
-            manager_email= manager.email
-            subject =  f'Job added by {request.user}'
-            message = f'your Client {request.user} added new Job posts.. go and check it \n this is link go and join \n '
-            sender = settings.EMAIL_HOST_USER
-            receipents_list = manager_email
-            send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
-            return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
+        serializer = JobPostingSerializer(data=request.data['job_data'])
+        interviewer_data = request.data['interviewers_data']
+        if serializer.is_valid() :
+
+            job_instance = serializer.save(username=request.user) 
+            for interviewer in interviewer_data:
+                interviewer['job_id'] = job_instance.id
+
+            interview_serializer = InterviewerDetailsSerializer(data=interviewer_data,many=True)
+            if(interview_serializer.is_valid()):
+                interview_serializer.save()
+                manager = CustomUser.objects.get(role="manager")
+                manager_email= manager.email
+                subject =  f'Job added by {request.user}'
+                message = f'your Client {request.user} added new Job posts.. go and check it \n this is link go and join \n '
+                sender = settings.EMAIL_HOST_USER
+                receipents_list = manager_email
+                send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
+                return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
+            print(interview_serializer.errors, "is the errors of interviewers")
         print(serializer.errors)
         return Response({"error" : serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
@@ -326,11 +332,12 @@ class ParticularJob(APIView):
         if user.role == 'manager':
             try:
                 job_details = JobPostings.objects.get(id=id)
+                interview_details = InterviewerDetails.objects.filter(job_id = id)
             except JobPostings.DoesNotExist:
                 return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            
+            interview_serializer = InterviewerDetailsSerializer(interview_details,many=True)
             serializer = GetAllJobPostsSerializer(job_details)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
         else:
             return Response({"warning":"only manager can see this page"})
     
@@ -395,14 +402,65 @@ class ParticularJobForStaff(APIView):
         if user.role == 'recruiter':
             try:
                 job_details = JobPostings.objects.get(id=id)
+                interview_details = InterviewerDetails.objects.filter(job_id = id)
             except JobPostings.DoesNotExist:
                 return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            
+            interview_serializer = InterviewerDetailsSerializer(interview_details,many=True)
             serializer = GetAllJobPostsSerializer(job_details)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
         else:
             return Response({"warning":"only recruiter can see this page"})
         
+    def put(self, request, id):
+        try:
+            job_posting = JobPostings.objects.get(id=id)
+            data = request.data
+            print(data)
+            
+            # Assuming interviewers_data is an array of objects
+            interviewers_data = data.get('interviewers_data', [])
+            
+            # Iterate through each interviewer data and update/create InterviewerDetails
+            for interviewer_data in interviewers_data:
+                round_num = interviewer_data.get('round_num')
+                interviewer_name = interviewer_data.get('name')
+                interviewer_email = interviewer_data.get('email')
+                type_of_interview = interviewer_data.get('type_of_interview')
+                
+                # Check if InterviewerDetails instance exists for this round
+                interviewer_obj, created = InterviewerDetails.objects.get_or_create(
+                    job_id=job_posting,
+                    round_num=round_num,
+                    defaults={
+                        'name': interviewer_name,
+                        'email': interviewer_email,
+                        'type_of_interview': type_of_interview
+                    }
+                )
+                
+                # If not created (i.e., already exists), update the existing instance
+                if not created:
+                    interviewer_obj.name = interviewer_name
+                    interviewer_obj.email = interviewer_email
+                    interviewer_obj.type_of_interview = type_of_interview
+                    interviewer_obj.save()
+            
+            # Update JobPostingSerializer with partial=True to allow partial updates
+            serializer = JobPostingSerializer(job_posting, data=data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response({'success': "Successfully modified"}, status=status.HTTP_200_OK)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
 class ParticularJobForClient(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -411,11 +469,12 @@ class ParticularJobForClient(APIView):
         if user.role == 'client':
             try:
                 job_details = JobPostings.objects.get(id=id)
+                interview_details = InterviewerDetails.objects.filter(job_id = id)
             except JobPostings.DoesNotExist:
                 return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            
+            interview_serializer = InterviewerDetailsSerializer(interview_details,many=True)
             serializer = GetAllJobPostsSerializer(job_details)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
         else:
             return Response({"warning":"only client can see this page"})
     
@@ -779,26 +838,53 @@ class CandidateApplications(APIView):
 
 class InterviewsScheduleList(APIView):
     def post(self,request):
-        data = request.data
         try:
-            print(data)
-            serializer = InterviewManageSerializer(data = data)
+            dataaa = request.data
+            recruiter_id = CustomUser.objects.get(username=request.user).id
+            
+            # Assuming dataaa contains selectedJobId directly, otherwise fetch it from JobPostings
+            job_id = dataaa.get('selectedJobId', None)
+            if job_id is None:
+                raise ValueError("No job_id found in request data")
+            
+            # Assuming dataaa contains selectedCandidate directly, otherwise fetch it from Candidate model
+            resume_id = dataaa.get('selectedCandidate', None)
+            if resume_id is None:
+                raise ValueError("No resume_id found in request data")
+            
+            data = {
+                "event_description": dataaa.get('eventDetails', ''),
+                "round_num": dataaa.get('selectedRound', ''),
+                "job_id": job_id,
+                "resume_id": resume_id,
+                "interview_time": dataaa.get('datetime', ''),
+                "recruiter_id": recruiter_id
+            }
+            
+            serializer = InterviewManageSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
-                return Response({"success":"event successfully added"},status=status.HTTP_201_CREATED)
+                return Response({"success": "Event successfully added"}, status=status.HTTP_201_CREATED)
             else:
                 print(serializer.errors)
-                return Response({"error":"There is the error in the input"},status= status.HTTP_403_FORBIDDEN)
+                return Response({"error": "There is an error in the input"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Recruiter does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        
+        except JobPostings.DoesNotExist:
+            return Response({"error": "JobPostings does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        
         except Exception as e:
             print(e)
-            return Response({"error":e},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def get(self,request):
         user_id = CustomUser.objects.get(username = request.user).id
         objects = InterviewsSchedule.objects.filter(recruiter_id=user_id)
         try:
             serializer = InterviewManageSerializer(objects, many = True)
-            return Response({"success":"serializer.data"},status = status.HTTP_200_OK)
+            return Response({"success":serializer.data},status = status.HTTP_200_OK)
         except Exception as e:
             print(serializer.errors)
             return Response({"error":serializer.errors},status = status.HTTP_400_BAD_REQUEST)
@@ -822,9 +908,7 @@ class JobDetailsForInterviews(APIView):
             data.append(json_data)
         try:
             serializer = JobDetailsForInterviewSerializer(data,many = True)
-            candidateSerializer = ResumeUploadSerializer(candidates, many =True)
-            print(candidateSerializer.data)
-            print(serializer.data)
+            candidateSerializer = CandidateApplicationsSerializer(candidates, many =True)
             return Response({'data':serializer.data,"candidates_data":candidateSerializer.data},status=status.HTTP_200_OK)
             
             # return Response({"error":serializer.errors},status= status.HTTP_400_BAD_REQUEST)

@@ -39,32 +39,8 @@ class UserSerializer(serializers.ModelSerializer):
         return user
     
 
-# class JobPostSerializer(serializers.ModelSerializer):
-   
-
-#     class Meta:
-#         model = JobPost
-#         fields = '__all__'
-
-#     def validate(self, data):
-#         rounds_of_interview = data.get('rounds_of_interview', 0)
-#         interviewers = data.get('interviewers', [])
-#         interviewer_emails = data.get('interviewer_emails', [])
-
-#         if rounds_of_interview != len(interviewers) or rounds_of_interview != len(interviewer_emails):
-#             raise serializers.ValidationError("Number of rounds, interviewers, and interviewer emails must match.")
-        
-#         return data
-
 class JobPostingSerializer(serializers.ModelSerializer):
-    interviewers = serializers.ListField(
-        child=serializers.CharField(max_length=100),
-        allow_empty=True
-    )
-    interviewer_emails = serializers.ListField(
-        child=serializers.EmailField(),
-        allow_empty=True
-    )
+    
     class Meta:
         model = JobPostings
         fields = [
@@ -76,8 +52,6 @@ class JobPostingSerializer(serializers.ModelSerializer):
             "years_of_experience",
             "ctc",
             "rounds_of_interview",
-            "interviewers",
-            "interviewer_emails",
             "job_location",
             "job_type",
             "job_level",
@@ -85,25 +59,25 @@ class JobPostingSerializer(serializers.ModelSerializer):
             "timings",
             "other_benefits",
             "working_days_per_week",
-            "interview_process",
             "decision_maker",
             "bond",
             "rotational_shift",
         ]
 
     def create(self, validated_data):
-        # User will be assigned in the view
+        # validated_data['interviewers'] = ','.join(validated_data.get('interviewers', []))
+        # validated_data['interviewer_emails'] = ','.join(validated_data.get('interviewer_emails', []))
         return JobPostings.objects.create(**validated_data)
     
 class EditJobSerializer(serializers.ModelSerializer):
-    interviewers = serializers.ListField(
-        child=serializers.CharField(max_length=100),
-        allow_empty=True
-    )
-    interviewer_emails = serializers.ListField(
-        child=serializers.EmailField(),
-        allow_empty=True
-    )
+    # interviewers = serializers.ListField(
+    #     child=serializers.CharField(max_length=100),
+    #     allow_empty=True
+    # )
+    # interviewer_emails = serializers.ListField(
+    #     child=serializers.EmailField(),
+    #     allow_empty=True
+    # )
     class Meta:
         model = JobPostingEdited
         fields = [
@@ -115,8 +89,8 @@ class EditJobSerializer(serializers.ModelSerializer):
             "years_of_experience",
             "ctc",
             "rounds_of_interview",
-            "interviewers",
-            "interviewer_emails",
+            # "interviewers",
+            # "interviewer_emails",
             "job_location",
             "job_type",
             "job_level",
@@ -200,7 +174,7 @@ class CandidateApplicationsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CandidateResume
-        fields = ['id', 'candidate_name', 'candidate_email', 'resume', 'job_title','status']  # Add other fields as necessary
+        fields = ['id', 'candidate_name','job_id', 'candidate_email', 'resume', 'job_title','status']  # Add other fields as necessary
 
     def get_job_title(self, obj):
         return obj.job_id.job_title if obj.job_id else None
@@ -218,3 +192,11 @@ class JobDetailsForInterviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobPostings
         fields = ['interviewers','job_title','rounds_of_interview','id']
+
+class InterviewerDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewerDetails
+        fields = '__all__'
+    
+    def create(self,validated_data):
+        InterviewerDetails.objects.create(**validated_data)

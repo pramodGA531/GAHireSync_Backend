@@ -89,15 +89,16 @@ class JobPostings(models.Model):
     username = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
-    job_title = models.CharField(max_length=255,default='',unique=True)
+    job_title = models.CharField(max_length=255,default='')
+    job_department = models.CharField(max_length=100,default='')
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank=True, null=True)
     years_of_experience = models.IntegerField()
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
-    interviewers = models.TextField()
-    interviewer_emails = models.TextField(default='')
+    # interviewers = models.TextField()
+    # interviewer_emails = models.TextField(default='')
     job_location = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100,default='')
     job_level = models.CharField(max_length=100, default='')
@@ -105,7 +106,6 @@ class JobPostings(models.Model):
     timings = models.CharField(max_length=100,default='')
     other_benefits = models.TextField(default='')
     working_days_per_week = models.IntegerField(default=5)
-    interview_process = models.CharField(max_length=255, default='')
     decision_maker = models.CharField(max_length=100, default='')
     bond = models.TextField(max_length=255, default='')
     rotational_shift = models.BooleanField()
@@ -119,14 +119,36 @@ class JobPostings(models.Model):
     def get_secondary_skills_list(self):
         return self.secondary_skills.split(",") if self.secondary_skills else []
 
-    def get_interviewers(self):
-        return self.interviewers.split(",") if self.interviewers else []
+    # def get_interviewers(self):
+    #     return self.interviewers.split(",") if self.interviewers else []
 
     def get_currency(self):
        return currencyInIndiaFormat(self.ctc)
 
     def __str__(self):
         return self.job_title
+    
+
+class InterviewerDetails(models.Model):
+    FACE ='face_to_face'
+    ONLINE = 'online'
+    TELEPHONE = 'telephone'
+
+    MODE_OF_INTERVIEW = [
+       (FACE,'face_to_face'),
+       (ONLINE,'online'),
+       (TELEPHONE,'telephone'),
+    ]
+
+    job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
+    round_num = models.IntegerField(default=0)
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    type_of_interview = models.CharField(max_length=20,choices=MODE_OF_INTERVIEW)
+
+    def __str__(self):
+        return self.name
+
     
 class JobPostingEdited(models.Model):
 
@@ -144,14 +166,13 @@ class JobPostingEdited(models.Model):
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
     job_title = models.CharField(max_length=255,default='',unique=True,primary_key=True)
+    job_department = models.CharField(max_length=100,default='')
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank=True, null=True)
     years_of_experience = models.IntegerField()
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
-    interviewers = models.TextField()
-    interviewer_emails = models.TextField(default='')
     job_location = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100,default='')
     job_level = models.CharField(max_length=100, default='')
@@ -159,7 +180,6 @@ class JobPostingEdited(models.Model):
     timings = models.CharField(max_length=100,default='')
     other_benefits = models.TextField(default='')
     working_days_per_week = models.IntegerField(default=5)
-    interview_process = models.CharField(max_length=255, default='')
     decision_maker = models.CharField(max_length=100, default='')
     bond = models.TextField(max_length=255, default='')
     rotational_shift = models.BooleanField()
@@ -227,6 +247,8 @@ class CandidateResume(models.Model):
         (ROUND1, 'round1'),
         (ROUND2, 'round2'),
         (ROUND3, 'round3'),
+        (ROUND4, 'round4'),
+        (ROUND5, 'round5'),
         (SHORTLISTED,'shortlisted'),
     ]
 
@@ -260,8 +282,24 @@ class CandidateResume(models.Model):
     is_viewed = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=APPLICATION_STATUS,null=True )
 
+    class Meta:
+        constraints =[
+           models.UniqueConstraint(
+              fields=['job_id','candidate_email'] , name='unique_job_id_candidate_email_constraint'
+           )
+        ]
+
     def __str__(self):
         return f"{self.candidate_name}'s Resume"
+    
+class RoundDetails(models.Model):
+    job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
+    round_num = models.IntegerField(default=0)
+    candidate_name = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
+    feedback = models.TextField
+
+    def __str__(self):
+       return f"{self.candidate}'s feedback"
 
 class Resume(models.Model):
     id = models.AutoField(primary_key=True)

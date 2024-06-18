@@ -27,7 +27,7 @@ urlpatterns = [
     path("particular_job_client/<str:id>/",ParticularJobForClient.as_view()),
     path("particular_job_edit_client/<str:id>/",ParticularJobEditClient.as_view()),
     path("verify_resend_email/",Resend_verify_email.as_view()),
-    path("recruiter/upload_resume/",UploadResume.as_view()),
+    path("recruiter/upload_resume/<str:id>",UploadResume.as_view()),
     path("edit_particular_job/<str:pk>/",EditJobPostView.as_view()),
     path('not_approval_jobs/',NotApprovalJobs.as_view()),
     path('client/approve_job/<str:key>/',ApproveJob.as_view()),
