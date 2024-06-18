@@ -669,8 +669,10 @@ class JobResume(APIView):
     def get(self, request , id):
         # objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id).filter(is_accepted = False).filter(is_rejected = False).filter(on_hold = False)
         objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
+        job_details = JobPostings.objects.get(id=id)
+        job_serializer = JobPostingSerializer(job_details)
         serializer = ResumeUploadSerializer(objects, many = True)
-        return Response(serializer.data)
+        return Response({"data":serializer.data,"job_data":job_serializer.data},status=status.HTTP_200_OK)
 
 class CandidateDataResponse(APIView):
     permission_classes = [IsAuthenticated]
