@@ -295,8 +295,8 @@ class CandidateResume(models.Model):
 class RoundDetails(models.Model):
     job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
     round_num = models.IntegerField(default=0)
-    candidate_name = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
-    feedback = models.TextField
+    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
+    feedback = models.TextField(default='')
 
     def __str__(self):
        return f"{self.candidate}'s feedback"

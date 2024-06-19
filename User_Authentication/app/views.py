@@ -340,6 +340,56 @@ class ParticularJob(APIView):
             return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
         else:
             return Response({"warning":"only manager can see this page"})
+        
+
+    def put(self, request, id):
+        try:
+            job_posting = JobPostings.objects.get(id=id)
+            data = request.data
+            print(data)
+            
+            # Assuming interviewers_data is an array of objects
+            interviewers_data = data.get('interviewers_data', [])
+            
+            # Iterate through each interviewer data and update/create InterviewerDetails
+            for interviewer_data in interviewers_data:
+                round_num = interviewer_data.get('round_num')
+                interviewer_name = interviewer_data.get('name')
+                interviewer_email = interviewer_data.get('email')
+                type_of_interview = interviewer_data.get('type_of_interview')
+                
+                # Check if InterviewerDetails instance exists for this round
+                interviewer_obj, created = InterviewerDetails.objects.get_or_create(
+                    job_id=job_posting,
+                    round_num=round_num,
+                    defaults={
+                        'name': interviewer_name,
+                        'email': interviewer_email,
+                        'type_of_interview': type_of_interview
+                    }
+                )
+                
+                # If not created (i.e., already exists), update the existing instance
+                if not created:
+                    interviewer_obj.name = interviewer_name
+                    interviewer_obj.email = interviewer_email
+                    interviewer_obj.type_of_interview = type_of_interview
+                    interviewer_obj.save()
+            
+            # Update JobPostingSerializer with partial=True to allow partial updates
+            serializer = JobPostingSerializer(job_posting, data=data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response({'success': "Successfully modified"}, status=status.HTTP_200_OK)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 class GetStaff(APIView):
     permission_classes = [IsAuthenticated]
@@ -502,6 +552,7 @@ class UploadResume(APIView):
         sender = User.objects.get(username=request.user).id
         job_id = id
         
+        print(id)
         if not job_id or job_id == 'undefined':
             return Response({'error': 'Job ID is missing or invalid'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -557,7 +608,7 @@ class UploadResume(APIView):
             file_serializer.save()
             return Response(file_serializer.data, status=status.HTTP_201_CREATED)
         else:
-            # print("entered 4",file_serializer.errors) 
+            print("entered 4",file_serializer.errors) 
             return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
 class ResumeUploadView(APIView):
@@ -684,8 +735,9 @@ class CandidateDataResponse(APIView):
             job_id = CandidateResume.objects.get(id = id).job_id
             objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = job_id)
             file_serializer = ResumeUploadSerializer(objects , many = True)
+            print(request.data)
             message = ''
-            if(response == 'Shortlist'):
+            if(response == 'Shortlisted'):
                 email = obj.candidate_email
                 full_name = obj.candidate_name
                 last_name = full_name.split()[-1]
@@ -716,11 +768,13 @@ class CandidateDataResponse(APIView):
                     user.save()
                     obj.is_accepted = True
                     obj.is_rejected = False
+                    feedback = request.data.get('feedback')
+
+                    obj.message = feedback
                     obj.on_hold = False
                     obj.status = 'shortlisted'
                     print(obj.status,"is the status")
                     obj.save()
-
                     subject = "Your account is created in RMS"
                     description =  f"These are your login credentials, \n username : {username} \n password :{password} \n click here to login http://localhost:3000/"
                     sender = settings.EMAIL_HOST
@@ -731,6 +785,8 @@ class CandidateDataResponse(APIView):
                     obj.is_accepted = True
                     obj.is_rejected = False
                     obj.on_hold = False
+                    feedback = request.data.get('feedback')
+                    obj.message = feedback
                     obj.status = 'shortlisted'
                     obj.save()
                     return Response({"success": "Account already created", "details": serializer.errors,"data":file_serializer.data}, status=status.HTTP_200_OK)
@@ -917,4 +973,91 @@ class JobDetailsForInterviews(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+
+class RecruiterDataForClient(APIView):
+    def get(self, request ,id):
+        recruiter = JobPostings.objects.get(id= id).is_assigned
+        recruiter_name = CustomUser.objects.get(username = recruiter).username
+        print(recruiter_name)
+        resume_sent = CandidateResume.objects.filter(job_id = id).count()
+        resume_selected = CandidateResume.objects.filter(job_id=id).filter(status = 'shortlisted').count()
+        resume_rejected = CandidateResume.objects.filter(job_id = id).filter(status='rejected').count()
+        resume_pending = CandidateResume.objects.filter(job_id = id).filter(status='pending').count()
+        data = {
+            "recruiter_name":recruiter_name,
+            "resume_sent":resume_sent,
+            "resume_selected":resume_selected,
+            "resume_rejected":resume_rejected,
+            "resume_pending" : resume_pending,
+        }
+        return Response({'data':data},status=status.HTTP_200_OK)
+
+class PromoteCandidates(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self,request):
+        candidates = CandidateResume.objects.filter(receiver = request.user)
+        serializer = CandidateApplicationsSerializer(candidates , many = True)
+        print(serializer.data)
+        return Response({"data":serializer.data},status=status.HTTP_200_OK)
+    def post(self, request):
+        print(request.data)
+        data = request.data
+
+        try:
+            candidate = CandidateResume.objects.get(id=data['id'])
+        except CandidateResume.DoesNotExist:
+            return Response({"error": "Candidate not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        print(f"Candidate status: {candidate.status}")
+        
+        rounds = InterviewerDetails.objects.filter(job_id=data['job_id']).count()
+        print(f"Total rounds: {rounds}")
+
+        current_status = candidate.status
+
+        try:
+            if current_status == 'shortlisted':
+                candidate.status = 'round1'
+            elif current_status.startswith('round'):
+                current_round = int(current_status.replace('round', ''))
+                next_round = current_round + 1
+                if next_round > rounds:
+                    candidate.status = 'accepted'
+                else:
+                    candidate.status = f'round{next_round}'
+            else:
+                return Response({"error": "Invalid candidate status"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            candidate.save()
+            print(f"Updated candidate status: {candidate.status}")
+
+            round_num = int(candidate.status.replace('round', '')) if 'round' in candidate.status else None
+            print(f"Round number: {round_num}")
+            
+            if round_num:
+                round_data = {
+                    "round_num": round_num,
+                    "job_id": data['job_id'],
+                    "candidate": data['id'],  # Assuming data['id'] is candidate ID, update if it's candidate's name
+                    "feedback": data.get('feedback', ''),  # Ensure feedback is provided or set default
+                }
+
+                print(f"Round data to be saved: {round_data}")
+
+                candidate_serializer = RoundsDataSerializer(data=round_data)
+                if candidate_serializer.is_valid():
+                    saved_instance = candidate_serializer.save()
+                    print(f"Saved instance: {saved_instance}")
+                    if not saved_instance:
+                        raise ValueError("Saved instance is None")
+                else:
+                    print(candidate_serializer.errors)
+                    return Response({"error": candidate_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            print(f"Error during status update: {str(e)}")
+            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"success": "Successfully promoted"}, status=status.HTTP_200_OK)
 

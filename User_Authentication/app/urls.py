@@ -44,4 +44,7 @@ urlpatterns = [
     path('candidate/applications/',CandidateApplications.as_view()),
     path('manage_interviews/',InterviewsScheduleList.as_view()),
     path('job_details_interview/',JobDetailsForInterviews.as_view()),
+    path('client/recruiter_data/<str:id>/',RecruiterDataForClient.as_view()),
+    path('client/promote_candidates/',PromoteCandidates.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
