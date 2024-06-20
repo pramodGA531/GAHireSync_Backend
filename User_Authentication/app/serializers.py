@@ -209,3 +209,12 @@ class RoundsDataSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         instance = RoundDetails.objects.create(**validated_data)
         return instance
+    
+class ResumeBankSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResumeBank
+        fields = '__all__'
+
+    def create(self, validated_data):
+        instance = ResumeBank.objects.create(**validated_data)
+        return instance

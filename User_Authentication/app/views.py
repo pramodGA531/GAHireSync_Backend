@@ -1061,3 +1061,49 @@ class PromoteCandidates(APIView):
 
         return Response({"success": "Successfully promoted"}, status=status.HTTP_200_OK)
 
+class CloseJobs(APIView):
+    def get(self, request):
+        user_id = CustomUser.objects.get(username = request.user).id
+        jobs = JobPostings.objects.filter(is_assigned = user_id)
+        data = []
+        for job in jobs:
+            sent = CandidateResume.objects.filter(sender= user_id).filter(job_id = job.id).count()
+            accepted = CandidateResume.objects.filter(sender= user_id).filter(job_id = job.id).filter(status = 'accepted').count()
+            rejected = CandidateResume.objects.filter(sender= user_id).filter(job_id = job.id).filter(status = 'rejected').count()
+            small_data = {
+                "sent" : sent,
+                "rejected" : rejected,
+                "accepted":accepted,
+                "job_id":job.id,
+                "status":job.status,
+                "job_title":job.job_title
+            }
+            data.append(small_data)
+
+        return Response({"success":"is the success","data":data})
+    
+class CloseParticularJob(APIView):
+    def post(self, request, id):
+        job = JobPostings.objects.get(id = id)
+        job.status = 'closed'
+        job.save()
+        user_id = CustomUser.objects.get(username = request.user).id
+        candidates = CandidateResume.objects.filter(sender= user_id).filter(job_id = id).filter(status = 'accepted')
+        print(candidates)
+        for candidate in candidates:
+            small_data = {
+                "candidate_name" : candidate.candidate_name,
+                "candidate_email" : candidate.candidate_email,
+                "contact_number" : candidate.contact_number,
+                "alternate_contact_number" : candidate.alternate_contact_number,
+                "resume":candidate.resume
+            }
+            print(small_data,"is the data")
+            resumeBank_serializer = ResumeBankSerializer(data = small_data)
+            if(resumeBank_serializer.is_valid()):
+                resumeBank_serializer.save()
+                print("success")
+            else:
+                print(resumeBank_serializer.errors)
+                return Response({"error":resumeBank_serializer.errors})
+        return Response({"success":"successfully closed job posting"})

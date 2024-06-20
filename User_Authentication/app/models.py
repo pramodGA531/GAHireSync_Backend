@@ -109,6 +109,7 @@ class JobPostings(models.Model):
     decision_maker = models.CharField(max_length=100, default='')
     bond = models.TextField(max_length=255, default='')
     rotational_shift = models.BooleanField()
+    status = models.CharField(max_length=10,default = 'opened')
     is_approved = models.BooleanField(default=True)
     is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
 
@@ -315,3 +316,14 @@ class InterviewsSchedule(models.Model):
 
     def __str__(self):
        return self.resume_id
+
+class ResumeBank(models.Model):
+    resume = models.FileField(upload_to='Resumes/')
+    freeze = models.BooleanField(default=False)
+    candidate_name = models.CharField(max_length=40, null=True, default='')
+    candidate_email = models.EmailField(null=True, default='')
+    contact_number = models.CharField(max_length=15, null=True, default='')  # Changed to CharField to support international phone numbers
+    alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
+   
+    def __str__(self):
+       return f"{self.candidate_name}'s data"

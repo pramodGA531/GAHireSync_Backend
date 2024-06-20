@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, JobPostings, TermsAndConditions, Resume, CandidateResume, JobPostingEdited,InterviewerDetails
+from .models import CustomUser, JobPostings, TermsAndConditions, Resume, CandidateResume, JobPostingEdited,InterviewerDetails,ResumeBank
+
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
@@ -27,3 +28,4 @@ admin.site.register(Resume)
 admin.site.register(CandidateResume)
 admin.site.register(JobPostingEdited)
 admin.site.register(InterviewerDetails) 
+admin.site.register(ResumeBank)
