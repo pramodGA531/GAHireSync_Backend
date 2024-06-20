@@ -1107,3 +1107,9 @@ class CloseParticularJob(APIView):
                 print(resumeBank_serializer.errors)
                 return Response({"error":resumeBank_serializer.errors})
         return Response({"success":"successfully closed job posting"})
+    
+class GetResumeBank(APIView):
+    def get(self, request):
+        resumes = ResumeBank.objects.all()
+        resume_serializer = ResumeBankSerializer(resumes,many = True)
+        return Response({"data":resume_serializer.data},status=status.HTTP_200_OK)

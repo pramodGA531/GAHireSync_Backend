@@ -48,5 +48,6 @@ urlpatterns = [
     path('client/promote_candidates/',PromoteCandidates.as_view()),
     path('recruiter/close_job_page/',CloseJobs.as_view()),
     path('recruiter/close_particular_job/<str:id>/',CloseParticularJob.as_view()),
+    path('recruiter/get_resume_bank/',GetResumeBank.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
