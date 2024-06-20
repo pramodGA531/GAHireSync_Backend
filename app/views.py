@@ -437,7 +437,7 @@ class GetJobsForStaff(APIView):
         print(request.user)
         try:
             userid = CustomUser.objects.get(username=request.user).id
-            jobs = JobPostings.objects.filter(is_assigned = userid)
+            jobs = JobPostings.objects.filter(is_assigned = userid).filter(status = 'opened')
             serializer = JobPostingSerializer(jobs,many = True)
             return Response({"data":serializer.data})
         except Exception as e:

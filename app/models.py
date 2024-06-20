@@ -316,6 +316,18 @@ class InterviewsSchedule(models.Model):
 
     def __str__(self):
        return self.resume_id
+   
+
+class InterviewsScheduleEdited(models.Model):
+    job_id = models.ForeignKey(InterviewerDetails,on_delete=models.CASCADE)
+    resume_id = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
+    recruiter_id = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"})
+    event_description = models.TextField()
+    interview_time = models.DateTimeField(default='')
+    round_num = models.IntegerField()
+
+    def __str__(self):
+       return f"${self.resume_id} edited"
 
 class ResumeBank(models.Model):
     resume = models.FileField(upload_to='Resumes/')
