@@ -200,6 +200,14 @@ class InterviewerDetailsSerializer(serializers.ModelSerializer):
     
     def create(self,validated_data):
         InterviewerDetails.objects.create(**validated_data)
+    
+class InterviewerDetailsEditedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewerDetailsEdited
+        fields = '__all__'
+    
+    def create(self,validated_data):
+        InterviewerDetailsEdited.objects.create(**validated_data)
 
 class RoundsDataSerializer(serializers.ModelSerializer):
     class Meta:

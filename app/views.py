@@ -353,13 +353,14 @@ class ParticularJob(APIView):
             
             # Iterate through each interviewer data and update/create InterviewerDetails
             for interviewer_data in interviewers_data:
+                print("Processing interviewer data")
                 round_num = interviewer_data.get('round_num')
                 interviewer_name = interviewer_data.get('name')
                 interviewer_email = interviewer_data.get('email')
                 type_of_interview = interviewer_data.get('type_of_interview')
                 
-                # Check if InterviewerDetails instance exists for this round
-                interviewer_obj, created = InterviewerDetails.objects.get_or_create(
+                # Check if InterviewerDetailsEdited instance exists for this round
+                interviewer_obj, created = InterviewerDetailsEdited.objects.get_or_create(
                     job_id=job_posting,
                     round_num=round_num,
                     defaults={
@@ -371,9 +372,12 @@ class ParticularJob(APIView):
                 
                 # If not created (i.e., already exists), update the existing instance
                 if not created:
+                    print("Updating existing interviewer detail")
                     interviewer_obj.name = interviewer_name
                     interviewer_obj.email = interviewer_email
                     interviewer_obj.type_of_interview = type_of_interview
+                    interviewer_obj.status = 'pending'
+                    interviewer_obj.edited_by = 'manager'
                     interviewer_obj.save()
             
             # Update JobPostingSerializer with partial=True to allow partial updates
@@ -387,6 +391,8 @@ class ParticularJob(APIView):
 
         except JobPostings.DoesNotExist:
             return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        except InterviewerDetails.DoesNotExist:
+            return Response({"error": "Interviewer details not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -472,13 +478,14 @@ class ParticularJobForStaff(APIView):
             
             # Iterate through each interviewer data and update/create InterviewerDetails
             for interviewer_data in interviewers_data:
+                print("Processing interviewer data")
                 round_num = interviewer_data.get('round_num')
                 interviewer_name = interviewer_data.get('name')
                 interviewer_email = interviewer_data.get('email')
                 type_of_interview = interviewer_data.get('type_of_interview')
                 
-                # Check if InterviewerDetails instance exists for this round
-                interviewer_obj, created = InterviewerDetails.objects.get_or_create(
+                # Check if InterviewerDetailsEdited instance exists for this round
+                interviewer_obj, created = InterviewerDetailsEdited.objects.get_or_create(
                     job_id=job_posting,
                     round_num=round_num,
                     defaults={
@@ -490,9 +497,12 @@ class ParticularJobForStaff(APIView):
                 
                 # If not created (i.e., already exists), update the existing instance
                 if not created:
+                    print("Updating existing interviewer detail")
                     interviewer_obj.name = interviewer_name
                     interviewer_obj.email = interviewer_email
                     interviewer_obj.type_of_interview = type_of_interview
+                    interviewer_obj.status = 'pending'
+                    interviewer_obj.edited_by = 'recruiter'
                     interviewer_obj.save()
             
             # Update JobPostingSerializer with partial=True to allow partial updates
@@ -506,9 +516,59 @@ class ParticularJobForStaff(APIView):
 
         except JobPostings.DoesNotExist:
             return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        except InterviewerDetails.DoesNotExist:
+            return Response({"error": "Interviewer details not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # try:
+        #     job_posting = JobPostings.objects.get(id=id)
+        #     data = request.data
+        #     print(data)
+            
+        #     # Assuming interviewers_data is an array of objects
+        #     interviewers_data = data.get('interviewers_data', [])
+            
+        #     # Iterate through each interviewer data and update/create InterviewerDetails
+        #     for interviewer_data in interviewers_data:
+        #         round_num = interviewer_data.get('round_num')
+        #         interviewer_name = interviewer_data.get('name')
+        #         interviewer_email = interviewer_data.get('email')
+        #         type_of_interview = interviewer_data.get('type_of_interview')
+                
+        #         # Check if InterviewerDetails instance exists for this round
+        #         interviewer_obj, created = InterviewerDetails.objects.get_or_create(
+        #             job_id=job_posting,
+        #             round_num=round_num,
+        #             defaults={
+        #                 'name': interviewer_name,
+        #                 'email': interviewer_email,
+        #                 'type_of_interview': type_of_interview
+        #             }
+        #         )
+                
+        #         # If not created (i.e., already exists), update the existing instance
+        #         if not created:
+        #             interviewer_obj.name = interviewer_name
+        #             interviewer_obj.email = interviewer_email
+        #             interviewer_obj.type_of_interview = type_of_interview
+        #             interviewer_obj.save()
+            
+        #     # Update JobPostingSerializer with partial=True to allow partial updates
+        #     serializer = JobPostingSerializer(job_posting, data=data, partial=True)
+            
+        #     if serializer.is_valid():
+        #         serializer.save()
+        #         return Response({'success': "Successfully modified"}, status=status.HTTP_200_OK)
+        #     else:
+        #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # except JobPostings.DoesNotExist:
+        #     return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        # except Exception as e:
+        #     print(str(e))
+        #     return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
         
 
 class ParticularJobForClient(APIView):
@@ -640,15 +700,26 @@ class NotApprovalJobs(APIView):
             user = CustomUser.objects.get(username = request.user).id
             data = JobPostingEdited.objects.filter(username=user)
             serializer = EditJobSerializer(data,many=True)
+            interviewers_data = []
+            jobs = JobPostings.objects.filter(username = request.user)
+            for job in jobs:
+                interviewers = InterviewerDetailsEdited.objects.filter(job_id = job.id).filter(status = 'pending')
+                print(job.id, "is the id")
+                print("entereed",interviewers)
+                interviewers_serializer = InterviewerDetailsEditedSerializer(interviewers,many = True)
+                interviewers_data.append(interviewers_serializer)
+            print(interviewers_data)
             print(request.user)
-            print(serializer.data)
-            return Response(serializer.data)
+            print(interviewers_serializer.data)
+            return Response({"data":serializer.data, "interviewers_data":interviewers_serializer.data})
+            
+            
         elif user_role == 'manager':
             data = JobPostingEdited.objects.all()
             serializer = EditJobSerializer(data,many=True)
-            print(request.user)
-            print(serializer.data)
-            return Response(serializer.data)
+            interviewers_data = InterviewerDetailsEdited.objects.all()
+            i_serializer = InterviewerDetailsEditedSerializer(interviewers_data,many=True)
+            return Response({"data":serializer.data, "interviewers_data":i_serializer.dataa})
 
 
 class ApproveJob(APIView):
@@ -1113,3 +1184,65 @@ class GetResumeBank(APIView):
         resumes = ResumeBank.objects.all()
         resume_serializer = ResumeBankSerializer(resumes,many = True)
         return Response({"data":resume_serializer.data},status=status.HTTP_200_OK)
+
+class ParticularInterviewersEdited(APIView):
+    def get(self, request, id):
+        interviewers = InterviewerDetailsEdited.objects.filter(job_id = id)
+        serializer = InterviewerDetailsEditedSerializer(interviewers,many = True)
+        return Response({"data":serializer.data},status=status.HTTP_200_OK)
+    
+class AcceptInterviewersEdited(APIView):
+     def get(self, request, id):
+        try:
+            # Fetch all edited interviewers for the specified job_id
+            edited_interviewers = InterviewerDetailsEdited.objects.filter(job_id=id)
+            
+            # Fetch all original interviewers for the same job_id
+            interviewers = InterviewerDetails.objects.filter(job_id=id)
+            
+            # Iterate over edited_interviewers and update or create corresponding interviewers
+            for edited_interviewer in edited_interviewers:
+                edited_interviewer.status = 'accepted'
+                edited_interviewer.save()
+                round_num = edited_interviewer.round_num
+                name = edited_interviewer.name
+                email = edited_interviewer.email
+                type_of_interview = edited_interviewer.type_of_interview
+                
+                # Check if there is an existing interviewer in the original data
+                interviewer = interviewers.filter(round_num=round_num).first()
+                
+                if interviewer:
+                    # Update existing interviewer
+                    interviewer.name = name
+                    interviewer.email = email
+                    interviewer.type_of_interview = type_of_interview
+                    interviewer.save()
+                else:
+                    # Create new interviewer if not found
+                    InterviewerDetails.objects.create(
+                        job_id=id,
+                        round_num=round_num,
+                        name=name,
+                        email=email,
+                        type_of_interview=type_of_interview
+                    )
+            
+            # Optionally, serialize and return updated interviewers data
+            interviewers_updated = InterviewerDetails.objects.filter(job_id=id)
+            serializer = InterviewerDetailsSerializer(interviewers_updated, many=True)
+            return Response(serializer.data)
+        
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class RejectInterviewersEdited(APIView):
+    def get(self,request,id):
+        interviewers_edited = InterviewerDetailsEdited.objects.filter(job_id = id)
+        for interviewer in interviewers_edited:
+            interviewer.status = 'Rejected'
+            interviewer.save()
+        
+        return Response({"success":"success"},status = status.HTTP_200_OK)
+        
+

@@ -318,16 +318,27 @@ class InterviewsSchedule(models.Model):
        return self.resume_id
    
 
-class InterviewsScheduleEdited(models.Model):
-    job_id = models.ForeignKey(InterviewerDetails,on_delete=models.CASCADE)
-    resume_id = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
-    recruiter_id = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"})
-    event_description = models.TextField()
-    interview_time = models.DateTimeField(default='')
-    round_num = models.IntegerField()
+class InterviewerDetailsEdited(models.Model):
+    FACE ='face_to_face'
+    ONLINE = 'online'
+    TELEPHONE = 'telephone'
+
+    MODE_OF_INTERVIEW = [
+       (FACE,'face_to_face'),
+       (ONLINE,'online'),
+       (TELEPHONE,'telephone'),
+    ]
+
+    job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
+    round_num = models.IntegerField(default=0)
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    type_of_interview = models.CharField(max_length=20,choices=MODE_OF_INTERVIEW)
+    status = models.CharField(default = 'pending',max_length=20)
+    edited_by = models.CharField(default='',max_length=20)
 
     def __str__(self):
-       return f"${self.resume_id} edited"
+       return f"${self.name} edited"
 
 class ResumeBank(models.Model):
     resume = models.FileField(upload_to='Resumes/')
