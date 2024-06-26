@@ -47,6 +47,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
             "id",
             "job_title",
             "job_description",
+            "job_department",
             "primary_skills",
             "secondary_skills",
             "years_of_experience",
@@ -84,6 +85,7 @@ class EditJobSerializer(serializers.ModelSerializer):
             "id",
             "job_title",
             "job_description",
+            "job_department",
             "primary_skills",
             "secondary_skills",
             "years_of_experience",
@@ -98,11 +100,9 @@ class EditJobSerializer(serializers.ModelSerializer):
             "timings",
             "other_benefits",
             "working_days_per_week",
-            "interview_process",
             "decision_maker",
             "bond",
             "rotational_shift",
-            "status",
         ]
 
         def create(self, validated_data):
@@ -169,15 +169,24 @@ class JobTitleSerializer(serializers.ModelSerializer):
         model = JobPostings
         fields = ['job_title']
 
+class NumOfRoundsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostings
+        fields = ['rounds_of_interview']
+
 class CandidateApplicationsSerializer(serializers.ModelSerializer):
     job_title = serializers.SerializerMethodField()
+    rounds_of_interview = serializers.SerializerMethodField()
 
     class Meta:
         model = CandidateResume
-        fields = ['id', 'candidate_name','job_id', 'candidate_email', 'resume', 'job_title','status']  # Add other fields as necessary
+        fields = ['id', 'candidate_name','job_id', 'candidate_email', 'resume', 'job_title','status','rounds_of_interview']  # Add other fields as necessary
 
     def get_job_title(self, obj):
         return obj.job_id.job_title if obj.job_id else None
+    
+    def get_rounds_of_interview(self,obj):
+        return obj.job_id.rounds_of_interview if obj.job_id else None
     
 
 class InterviewManageSerializer(serializers.ModelSerializer):
@@ -191,7 +200,7 @@ class InterviewManageSerializer(serializers.ModelSerializer):
 class JobDetailsForInterviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobPostings
-        fields = ['interviewers','job_title','rounds_of_interview','id']
+        fields = ['job_title','rounds_of_interview','id']
 
 class InterviewerDetailsSerializer(serializers.ModelSerializer):
     class Meta:

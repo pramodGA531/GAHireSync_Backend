@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 import decimal
+from django.utils import timezone
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, role=None, **extra_fields):
@@ -50,6 +51,19 @@ class CustomUser(AbstractUser):
     
     def __str__(self):
         return self.username
+    
+class ClientDetails(models.Model):
+    username = models.CharField(max_length=100)
+    email = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    name_of_organization = models.CharField(max_length=200)
+    designation = models.TextField()
+    contact_number = models.IntegerField()
+    website_url = models.URLField()
+    gst= models.CharField(max_length=100)
+    company_pan = models.CharField(max_length=20)
+    company_address = models.TextField()
+    
+
     
 def currencyInIndiaFormat(n):
   d = decimal.Decimal(str(n))
@@ -162,11 +176,11 @@ class JobPostingEdited(models.Model):
        (REJECTED,'rejected'),
        (APPROVED,'approved'),
     ]
-    id= models.ForeignKey(JobPostings,on_delete=models.CASCADE)
+    id= models.OneToOneField(JobPostings,on_delete=models.CASCADE,primary_key=True)
     username = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
-    job_title = models.CharField(max_length=255,default='',unique=True,primary_key=True)
+    job_title = models.CharField(max_length=255,default='')
     job_department = models.CharField(max_length=100,default='')
     job_description = models.TextField()
     primary_skills = models.TextField()
@@ -343,10 +357,19 @@ class InterviewerDetailsEdited(models.Model):
 class ResumeBank(models.Model):
     resume = models.FileField(upload_to='Resumes/')
     freeze = models.BooleanField(default=False)
+    freeze_until = models.DateTimeField(null=True, blank=True)
     candidate_name = models.CharField(max_length=40, null=True, default='')
     candidate_email = models.EmailField(null=True, default='')
     contact_number = models.CharField(max_length=15, null=True, default='')  # Changed to CharField to support international phone numbers
     alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
    
+    def freeze_resume(self, days = 1):
+       self.freeze =  True
+       self.freeze_until = timezone.now() + timezone.timedelta(days=days)
+       self.save()
+
+    def is_frozen(self):
+       return self.freeze_until is not None and self.freeze_until > timezone.now()
+    
     def __str__(self):
        return f"{self.candidate_name}'s data"

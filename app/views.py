@@ -17,6 +17,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Count,F
 import random
+from django.db.models import Q
+
 
 # Create your views here.
 
@@ -217,9 +219,9 @@ class EditJobPostView(APIView):
         job_post = JobPostings.objects.get(pk =pk)
         user = job_post.username
         job_post.is_approved = False
-
+        job_post.save()
         try:
-            job = JobPostingEdited.objects.get(job_title = title)
+            job = JobPostingEdited.objects.get(id = pk)
             serializer = EditJobSerializer(job, data=data)
             job.status = 'pending'
             job.save()
@@ -747,6 +749,7 @@ class ApproveJob(APIView):
                 print(e)
                 return Response({"error":"check your internet connection/email"})
         else:
+            print(serializer.errors)
             return Response({"error":"there is an error"}, status=status.HTTP_400_BAD_REQUEST)
     
 class RejectJob(APIView):
@@ -946,16 +949,17 @@ class SearchJobTitles(APIView):
             job_titles = JobPostings.objects.filter(job_title__icontains = search_term).values_list('job_title',flat=True).distinct()
             jobs = []
             for job_title in job_titles:
-                job= JobPostings.objects.get(job_title = job_title)
-                if job:
-                    jobs.append(job)
+                total_jobs= JobPostings.objects.filter(job_title = job_title)
+                for job in total_jobs:
+                    if job:
+                        jobs.append(job)
             serializer = JobPostingSerializer(jobs, many = True)
             # serializer = JobTitleSerializer(job_titles , many = True)
             print(serializer.data)
             return Response({"data":serializer.data, "titles":job_titles}, status=status.HTTP_200_OK)
         return Response([])
 
-class CandidateApplications(APIView):
+class CandidateApplications(APIView):   
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
     def get(self,request):
@@ -1024,13 +1028,18 @@ class JobDetailsForInterviews(APIView):
     def get(self,request):
         user_id = CustomUser.objects.get(username = request.user).id
         jobs = JobPostings.objects.filter(is_assigned = user_id)
-        candidates = CandidateResume.objects.filter(status = 'shortlisted')
+        # jobs = InterviewerDetails.objects.filter
+        candidates = CandidateResume.objects.filter( 
+                                Q(status='shortlisted') |
+                                Q(status='round1') |
+                                Q(status='round2') |
+                                Q(status='round3'))
         
         data = []
         for job in jobs:
             json_data={
                 "rounds_of_interview": job.rounds_of_interview,
-                "interviewers" : job.interviewers,
+                # "interviewers" : job.interviewers,
                 "job_title":job.job_title,
                 "id":job.id
             }
@@ -1172,7 +1181,8 @@ class CloseParticularJob(APIView):
             print(small_data,"is the data")
             resumeBank_serializer = ResumeBankSerializer(data = small_data)
             if(resumeBank_serializer.is_valid()):
-                resumeBank_serializer.save()
+                resume_bank_instance = resumeBank_serializer.save()
+                resume_bank_instance.freeze_resume()
                 print("success")
             else:
                 print(resumeBank_serializer.errors)
