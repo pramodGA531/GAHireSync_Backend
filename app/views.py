@@ -18,6 +18,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Count,F
 import random
 from django.db.models import Q
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 
 # Create your views here.
@@ -62,6 +65,8 @@ class SignupView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        apiurl = os.getenv('DJANGO_FORNTEND_URL')
+        print(apiurl)
         data = request.data
         if data['role'] == "manager":
             user = CustomUser.objects.filter(role = "manager")
@@ -76,7 +81,7 @@ class SignupView(APIView):
             user.email_token = email_token
             print(user.email_token,"is the email token")
             send_email(subject="Email Verification for RMS ",
-                        message=f"This is the link to verify your account, please click on this link http://localhost:3000/verify/?token={email_token}",
+                        message=f"This is the link to verify your account, please click on this link {apiurl}/verify/?token={email_token}",
                         sender = settings.EMAIL_HOST_USER,
                         receipents_list=data['email']
                         )
@@ -89,7 +94,52 @@ class SignupView(APIView):
             )
         return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-
+class ClientSignup(APIView):
+    def post(self, request):
+        print(request.data)
+        data = {
+            'username': request.data['username'],
+            'email': request.data['email'],
+            'password': request.data['password'],
+            'role': 'client',  
+        }
+        email_token = str(uuid.uuid4())
+        serializer = UserSerializer(data = data)
+        if serializer.is_valid():
+            user = serializer.save()
+            user.email_token = email_token
+            refresh = (RefreshToken.for_user(user))
+            token = str(refresh.access_token)
+            print(user.email_token,"is the email token", "entred here")
+            
+            client_data = {
+                'username': request.data['username'],
+                'email': user.pk,
+                'name_of_organization' : request.data['name_of_organization'],
+                'designation': request.data['designation'],
+                'contact_number': request.data['contact_number'],
+                'website_url': request.data['website_url'],
+                'gst':request.data['gst'],
+                'company_pan': request.data['company_pan'],
+                'company_address':request.data['company_address'],
+             }
+            
+            client_serializer = ClientSignupSerializer(data = client_data)
+            if client_serializer.is_valid():
+                instance = client_serializer.save()
+                print(client_serializer.data, "is the client serializer data")
+                send_email(subject="Email Verification for RMS ",
+                        message=f"This is the link to verify your account, please click on this link http://localhost:3000/verify/?token={email_token}",
+                        sender = settings.EMAIL_HOST_USER,
+                        receipents_list=data['email']
+                        )
+                user.save()
+                return Response(
+                    {"token": token,"is_verified":user.is_verified,"role": user.role}, status=status.HTTP_201_CREATED
+                )
+            print(client_serializer.errors)
+        print(serializer.errors)
+        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 class Verify_email(APIView):
     def get(self, request, token):
@@ -1169,14 +1219,26 @@ class CloseParticularJob(APIView):
         job.save()
         user_id = CustomUser.objects.get(username = request.user).id
         candidates = CandidateResume.objects.filter(sender= user_id).filter(job_id = id).filter(status = 'accepted')
-        print(candidates)
         for candidate in candidates:
+            name_parts = candidate.candidate_name.split()        
+            if len(name_parts) == 1:
+                first_name = name_parts[0]
+                middle_name = ''
+                last_name = ''
+            elif len(name_parts) == 2:
+                first_name = name_parts[0]
+                middle_name = ''
+                last_name = name_parts[1]
+            else:
+                first_name = name_parts[0]
+                middle_name = ' '.join(name_parts[1:-1])
+                last_name = name_parts[-1]
+            
             small_data = {
-                "candidate_name" : candidate.candidate_name,
-                "candidate_email" : candidate.candidate_email,
-                "contact_number" : candidate.contact_number,
-                "alternate_contact_number" : candidate.alternate_contact_number,
-                "resume":candidate.resume
+                "first_name": first_name,
+                "last_name": last_name,
+                "middle_name": middle_name,
+                "resume": candidate.resume
             }
             print(small_data,"is the data")
             resumeBank_serializer = ResumeBankSerializer(data = small_data)
@@ -1255,4 +1317,3 @@ class RejectInterviewersEdited(APIView):
         
         return Response({"success":"success"},status = status.HTTP_200_OK)
         
-

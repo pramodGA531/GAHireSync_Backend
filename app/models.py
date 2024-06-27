@@ -268,7 +268,6 @@ class CandidateResume(models.Model):
     ]
 
     resume = models.FileField(upload_to='Resumes/')
-    job_dept = models.CharField(max_length=100, default='')
     job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
     candidate_name = models.CharField(max_length=40, null=True, default='')
     candidate_email = models.EmailField(null=True, default='')
@@ -355,13 +354,31 @@ class InterviewerDetailsEdited(models.Model):
        return f"${self.name} edited"
 
 class ResumeBank(models.Model):
+    MALE = 'male'
+    FEMALE  = 'female'
+    TRANSGENDER = 'transgender'
+
+    GENDER = [
+      (MALE,'male'),
+      (FEMALE, 'female'),
+      (TRANSGENDER,'transgender'),
+    ]
+
     resume = models.FileField(upload_to='Resumes/')
     freeze = models.BooleanField(default=False)
     freeze_until = models.DateTimeField(null=True, blank=True)
-    candidate_name = models.CharField(max_length=40, null=True, default='')
-    candidate_email = models.EmailField(null=True, default='')
-    contact_number = models.CharField(max_length=15, null=True, default='')  # Changed to CharField to support international phone numbers
-    alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
+    # candidate_name = models.CharField(max_length=40, null=True, default='')
+    # candidate_email = models.EmailField(null=True, default='')
+    # contact_number = models.CharField(max_length=15, null=True, default='') # Changed to CharField to support international phone numbers
+    # alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
+    position = models.CharField(max_length=50, null=True, default='')
+    first_name = models.CharField(max_length=30, null=True, default='')
+    last_name = models.CharField(max_length=30, null=True, default='')
+    middle_name = models.CharField(max_length=30, null=True, default='')
+    age = models.PositiveIntegerField( default=1)
+    gender = models.CharField(max_length=15,choices=GENDER)
+    address = models.TextField( null=True, default='')
+    cover_letter = models.TextField( null=True, default='')
    
     def freeze_resume(self, days = 1):
        self.freeze =  True
@@ -370,6 +387,4 @@ class ResumeBank(models.Model):
 
     def is_frozen(self):
        return self.freeze_until is not None and self.freeze_until > timezone.now()
-    
-    def __str__(self):
-       return f"{self.candidate_name}'s data"
+
