@@ -21,10 +21,10 @@ from django.db.models import Q
 import os
 from dotenv import load_dotenv
 load_dotenv()
-
+from .utils import *
 
 # Create your views here.
-
+apiurl = os.getenv('DJANGO_FORNTEND_URL')
 def send_email(sender, subject, message,receipents_list):
     send_mail(
         subject,
@@ -65,7 +65,7 @@ class SignupView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        apiurl = os.getenv('DJANGO_FORNTEND_URL')
+        
         print(apiurl)
         data = request.data
         if data['role'] == "manager":
@@ -129,7 +129,7 @@ class ClientSignup(APIView):
                 instance = client_serializer.save()
                 print(client_serializer.data, "is the client serializer data")
                 send_email(subject="Email Verification for RMS ",
-                        message=f"This is the link to verify your account, please click on this link http://localhost:3000/verify/?token={email_token}",
+                        message=f"This is the link to verify your account, please click on this link {apiurl}/verify/?token={email_token}",
                         sender = settings.EMAIL_HOST_USER,
                         receipents_list=data['email']
                         )
@@ -1349,3 +1349,33 @@ class TermsAndConditionsEditedView(APIView):
         else:
             print(serializer.errors)
             return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get(self, request):
+        data = TermsAndConditionsEdited.objects.all()
+        serializer = TermsAndConditionsEditedSerializer(data , many = True)
+        return Response({"data":serializer.data},status = status.HTTP_200_OK)
+    
+class AddRecruiter(APIView):
+    def post(self, request):
+        print(request.data)
+        username = request.data['username']
+        password = generate_passwrord()
+        data= {
+            "username": username,
+            "password": password,
+            "role" : "recruiter",
+            "email": request.data['email'],
+            "is_verified": True
+        }
+        serializer = UserSerializer(data =data)
+        if(serializer.is_valid()):
+            print("enterd here")
+            serializer.save()
+            send_email(subject="Your account created at RMS",
+                        message=f"Your account is created at RMS \n These are your login credentials \n username:{username} \n password:{password} \n click the link ${apiurl}",
+                        sender = settings.EMAIL_HOST_USER,
+                        receipents_list=data['email']
+                        )
+            return Response({"success":"successfully account created"},status=status.HTTP_201_CREATED)
+        print(serializer.errors)
+        return Response({"error":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
