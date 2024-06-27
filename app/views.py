@@ -1317,3 +1317,35 @@ class RejectInterviewersEdited(APIView):
         
         return Response({"success":"success"},status = status.HTTP_200_OK)
         
+class TermsAndConditionsEditedView(APIView):
+    def post(self, request):
+        print(request.data)
+        user = CustomUser.objects.get(username=request.user)
+        email = user.email
+        data = {
+            'username': user.pk,
+            'terms_and_conditions': request.data['negotiationText']
+        }
+
+        # Check if the user already has a TermsAndConditionsEdited instance
+        try:
+            user_tandc_instance = TermsAndConditionsEdited.objects.get(username=user)
+            # Update the existing instance
+            serializer = TermsAndConditionsEditedSerializer(user_tandc_instance, data=data, partial=True)
+        except TermsAndConditionsEdited.DoesNotExist:
+            # Create a new instance
+            serializer = TermsAndConditionsEditedSerializer(data=data)
+
+        if serializer.is_valid():
+            serializer.save()
+            subject = 'Request From client'
+            sender = settings.EMAIL_HOST_USER
+            recipients_list = [email]
+            message = f'Your client {request.user} has some negotiations with you. You can check those negotiations.'
+
+            send_mail(subject, message, sender, recipients_list)
+            
+            return Response({"success": "Successfully sent a request"}, status=status.HTTP_200_OK)
+        else:
+            print(serializer.errors)
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)

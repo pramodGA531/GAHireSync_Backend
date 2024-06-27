@@ -225,6 +225,13 @@ class TermsAndConditions(models.Model):
     )
     terms_and_conditions = models.TextField(default="")
 
+class TermsAndConditionsEdited(models.Model):
+   username = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
+    )
+   terms_and_conditions= models.TextField(default = '')
+   
+
 class CandidateResume(models.Model):
     PERMANENT = 'permanent'
     CONTRACT = 'contract'

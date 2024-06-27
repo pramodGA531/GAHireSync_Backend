@@ -244,3 +244,11 @@ class ClientSignupSerializer(serializers.ModelSerializer):
     def create(self , validated_data):
         instance = ClientDetails.objects.create(**validated_data)
         return instance
+    
+class TermsAndConditionsEditedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TermsAndConditionsEdited
+        fields = '__all__'
+
+    def create(self, validated_data):
+        return TermsAndConditionsEdited.objects.create(**validated_data)

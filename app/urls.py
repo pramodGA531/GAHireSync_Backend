@@ -53,5 +53,6 @@ urlpatterns = [
     path('accept_interviewer/<str:id>/',AcceptInterviewersEdited.as_view()),
     path('reject_interviewer/<str:id>/',RejectInterviewersEdited.as_view()),
     path('client_signup/',ClientSignup.as_view()),
+    path('client/terms_and_conditions/negotiated/',TermsAndConditionsEditedView.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
