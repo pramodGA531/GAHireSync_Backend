@@ -1379,3 +1379,45 @@ class AddRecruiter(APIView):
             return Response({"success":"successfully account created"},status=status.HTTP_201_CREATED)
         print(serializer.errors)
         return Response({"error":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+
+class GetCandidatesOfJob(APIView):
+    def get(self,request,id):
+        candidates = CandidateResume.objects.filter(job_id = id).filter(sender = request.user).filter(status = "accepted")
+        serializer = CandidateApplicationsSerializer(candidates,many = True)
+        return Response({"data":serializer.data},status=status.HTTP_200_OK)
+    
+    def post(self, request, id):
+        resumes_data = request.data.get('candidates', [])  # Assuming candidates data is under 'candidates' key
+        freeze_time = int(request.data.get('freeze_time', 1))
+        all_candidates = []
+        for resume_data in resumes_data:
+            # Example query to get the resume file associated with the candidate and job_id
+            resume_file = CandidateResume.objects.filter(job_id=id, candidate_name=resume_data.get('fullName')).first()
+            print(resume_file)  # Ensure this returns the correct resume file or None
+            
+            data = {
+                "first_name": resume_data.get('first_name', ''),
+                "last_name": resume_data.get('last_name', ''),
+                "middle_name": resume_data.get('middle_name', ''),
+                "age": resume_data.get('age', None),
+                "gender": resume_data.get('gender', ''),
+                "position": resume_data.get('position', ''),
+                "address": resume_data.get('address', ''),
+                "cover_letter": resume_data.get('cover_letter', ''),
+                "resume": resume_file.resume if resume_file else None,  # Assuming 'resume_file' is the field containing the resume file
+            }
+            all_candidates.append(data)
+        
+        serializer = ResumeBankSerializer(data=all_candidates, many=True)
+        if serializer.is_valid():
+            instances = serializer.save()
+            print(instances)
+            for instance in instances:
+                instance.freeze_resume(freeze_time)
+            job = JobPostings.objects.get(id = id)
+            job.status = "closed"
+            job.save()
+            return Response({"success": "Data Added Successfully"}, status=status.HTTP_201_CREATED)
+        
+        # If serializer validation fails, return error response
+        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)

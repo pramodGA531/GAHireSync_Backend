@@ -49,12 +49,13 @@ urlpatterns = [
     path('recruiter/close_job_page/',CloseJobs.as_view()),
     path('recruiter/close_particular_job/<str:id>/',CloseParticularJob.as_view()),
     path('recruiter/get_resume_bank/',GetResumeBank.as_view()),
-    path('particular_interviewers_edited/<str:id>/',ParticularInterviewersEdited.as_view()),
+    path('particular_interviewers_edited/<str:id>/',ParticularInterviewersEdited.as_view()),    
     path('accept_interviewer/<str:id>/',AcceptInterviewersEdited.as_view()),
     path('reject_interviewer/<str:id>/',RejectInterviewersEdited.as_view()),
     path('client_signup/',ClientSignup.as_view()),
     path('client/terms_and_conditions/negotiated/',TermsAndConditionsEditedView.as_view()),
     path('manager/t_and_c/negotiations/',TermsAndConditionsEditedView.as_view()), 
-    path('manager/add_recruiter/', AddRecruiter.as_view())
+    path('manager/add_recruiter/', AddRecruiter.as_view()),
+    path('recruiter/close_job/all_accepted_candidates/<str:id>/',GetCandidatesOfJob.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

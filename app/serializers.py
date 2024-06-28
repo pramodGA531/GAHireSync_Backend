@@ -230,7 +230,7 @@ class RoundsDataSerializer(serializers.ModelSerializer):
 class ResumeBankSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResumeBank
-        fields = ['first_name','last_name','middle_name','resume']
+        fields = '__all__'
 
     def create(self, validated_data):
         instance = ResumeBank.objects.create(**validated_data)

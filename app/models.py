@@ -387,9 +387,9 @@ class ResumeBank(models.Model):
     address = models.TextField( null=True, default='')
     cover_letter = models.TextField( null=True, default='')
    
-    def freeze_resume(self, days = 1):
+    def freeze_resume(self, months = 1):
        self.freeze =  True
-       self.freeze_until = timezone.now() + timezone.timedelta(days=days)
+       self.freeze_until = timezone.now() + timezone.timedelta(days=months*30)
        self.save()
 
     def is_frozen(self):
