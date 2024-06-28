@@ -57,5 +57,7 @@ urlpatterns = [
     path('manager/t_and_c/negotiations/',TermsAndConditionsEditedView.as_view()), 
     path('manager/add_recruiter/', AddRecruiter.as_view()),
     path('recruiter/close_job/all_accepted_candidates/<str:id>/',GetCandidatesOfJob.as_view()),
+    path('forgot_pwd/',ForgotPwdView.as_view()),
+    path('set_pwd/',SetPassword.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

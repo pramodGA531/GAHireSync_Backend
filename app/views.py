@@ -1372,7 +1372,7 @@ class AddRecruiter(APIView):
             print("enterd here")
             serializer.save()
             send_email(subject="Your account created at RMS",
-                        message=f"Your account is created at RMS \n These are your login credentials \n username:{username} \n password:{password} \n click the link ${apiurl}",
+                        message=f"Your account is created at RMS \n These are your login credentials \n username:{username} \n password:{password} \n click the link {apiurl}",
                         sender = settings.EMAIL_HOST_USER,
                         receipents_list=data['email']
                         )
@@ -1421,3 +1421,38 @@ class GetCandidatesOfJob(APIView):
         
         # If serializer validation fails, return error response
         return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
+class ForgotPwdView(APIView):
+    def post(self, request):
+        mail = request.data.get('email')
+        try:
+            send_email(subject="RMS Application",
+                            message=f"This is the link to reset your password for RMS Application {apiurl}/set_password/{mail}",
+                            sender = settings.EMAIL_HOST_USER,
+                            receipents_list=mail
+                        )
+            return Response({"success":"Mail sent successfully"})
+        except Exception as e:
+            return Response({"error":str(e)})
+        
+class SetPassword(APIView):
+   def post(self, request):
+        mail = request.data.get('email')
+        print(mail, "is the email")
+        
+        try:
+            user = CustomUser.objects.get(email=mail)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(request.data.get('password'))
+        user.save()
+        
+        send_mail(
+            subject="RMS Application",
+            message="Your password is updated successfully, you can login now",
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[mail],
+        )
+        
+        return Response({"success": "Password Updated Successfully"}, status=status.HTTP_200_OK)
