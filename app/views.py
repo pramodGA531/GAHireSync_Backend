@@ -663,7 +663,7 @@ class UploadResume(APIView):
     def post(self, request,id,  *args, **kwargs):
         sender = User.objects.get(username=request.user).id
         job_id = id
-        
+        print(request.data)
         print(id)
         if not job_id or job_id == 'undefined':
             return Response({'error': 'Job ID is missing or invalid'}, status=status.HTTP_400_BAD_REQUEST)
