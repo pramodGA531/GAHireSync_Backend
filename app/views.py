@@ -43,8 +43,7 @@ class LoginView(APIView):
             username = serializer.validated_data["username"]
             password = serializer.validated_data["password"]
             user = authenticate(username=username, password=password)
-            if user:
-                
+            if user:                
                 role = user.role
                 is_verified = user.is_verified
                 print(is_verified)
@@ -57,7 +56,7 @@ class LoginView(APIView):
             else:
                 return Response(
                     {"error": "Invalid username or password"},
-                    status=status.HTTP_401_UNAUTHORIZED,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
 
@@ -66,8 +65,8 @@ class SignupView(APIView):
 
     def post(self, request, *args, **kwargs):
         
-        print(apiurl)
         data = request.data
+        print(data)
         if data['role'] == "manager":
             user = CustomUser.objects.filter(role = "manager")
             if user:
@@ -92,6 +91,7 @@ class SignupView(APIView):
             return Response(
                 {"token": token,"is_verified":user.is_verified,"role": user.role}, status=status.HTTP_201_CREATED
             )
+        print(serializer.errors)
         return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 class ClientSignup(APIView):
@@ -174,6 +174,7 @@ class Resend_verify_email(APIView):
             send_email(sender=sender_email, message=message, subject=subject, receipents_list=receipents_list)
             return Response({"success":"email sent successfully"},status=status.HTTP_202_ACCEPTED)
         except Exception as e:
+            print(str(e))
             return Response({'error':str(e)}, status=status.HTTP_406_NOT_ACCEPTABLE)
         
 
@@ -380,18 +381,33 @@ class ParticularJob(APIView):
     permission_classes=[IsAuthenticated]
     authentication_classes = [JWTAuthentication]
     def get(self,request,id):
-        user = CustomUser.objects.get(username = request.user)
-        if user.role == 'manager':
-            try:
-                job_details = JobPostings.objects.get(id=id)
-                interview_details = InterviewerDetails.objects.filter(job_id = id)
-            except JobPostings.DoesNotExist:
-                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            interview_serializer = InterviewerDetailsSerializer(interview_details,many=True)
-            serializer = GetAllJobPostsSerializer(job_details)
-            return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
-        else:
-            return Response({"warning":"only manager can see this page"})
+        try:
+            user = CustomUser.objects.get(username=request.user)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.role != 'manager':
+            return Response({"warning": "Only managers can see this page"}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            job_details = JobPostings.objects.get(id=id)
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        interview_details = InterviewerDetails.objects.filter(job_id=id)
+        interview_serializer = InterviewerDetailsSerializer(interview_details, many=True)
+        job_serializer = GetAllJobPostsSerializer(job_details)
+
+        interviewers_edited_data = InterviewerDetailsEdited.objects.filter(job_id=id).filter(status='pending')
+        interviewers_edited_serializer = InterviewerDetailsEditedSerializer(interviewers_edited_data, many=True)
+
+        response_data = {
+            "data": job_serializer.data,
+            "interviewers_data": interview_serializer.data,
+            "interviewers_edited": interviewers_edited_serializer.data
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
         
 
     def put(self, request, id):
@@ -747,33 +763,52 @@ class NotApprovalJobs(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
     def get(self, request):
-        user_role = CustomUser.objects.get(username= request.user).role
-        if user_role == 'client':
-            user = CustomUser.objects.get(username = request.user).id
-            data = JobPostingEdited.objects.filter(username=user)
-            serializer = EditJobSerializer(data,many=True)
-            interviewers_data = []
-            jobs = JobPostings.objects.filter(username = request.user)
-            for job in jobs:
-                interviewers = InterviewerDetailsEdited.objects.filter(job_id = job.id).filter(status = 'pending')
-                print(job.id, "is the id")
-                print("entereed",interviewers)
-                interviewers_serializer = InterviewerDetailsEditedSerializer(interviewers,many = True)
-                interviewers_data.append(interviewers_serializer)
-            print(interviewers_data)
-            print(request.user)
-            print(interviewers_serializer.data)
-            return Response({"data":serializer.data, "interviewers_data":interviewers_serializer.data})
-            
-            
-        elif user_role == 'manager':
-            data = JobPostingEdited.objects.all()
-            serializer = EditJobSerializer(data,many=True)
-            interviewers_data = InterviewerDetailsEdited.objects.all()
-            i_serializer = InterviewerDetailsEditedSerializer(interviewers_data,many=True)
-            return Response({"data":serializer.data, "interviewers_data":i_serializer.dataa})
+        try:
+        # Get user role
+            user = CustomUser.objects.get(username=request.user)
+            user_role = user.role
 
+            if user_role == 'client':
+                user_id = user.id
 
+                # Fetch job postings for the client
+                job_postings = JobPostingEdited.objects.filter(username=user_id)
+                job_postings_serializer = EditJobSerializer(job_postings, many=True)
+
+                # Fetch interviewers for each job posting
+                interviewers_data = []
+                jobs = JobPostings.objects.filter(username=user_id)
+                
+                for job in jobs:
+                    interviewers = InterviewerDetailsEdited.objects.filter(job_id=job.id, status='pending')
+                    interviewers_serializer = InterviewerDetailsEditedSerializer(interviewers, many=True)
+                    if  interviewers_serializer.data:
+                        interviewers_data.append({
+                            "job_id": job.id,
+                            "interviewers": interviewers_serializer.data
+                        })
+
+                # Combine data into a single response
+                response_data = {
+                    "job_postings": job_postings_serializer.data,
+                    "interviewers_data": interviewers_data
+                }
+                return Response(response_data)
+            elif user_role == 'manager':
+                data = JobPostingEdited.objects.all()
+                serializer = EditJobSerializer(data,many=True)
+                interviewers_data = InterviewerDetailsEdited.objects.all()
+                i_serializer = InterviewerDetailsEditedSerializer(interviewers_data,many=True)
+                return Response({"data":serializer.data, "interviewers_data":i_serializer.dataa})
+            else:
+                print(user_role)
+                return Response({"error": "User role not authorized"}, status=status.HTTP_403_FORBIDDEN)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 class ApproveJob(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -785,6 +820,7 @@ class ApproveJob(APIView):
             job.is_approved = True
             jobedit = JobPostingEdited.objects.get(id=key)
             jobedit.status = 'approved'
+            jobedit.save()
             manager = CustomUser.objects.get(role="manager")
             manager_email= manager.email
             print(manager_email)

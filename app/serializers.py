@@ -103,6 +103,7 @@ class EditJobSerializer(serializers.ModelSerializer):
             "decision_maker",
             "bond",
             "rotational_shift",
+            "status",
         ]
 
         def create(self, validated_data):
@@ -180,7 +181,7 @@ class CandidateApplicationsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CandidateResume
-        fields = ['id', 'candidate_name','job_id', 'candidate_email', 'resume', 'job_title','status','rounds_of_interview']  # Add other fields as necessary
+        fields = ['id', 'candidate_name','job_id', 'candidate_email', 'resume', 'job_title','status','rounds_of_interview','date_of_birth']  # Add other fields as necessary
 
     def get_job_title(self, obj):
         return obj.job_id.job_title if obj.job_id else None
@@ -214,7 +215,6 @@ class InterviewerDetailsEditedSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewerDetailsEdited
         fields = '__all__'
-    
     def create(self,validated_data):
         InterviewerDetailsEdited.objects.create(**validated_data)
 
