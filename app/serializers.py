@@ -103,7 +103,7 @@ class EditJobSerializer(serializers.ModelSerializer):
             "decision_maker",
             "bond",
             "rotational_shift",
-            "status",
+            "edit_status",
         ]
 
         def create(self, validated_data):

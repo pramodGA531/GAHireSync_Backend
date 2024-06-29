@@ -198,7 +198,7 @@ class JobPostingEdited(models.Model):
     decision_maker = models.CharField(max_length=100, default='')
     bond = models.TextField(max_length=255, default='')
     rotational_shift = models.BooleanField()
-    status = models.CharField(max_length=10, choices=STATUS, default='pending')
+    edit_status = models.CharField(max_length=10, choices=STATUS, default='pending')
     message = models.TextField(default='')
     # is_approved = models.BooleanField(default=True)
     # is_assigned = models.ForeignKey(CustomUser, related_name='assigned_to',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')

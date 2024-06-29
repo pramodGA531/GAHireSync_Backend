@@ -265,7 +265,6 @@ class EditJobPostView(APIView):
     authentication_classes = [JWTAuthentication]
     def post(self, request, pk):
         data = request.data
-        print(data)
         title = request.data['job_title']
         job_post = JobPostings.objects.get(pk =pk)
         user = job_post.username
@@ -274,16 +273,17 @@ class EditJobPostView(APIView):
         try:
             job = JobPostingEdited.objects.get(id = pk)
             serializer = EditJobSerializer(job, data=data)
-            job.status = 'pending'
+            job.edit_status = 'pending'
+            print("entered here 1")
             job.save()
         except JobPostingEdited.DoesNotExist:
             # If not found, we'll create a new one
+            print("entered here 2")
             serializer = EditJobSerializer(data=data)
 
         if serializer.is_valid():
             serializer.save(username = user)
-            # job.status = 'pending'
-            # job.save()
+            print(serializer.data, "is the data")
             return Response({"success": "Successfully modified"}, status=status.HTTP_200_OK)
         else:
             print(serializer.errors)
@@ -799,7 +799,8 @@ class NotApprovalJobs(APIView):
                 serializer = EditJobSerializer(data,many=True)
                 interviewers_data = InterviewerDetailsEdited.objects.all()
                 i_serializer = InterviewerDetailsEditedSerializer(interviewers_data,many=True)
-                return Response({"data":serializer.data, "interviewers_data":i_serializer.dataa})
+                return Response({"data":serializer.data, "interviewers_data":i_serializer.data})
+                
             else:
                 print(user_role)
                 return Response({"error": "User role not authorized"}, status=status.HTTP_403_FORBIDDEN)
