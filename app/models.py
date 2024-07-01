@@ -57,13 +57,11 @@ class ClientDetails(models.Model):
     email = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     name_of_organization = models.CharField(max_length=200)
     designation = models.TextField()
-    contact_number = models.IntegerField()
+    contact_number = models.BigIntegerField()
     website_url = models.URLField()
     gst= models.CharField(max_length=100)
     company_pan = models.CharField(max_length=20)
     company_address = models.TextField()
-    
-
     
 def currencyInIndiaFormat(n):
   d = decimal.Decimal(str(n))

@@ -190,7 +190,13 @@ class User_view(APIView):
             "email": user.email,
             "role": user.role,
         }
-        return Response(user_data, status=status.HTTP_200_OK)
+        if user_data['role']=='client':
+            email_id = CustomUser.objects.get(email= user_data['email']).id
+            # print(email_id)
+            client_data = ClientDetails.objects.get(email = email_id)
+            client_serializer = ClientSignupSerializer(client_data)
+            print(client_serializer.data)
+        return Response({"data":user_data,"client_data":client_serializer.data},status=status.HTTP_200_OK)
 
     def put(self, request):
         user = request.user
@@ -1493,3 +1499,11 @@ class SetPassword(APIView):
         )
         
         return Response({"success": "Password Updated Successfully"}, status=status.HTTP_200_OK)
+   
+class GetRole(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self,request):
+        print(request.user,"is the iser")
+        user = CustomUser.objects.get(username = request.user)
+        return Response({"role":user.role}, status = status.HTTP_200_OK)

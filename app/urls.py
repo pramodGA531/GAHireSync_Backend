@@ -59,5 +59,6 @@ urlpatterns = [
     path('recruiter/close_job/all_accepted_candidates/<str:id>/',GetCandidatesOfJob.as_view()),
     path('forgot_pwd/',ForgotPwdView.as_view()),
     path('set_pwd/',SetPassword.as_view()),
+    path('get_role/',GetRole.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
