@@ -124,6 +124,7 @@ class JobPostings(models.Model):
     status = models.CharField(max_length=10,default = 'opened')
     is_approved = models.BooleanField(default=True)
     is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
+    created_at = models.DateTimeField(auto_now_add=True,null=True)
 
 
     def get_primary_skills_list(self):
@@ -300,7 +301,8 @@ class CandidateResume(models.Model):
     on_hold = models.BooleanField(default=False)
     is_viewed = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=APPLICATION_STATUS,null=True )
-
+    started_at = models.DateTimeField(auto_now_add=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True , null=True)
     class Meta:
         constraints =[
            models.UniqueConstraint(
@@ -308,6 +310,10 @@ class CandidateResume(models.Model):
            )
         ]
 
+    def get_earliest_resume_date(self):
+        first_resume = self.resume.order_by('created_at').first()
+        return first_resume.created_at if first_resume else None
+    
     def __str__(self):
         return f"{self.candidate_name}'s Resume"
     

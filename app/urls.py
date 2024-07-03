@@ -60,5 +60,8 @@ urlpatterns = [
     path('forgot_pwd/',ForgotPwdView.as_view()),
     path('set_pwd/',SetPassword.as_view()),
     path('get_role/',GetRole.as_view()),
+    path('client_activities/',ClientDetailActivities.as_view()),
+    path('manager/recruiter_summary/', RecruiterSummary.as_view()),
+    path('manager/work_to_recruiter/',WorkToRecruiter.as_view()),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

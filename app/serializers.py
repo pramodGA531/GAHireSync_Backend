@@ -22,7 +22,7 @@ class LoginSerializer(Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["username", "email", "password", "role", "resume", "is_verified"]
+        fields = ["username", "email", "password", "role", "resume", "is_verified", "id"]
         extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, validated_data):
@@ -40,7 +40,8 @@ class UserSerializer(serializers.ModelSerializer):
     
 
 class JobPostingSerializer(serializers.ModelSerializer):
-    
+    username = serializers.SerializerMethodField()
+
     class Meta:
         model = JobPostings
         fields = [
@@ -63,8 +64,12 @@ class JobPostingSerializer(serializers.ModelSerializer):
             "decision_maker",
             "bond",
             "rotational_shift",
+            "status",
         ]
 
+    # def get_username(self, obj):
+    #     return obj.username.username
+    
     def create(self, validated_data):
         # validated_data['interviewers'] = ','.join(validated_data.get('interviewers', []))
         # validated_data['interviewer_emails'] = ','.join(validated_data.get('interviewer_emails', []))
@@ -111,11 +116,18 @@ class EditJobSerializer(serializers.ModelSerializer):
 
 class GetAllJobPostsSerializer(serializers.ModelSerializer):
     username = serializers.SerializerMethodField()
+    recruiter_name = serializers.SerializerMethodField()
 
     class Meta:
         model = JobPostings
         fields = "__all__"
 
+        
+    def get_recruiter_name(self,obj):
+        if obj.is_assigned:
+            return obj.is_assigned.username
+        return None
+    
     def get_username(self, obj):
         return obj.username.username
     
@@ -128,6 +140,7 @@ class GetAllJobPostEditSerializer(serializers.ModelSerializer):
 
     def get_username(self, obj):
         return obj.username.username
+
 
 class TandC_Serializer(serializers.ModelSerializer):
     username = serializers.CharField(source="username.username", read_only=True)
