@@ -18,10 +18,9 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
 
-        # Ensure superusers have a default role if not provided
         if "role" not in extra_fields:
             extra_fields["role"] = (
-                "admin"  # or any default role you consider appropriate
+                "admin"
             )
 
         return self.create_user(email, username, password, **extra_fields)
@@ -109,8 +108,6 @@ class JobPostings(models.Model):
     years_of_experience = models.IntegerField()
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
-    # interviewers = models.TextField()
-    # interviewer_emails = models.TextField(default='')
     job_location = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100,default='')
     job_level = models.CharField(max_length=100, default='')
@@ -133,11 +130,9 @@ class JobPostings(models.Model):
     def get_secondary_skills_list(self):
         return self.secondary_skills.split(",") if self.secondary_skills else []
 
-    # def get_interviewers(self):
-    #     return self.interviewers.split(",") if self.interviewers else []
 
     def get_currency(self):
-       return currencyInIndiaFormat(self.ctc)
+        return currencyInIndiaFormat(self.ctc)
 
     def __str__(self):
         return self.job_title
@@ -149,9 +144,9 @@ class InterviewerDetails(models.Model):
     TELEPHONE = 'telephone'
 
     MODE_OF_INTERVIEW = [
-       (FACE,'face_to_face'),
-       (ONLINE,'online'),
-       (TELEPHONE,'telephone'),
+        (FACE,'face_to_face'),
+        (ONLINE,'online'),
+        (TELEPHONE,'telephone'),
     ]
 
     job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
@@ -171,9 +166,9 @@ class JobPostingEdited(models.Model):
     APPROVED = 'approved'
 
     STATUS = [
-       (PENDING,'pending'),
-       (REJECTED,'rejected'),
-       (APPROVED,'approved'),
+        (PENDING,'pending'),
+        (REJECTED,'rejected'),
+        (APPROVED,'approved'),
     ]
     id= models.OneToOneField(JobPostings,on_delete=models.CASCADE,primary_key=True)
     username = models.ForeignKey(
@@ -199,8 +194,6 @@ class JobPostingEdited(models.Model):
     rotational_shift = models.BooleanField()
     edit_status = models.CharField(max_length=10, choices=STATUS, default='pending')
     message = models.TextField(default='')
-    # is_approved = models.BooleanField(default=True)
-    # is_assigned = models.ForeignKey(CustomUser, related_name='assigned_to',on_delete=models.CASCADE, limit_choices_to={"role": "staff"},null=True,default='')
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
@@ -212,7 +205,7 @@ class JobPostingEdited(models.Model):
         return self.interviewers.split(",") if self.interviewers else []
 
     def get_currency(self):
-       return currencyInIndiaFormat(self.ctc)
+        return currencyInIndiaFormat(self.ctc)
 
     def __str__(self):
         return self.job_title
@@ -225,11 +218,10 @@ class TermsAndConditions(models.Model):
     terms_and_conditions = models.TextField(default="")
 
 class TermsAndConditionsEdited(models.Model):
-   username = models.OneToOneField(
+    username = models.OneToOneField(
         CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"}
     )
-   terms_and_conditions= models.TextField(default = '')
-   
+    terms_and_conditions= models.TextField(default = '')
 
 class CandidateResume(models.Model):
     PERMANENT = 'permanent'
@@ -277,25 +269,24 @@ class CandidateResume(models.Model):
     job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
     candidate_name = models.CharField(max_length=40, null=True, default='')
     candidate_email = models.EmailField(null=True, default='')
-    contact_number = models.CharField(max_length=15, null=True, default='')  # Changed to CharField to support international phone numbers
+    contact_number = models.CharField(max_length=15, null=True, default='')
     alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
-    other_details = models.CharField(max_length=100, null=True, blank=True, default='')  # Made it optional with blank=True
+    other_details = models.CharField(max_length=100, null=True, blank=True, default='')
     sender = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
     receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
-    message = models.TextField(null=True, blank=True)  # Made it optional with blank=True
+    message = models.TextField(null=True, blank=True)
     current_organisation = models.CharField(max_length=100, null=True, default='')
     current_job_location = models.CharField(max_length=100, null=True, default='')
     current_job_type = models.CharField(max_length=50, choices=EMPLOYMENT_TYPE_CHOICES, default=PERMANENT)
     date_of_birth = models.DateField(null=True)
-    total_years_of_experience = models.IntegerField( null=True, blank=True)  # Total years of experience can be in decimal
-    # years_of_experience_in_cloud = models.Field(max_digits=5, decimal_places=2, null=True, blank=True)  # Years of experience in cloud can be in decimal
-    skillset = models.JSONField(null=True, blank=True)  # Skillset can be stored as text
+    total_years_of_experience = models.IntegerField( null=True, blank=True)
+    skillset = models.JSONField(null=True, blank=True)
     job_status = models.CharField(max_length=20, null=True, choices=JOB_STATUS)
-    current_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Current CTC can be in decimal
-    expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Expected CTC can be in decimal
-    notice_period = models.CharField(max_length=50, null=True, blank=True)  # Notice period can be stored as text
-    joining_days_required = models.IntegerField(null=True, blank=True)  # Number of days required for joining
-    highest_qualification = models.CharField(max_length=100, null=True, blank=True)   # Alternate contact number can be stored as text
+    current_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    notice_period = models.CharField(max_length=50, null=True, blank=True)
+    joining_days_required = models.IntegerField(null=True, blank=True)
+    highest_qualification = models.CharField(max_length=100, null=True, blank=True)
     is_accepted = models.BooleanField(default=False)
     is_rejected = models.BooleanField(default=False)
     on_hold = models.BooleanField(default=False)
@@ -305,9 +296,9 @@ class CandidateResume(models.Model):
     created_at = models.DateTimeField(auto_now_add=True , null=True)
     class Meta:
         constraints =[
-           models.UniqueConstraint(
-              fields=['job_id','candidate_email'] , name='unique_job_id_candidate_email_constraint'
-           )
+            models.UniqueConstraint(
+                fields=['job_id','candidate_email'] , name='unique_job_id_candidate_email_constraint'
+            )
         ]
 
     def get_earliest_resume_date(self):
@@ -324,7 +315,7 @@ class RoundDetails(models.Model):
     feedback = models.TextField(default='')
 
     def __str__(self):
-       return f"{self.candidate}'s feedback"
+        return f"{self.candidate}'s feedback"
 
 class Resume(models.Model):
     id = models.AutoField(primary_key=True)
@@ -339,8 +330,7 @@ class InterviewsSchedule(models.Model):
     round_num = models.IntegerField()
 
     def __str__(self):
-       return self.resume_id
-   
+        return self.resume_id
 
 class InterviewerDetailsEdited(models.Model):
     FACE ='face_to_face'
@@ -348,9 +338,9 @@ class InterviewerDetailsEdited(models.Model):
     TELEPHONE = 'telephone'
 
     MODE_OF_INTERVIEW = [
-       (FACE,'face_to_face'),
-       (ONLINE,'online'),
-       (TELEPHONE,'telephone'),
+        (FACE,'face_to_face'),
+        (ONLINE,'online'),
+        (TELEPHONE,'telephone'),
     ]
 
     job_id = models.ForeignKey(JobPostings,on_delete=models.CASCADE)
@@ -362,26 +352,22 @@ class InterviewerDetailsEdited(models.Model):
     edited_by = models.CharField(default='',max_length=20)
 
     def __str__(self):
-       return f"${self.name} edited"
+        return f"${self.name} edited"
 
 class ResumeBank(models.Model):
     MALE = 'male'
     FEMALE  = 'female'
-    TRANSGENDER = 'transgender'
+    OTHER = 'other'
 
     GENDER = [
-      (MALE,'male'),
-      (FEMALE, 'female'),
-      (TRANSGENDER,'transgender'),
+        (MALE,'male'),
+        (FEMALE, 'female'),
+        (OTHER,'other'),
     ]
 
     resume = models.FileField(upload_to='Resumes/')
     freeze = models.BooleanField(default=False)
     freeze_until = models.DateTimeField(null=True, blank=True)
-    # candidate_name = models.CharField(max_length=40, null=True, default='')
-    # candidate_email = models.EmailField(null=True, default='')
-    # contact_number = models.CharField(max_length=15, null=True, default='') # Changed to CharField to support international phone numbers
-    # alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
     position = models.CharField(max_length=50, null=True, default='')
     first_name = models.CharField(max_length=30, null=True, default='')
     last_name = models.CharField(max_length=30, null=True, default='')
@@ -390,12 +376,11 @@ class ResumeBank(models.Model):
     gender = models.CharField(max_length=15,choices=GENDER)
     address = models.TextField( null=True, default='')
     cover_letter = models.TextField( null=True, default='')
-   
+
     def freeze_resume(self, months = 1):
-       self.freeze =  True
-       self.freeze_until = timezone.now() + timezone.timedelta(days=months*30)
-       self.save()
+        self.freeze =  True
+        self.freeze_until = timezone.now() + timezone.timedelta(days=months*30)
+        self.save()
 
     def is_frozen(self):
-       return self.freeze_until is not None and self.freeze_until > timezone.now()
-
+        return self.freeze_until is not None and self.freeze_until > timezone.now()

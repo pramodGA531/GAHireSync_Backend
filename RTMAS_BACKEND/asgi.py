@@ -1,5 +1,5 @@
 """
-ASGI config for User_Authentication project.
+ASGI config for RTMAS_BACKEND project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'User_Authentication.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RTMAS_BACKEND.settings')
 
 application = get_asgi_application()

@@ -1,5 +1,5 @@
 """
-WSGI config for User_Authentication project.
+WSGI config for RTMAS_BACKEND project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,8 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'User_Authentication.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RTMAS_BACKEND.settings')
 
 application = get_wsgi_application()
+
+app=application
