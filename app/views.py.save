@@ -43,11 +43,9 @@ class LoginView(APIView):
             username = serializer.validated_data["username"]
             password = serializer.validated_data["password"]
             user = authenticate(username=username, password=password)
-            if user:
+            if user:                
                 role = user.role
                 is_verified = user.is_verified
-                if role != 'client':
-                    is_verified = True
                 print(is_verified)
                 refresh = RefreshToken.for_user(user)
                 token = str(refresh.access_token)
@@ -99,7 +97,7 @@ class ClientSignup(APIView):
             'username': request.data['username'],
             'email': request.data['email'],
             'password': request.data['password'],
-            'role': 'client',
+            'role': 'client',  
         }
         email_token = str(uuid.uuid4())
         serializer = UserSerializer(data = data)
@@ -108,6 +106,8 @@ class ClientSignup(APIView):
             user.email_token = email_token
             refresh = (RefreshToken.for_user(user))
             token = str(refresh.access_token)
+            print(user.email_token,"is the email token", "entred here")
+            
             client_data = {
                 'username': request.data['username'],
                 'email': user.pk,
@@ -119,6 +119,7 @@ class ClientSignup(APIView):
                 'company_pan': request.data['company_pan'],
                 'company_address':request.data['company_address'],
              }
+            
             client_serializer = ClientSignupSerializer(data = client_data)
             if client_serializer.is_valid():
                 instance = client_serializer.save()
@@ -189,12 +190,15 @@ class User_view(APIView):
             # print(email_id)
             client_data = ClientDetails.objects.get(email = email_id)
             client_serializer = ClientSignupSerializer(client_data)
-            print(client_serializer.data)
+            print(client_serializer.data)   
             return Response({"data":user_data,"role_data":client_serializer.data},status=status.HTTP_200_OK)
+        
         if user_data['role']=='manager':
             return Response({"data":user_data,"role_data":""},status=status.HTTP_200_OK)
+        
         if user_data['role']=='recruiter':
             return Response({"data":user_data,"role_data":""},status=status.HTTP_200_OK)
+        
     def put(self, request):
         user = request.user
         obj = CustomUser.objects.get(username = user)

@@ -37,35 +37,14 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
 
         return user
+
     
 
 class JobPostingSerializer(serializers.ModelSerializer):
-    username = serializers.SerializerMethodField()
 
     class Meta:
         model = JobPostings
-        fields = [
-            "id",
-            "job_title",
-            "job_description",
-            "job_department",
-            "primary_skills",
-            "secondary_skills",
-            "years_of_experience",
-            "ctc",
-            "rounds_of_interview",
-            "job_location",
-            "job_type",
-            "job_level",
-            "qualifications",
-            "timings",
-            "other_benefits",
-            "working_days_per_week",
-            "decision_maker",
-            "bond",
-            "rotational_shift",
-            "status",
-        ]
+        fields = "__all__"
 
     # def get_username(self, obj):
     #     return obj.username.username
