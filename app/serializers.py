@@ -46,12 +46,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
         model = JobPostings
         fields = "__all__"
 
-    # def get_username(self, obj):
-    #     return obj.username.username
-    
     def create(self, validated_data):
-        # validated_data['interviewers'] = ','.join(validated_data.get('interviewers', []))
-        # validated_data['interviewer_emails'] = ','.join(validated_data.get('interviewer_emails', []))
         return JobPostings.objects.create(**validated_data)
     
 class EditJobSerializer(serializers.ModelSerializer):

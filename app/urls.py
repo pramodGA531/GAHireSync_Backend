@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import *
-from django.conf.urls.static import static
+
 
 router = DefaultRouter()
 router.register(r"CustomUser", UserViewSet)
@@ -38,7 +38,8 @@ urlpatterns = [
     path('update_details/',User_view.as_view()),
     path('client/CandidateResume/is_viewed/<str:id>/', ViewedCandidateResume.as_view()),
     path('client/CandidateResume/set_feedback/<str:id>/', FeedbackResume.as_view()),
-    path('recruiter/applications/',ViewApplication.as_view()),
+    path('recruiter/applications/', ViewApplication.as_view(), name='view_applications'),
+    path('recruiter/applications/<str:id>/',ViewApplication.as_view()),
     path('particular_application/<str:id>/',ParticularApplication.as_view()),
     path('job_titles/',SearchJobTitles.as_view()),
     path('candidate/applications/',CandidateApplications.as_view()),
@@ -63,5 +64,6 @@ urlpatterns = [
     path('client_activities/',ClientDetailActivities.as_view()),
     path('manager/recruiter_summary/', RecruiterSummary.as_view()),
     path('manager/work_to_recruiter/',WorkToRecruiter.as_view()),
-]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path('recruiterdash/',RecruiterDash.as_view()),
+]
 

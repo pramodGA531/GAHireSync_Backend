@@ -215,7 +215,6 @@ class JobPostingView(APIView):
     def get(self, request):
         job_postings = JobPostings.objects.filter(username=request.user)
         serializer = JobPostingSerializer(job_postings, many=True)
-
         return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
@@ -824,7 +823,7 @@ class CandidateDataResponse(APIView):
                 obj.is_accepted = False
                 obj.is_rejected = False
                 obj.on_hold = True
-                obj.status = 'hole'
+                obj.status = 'hold'
             obj.save()
             
             return Response({"success":"Your response saved successfully","message":message,"data":file_serializer.data})  
@@ -859,18 +858,27 @@ class FeedbackResume(APIView):
 class ViewApplication(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
-    def get(self,request):
+    def get(self,request,id=None):
         user = CustomUser.objects.get(username = request.user)
         if(user.role == 'recruiter'):
-            objects = CandidateResume.objects.filter(sender = request.user)
+            if id:
+                objects = CandidateResume.objects.filter(sender = request.user,job_id=id)
+            else:
+                objects = CandidateResume.objects.filter(sender = request.user)
             serializer = ResumeUploadSerializer(objects, many=True)
             return Response({"data":serializer.data}, status=status.HTTP_200_OK)
         if(user.role == 'manager'):
-            objects = CandidateResume.objects.all()
+            if id:
+                objects = CandidateResume.objects.filter(job_id=id)
+            else:
+                objects = CandidateResume.objects.all()
             serializer = ResumeUploadSerializer(objects,many = True)
             return Response({"data":serializer.data},status= status.HTTP_200_OK)
         if(user.role=='client'):
-            objects = CandidateResume.objects.filter(receiver= request.user)
+            if id:
+                objects = CandidateResume.objects.filter(receiver= request.user,job_id=id)
+            else:
+                objects = CandidateResume.objects.filter(receiver= request.user)
             serializer = ResumeUploadSerializer(objects,many = True)
             return Response({"data":serializer.data},status= status.HTTP_200_OK)
 
@@ -1403,9 +1411,7 @@ class RecruiterSummary(APIView):
             for candidate in userSerializer.data:
                 clients = JobPostings.objects.filter(is_assigned=candidate['id'])
                 client_serializer = GetAllJobPostsSerializer(clients,many=True)
-                print(client_serializer)
                 for client in client_serializer.data:
-                    print(client, 'is the id')
                     resumes = CandidateResume.objects.filter(job_id=client['id']).count()
                     resumes_selected = CandidateResume.objects.filter(job_id=client['id'], status='accepted').count()
                     number_of_rounds = client['rounds_of_interview']
@@ -1417,7 +1423,6 @@ class RecruiterSummary(APIView):
                         round_counts[round_key] = round_value
 
                     resumes_shortlisted = CandidateResume.objects.filter(job_id=client['id'], status='shortlisted').count()
-                    
 
                     small_data = {
                         'name': candidate['username'],
@@ -1430,15 +1435,60 @@ class RecruiterSummary(APIView):
                         'resumes_shortlisted': resumes_shortlisted,
                         'status':client['status']
                     }
-                    
+
                     small_data.update(round_counts)
-                    
                     data.append(small_data)
 
             return Response({"data": data}, status=status.HTTP_200_OK)
         except Exception as e:
-            print(e, 'is teh erroer')
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RecruiterDash(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request):
+        user = request.user
+        try:
+            userSerializer = UserSerializer(user)
+            candidate = userSerializer.data
+            data = []
+            clients = JobPostings.objects.filter(is_assigned=candidate['id'])
+            client_serializer = GetAllJobPostsSerializer(clients,many=True)
+            for client in client_serializer.data:
+                resumes = CandidateResume.objects.filter(job_id=client['id']).count()
+                resumes_selected = CandidateResume.objects.filter(job_id=client['id'], status='accepted').count()
+                number_of_rounds = client['rounds_of_interview']
+
+                round_counts = {}
+                for i in range(1, number_of_rounds + 1):
+                    round_key = f'round{i}_mem'
+                    round_value = CandidateResume.objects.filter(job_id=client['id'], status=f'round{i}').count()
+                    round_counts[round_key] = round_value
+
+                resumes_shortlisted = CandidateResume.objects.filter(job_id=client['id'], status='shortlisted').count()
+
+                small_data = {
+                    'name': candidate['username'],
+                    'client_name': client['username'],
+                    'id':client['id'],
+                    'job_title': client['job_title'],
+                    'job_department': client['job_department'],
+                    'num_of_positions': 1,
+                    'resumes_sent': resumes,
+                    'resumes_accepted': resumes_selected,
+                    'resumes_shortlisted': resumes_shortlisted,
+                    'status':client['status']
+                }
+
+                small_data.update(round_counts)
+                data.append(small_data)
+
+            return Response({"data": data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 class WorkToRecruiter(APIView):
     def get(self,request):
