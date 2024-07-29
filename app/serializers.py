@@ -184,7 +184,7 @@ class InterviewManageSerializer(serializers.ModelSerializer):
 
     def create(self,validated_data):
         return InterviewsSchedule.objects.create(**validated_data)
-    
+
 class JobDetailsForInterviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobPostings

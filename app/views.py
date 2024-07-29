@@ -963,7 +963,7 @@ class InterviewsScheduleList(APIView):
             return Response({"success":serializer.data},status = status.HTTP_200_OK)
         except Exception as e:
             return Response({"error":serializer.errors},status = status.HTTP_400_BAD_REQUEST)
-        
+
 class JobDetailsForInterviews(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -1013,27 +1013,21 @@ class RecruiterDataForClient(APIView):
 class PromoteCandidates(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
-    def get(self,request):
+    def get(self,request,id=None):
+        if id:
+            candidates = CandidateResume.objects.filter(job_id = id)
         candidates = CandidateResume.objects.filter(receiver = request.user)
         serializer = CandidateApplicationsSerializer(candidates , many = True)
-        print(serializer.data)
         return Response({"data":serializer.data},status=status.HTTP_200_OK)
-    def post(self, request):
-        print(request.data)
-        data = request.data
 
+    def post(self, request):
+        data = request.data
         try:
             candidate = CandidateResume.objects.get(id=data['id'])
         except CandidateResume.DoesNotExist:
             return Response({"error": "Candidate not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        print(f"Candidate status: {candidate.status}")
-        
         rounds = InterviewerDetails.objects.filter(job_id=data['job_id']).count()
-        print(f"Total rounds: {rounds}")
-
         current_status = candidate.status
-
         try:
             if current_status == 'shortlisted':
                 candidate.status = 'round1'
@@ -1048,10 +1042,8 @@ class PromoteCandidates(APIView):
                 return Response({"error": "Invalid candidate status"}, status=status.HTTP_400_BAD_REQUEST)
             
             candidate.save()
-            print(f"Updated candidate status: {candidate.status}")
 
             round_num = int(candidate.status.replace('round', '')) if 'round' in candidate.status else None
-            print(f"Round number: {round_num}")
             
             if round_num:
                 round_data = {
@@ -1061,20 +1053,15 @@ class PromoteCandidates(APIView):
                     "feedback": data.get('feedback', ''),
                 }
 
-                print(f"Round data to be saved: {round_data}")
-
                 candidate_serializer = RoundsDataSerializer(data=round_data)
                 if candidate_serializer.is_valid():
                     saved_instance = candidate_serializer.save()
-                    print(f"Saved instance: {saved_instance}")
                     if not saved_instance:
                         raise ValueError("Saved instance is None")
                 else:
-                    print(candidate_serializer.errors)
                     return Response({"error": candidate_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
-            print(f"Error during status update: {str(e)}")
             return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"success": "Successfully promoted"}, status=status.HTTP_200_OK)
