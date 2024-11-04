@@ -66,5 +66,6 @@ urlpatterns = [
     path('manager/recruiter_summary/', RecruiterSummary.as_view()),
     path('manager/work_to_recruiter/',WorkToRecruiter.as_view()),
     path('recruiterdash/',RecruiterDash.as_view()),
+    
 ]
 

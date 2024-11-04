@@ -22,6 +22,8 @@ load_dotenv()
 from .utils import *
 
 apiurl = os.getenv('apiurl')
+
+# mail handling 
 def send_email(sender, subject, message,receipents_list):
     send_mail(
         subject,
@@ -30,6 +32,7 @@ def send_email(sender, subject, message,receipents_list):
         [receipents_list],
         fail_silently=False
     )
+    
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -39,16 +42,17 @@ class LoginView(APIView):
         if serializer.is_valid():
             username = serializer.validated_data["username"]
             password = serializer.validated_data["password"]
-            user = authenticate(username=username, password=password)
+            user = authenticate(username=username,password=password)
             if user:
                 role = user.role
                 is_verified = user.is_verified
-                if role != 'client':
+                if role !='client':# here I have changed this !=  to ==
                     is_verified = True
                 print(is_verified)
                 refresh = RefreshToken.for_user(user)
                 token = str(refresh.access_token)
-
+               
+                
                 return Response(
                     {"token": str(token), "role": role,"is_verified" : is_verified}, status=status.HTTP_200_OK
                 )
@@ -70,7 +74,7 @@ class SignupView(APIView):
             user = serializer.save()
             user.email_token = email_token
             if data['role'] != 'client':
-                user.is_verified = True
+                user.is_verified = True 
                 user.save()
             send_email(subject="Email Verification for RMS ",
                         message=f"This is the link to verify your account, please click on this link {apiurl}/verify/?token={email_token}",
@@ -88,7 +92,7 @@ class SignupView(APIView):
 
 class ClientSignup(APIView):
     def post(self, request):
-        print(request.data)
+        # print(request.data)
         data = {
             'username': request.data['username'],
             'email': request.data['email'],
@@ -164,28 +168,37 @@ class User_view(APIView):
 
     def get(self, request, *args, **kwargs):
         user = request.user
+        print(user)
         user_data = {
             "id": user.id,
             "username": user.username,
             "email": user.email,
             "role": user.role,
         }
-        if user_data['role']=='client':
-            email_id = CustomUser.objects.get(email= user_data['email']).id
-            client_data = ClientDetails.objects.get(email = email_id)
+        if user_data['role'] == 'client':
+            email_id = CustomUser.objects.get(email=user_data['email']).id
+            client_data = ClientDetails.objects.get(email=email_id)
             client_serializer = ClientSignupSerializer(client_data)
-            return Response({"data":user_data,"role_data":client_serializer.data},status=status.HTTP_200_OK)
-        if user_data['role']=='manager':
-            return Response({"data":user_data,"role_data":""},status=status.HTTP_200_OK)
-        if user_data['role']=='recruiter':
-            return Response({"data":user_data,"role_data":""},status=status.HTTP_200_OK)
+            return Response({"data": user_data, "role_data": client_serializer.data}, status=status.HTTP_200_OK)
+
+        elif user_data['role'] == 'manager':
+            return Response({"data": user_data, "role_data": ""}, status=status.HTTP_200_OK)
+
+        elif user_data['role'] == 'recruiter':
+            return Response({"data": user_data, "role_data": ""}, status=status.HTTP_200_OK)
+
+        # Add a fallback response for unexpected roles
+        else:
+            return Response({"data": user_data, "role_data": "Unknown role"}, status=status.HTTP_200_OK)
+
     def put(self, request):
         user = request.user
-        obj = CustomUser.objects.get(username = user)
-        for qun,ans in request.data:
-            obj.qun = ans
+        obj = CustomUser.objects.get(username=user)
+        for qun, ans in request.data.items():  # You should use .items() to loop through key-value pairs
+            setattr(obj, qun, ans)
         obj.save()
-        return Response({"success":"This is the success message"})
+        return Response({"success": "This is the success message"}, status=status.HTTP_200_OK)
+
 
 
 class UserViewSet(viewsets.ModelViewSet):
