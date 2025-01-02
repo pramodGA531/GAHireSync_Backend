@@ -146,6 +146,7 @@ class LoginView(APIView):
         if password is not None:
             password = password.strip()
         user = authenticate(request, email=email, password=password)
+        print(user)
         if user is not None:
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
