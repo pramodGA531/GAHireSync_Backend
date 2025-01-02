@@ -148,8 +148,8 @@ class LoginView(APIView):
         user = authenticate(request, email=email, password=password)
         print(user)
         if user is not None:
-            refresh = RefreshToken.for_user(user)
-            print(refresh)
+            # refresh = RefreshToken.for_user(user)
+            # print(refresh)
             # access_token = str(refresh.access_token)
             message = f"Successfully signed in. If not done by you please change your password."
             return Response({'role':user.role}, status=status.HTTP_200_OK)
