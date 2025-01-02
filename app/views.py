@@ -148,10 +148,10 @@ class LoginView(APIView):
         user = authenticate(request, email=email, password=password)
         if user is not None:
             refresh = RefreshToken.for_user(user)
-            print(refresh)
-            access_token = str(refresh.access_token)
+            # print(refresh)
+            # access_token = str(refresh.access_token)
             message = f"Successfully signed in. If not done by you please change your password."
-            return Response({'access_token': access_token,'role':user.role}, status=status.HTTP_200_OK)
+            return Response({'access_token': refresh,'role':user.role}, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class VerifyTokenView(APIView):
