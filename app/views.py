@@ -1,1515 +1,871 @@
-from rest_framework import viewsets
-from .serializers import *
-from RTMAS_BACKEND import settings
-import uuid
-import json
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import CustomUser, JobPostings, TermsAndConditions, Resume
-from rest_framework.views import APIView
 from django.contrib.auth import authenticate
-from rest_framework.response import Response
 from rest_framework import status
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from django.core.mail import send_mail
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models import Count,F
+from .models import *
+from .serializers import *
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
+from django.conf import settings 
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes
+
+import jwt
+import string 
 import random
-from django.db.models import Q
-import os
-from dotenv import load_dotenv
-load_dotenv()
+from django.contrib.auth.tokens import default_token_generator
+from django.template import Template, Context
+from django.shortcuts import get_object_or_404
 from .utils import *
 
-apiurl = os.getenv('apiurl')
 
-# mail handling 
-def send_email(sender, subject, message,receipents_list):
-    send_mail(
-        subject,
-        message,
-        sender,
-        [receipents_list],
-        fail_silently=False
-    )
-    
+
+
+class ClientSignupView(APIView):
+    """
+    API view to sign up a new client user.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        combined_values = request.data
+
+        try:
+            with transaction.atomic():
+                user_serializer = CustomUserSerializer(data={
+                    'email': combined_values.get('email'),
+                    'username': combined_values.get('username'),
+                    'role': CustomUser.CLIENT,
+                    'credit' : 50,
+                    'password': combined_values.get('password')
+                })
+                if user_serializer.is_valid(raise_exception=True):
+                    user = user_serializer.save()
+                    user.set_password(combined_values.get('password'))
+                    user.save()
+
+                    client_data = {
+                        'username': user.username,
+                        'user': user.id,
+                        'name_of_organization': combined_values.get('name_of_organization'),
+                        'designation': combined_values.get('designation'),
+                        'contact_number': combined_values.get('contact_number'),
+                        'website_url': combined_values.get('website_url'),
+                        'gst_number': combined_values.get('gst'),
+                        'company_pan': combined_values.get('company_pan'),
+                        'company_address': combined_values.get('company_address')
+                    }
+                    client_serializer = ClientDetailsSerializer(data=client_data)
+                    
+                    if client_serializer.is_valid(raise_exception=True):
+                        client_serializer.save()
+
+                    return Response({"message": "Client created successfully"}, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class AgencySignupView(APIView):
+    """
+    API view to sign up a new client user.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        combined_values = request.data
+        org_code = combined_values.get('org_code')
+        if Organization.objects.filter(org_code=org_code).exists():
+            return Response({"error": "Organization with the give code already exists"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            with transaction.atomic():
+                user_serializer = CustomUserSerializer(data={
+                    'email': combined_values.get('email'),
+                    'username': combined_values.get('username'),
+                    'role': CustomUser.MANAGER,
+                    'credit' : 0,
+                    'password': combined_values.get('password')
+                })
+
+                if user_serializer.is_valid(raise_exception=True):
+                    user = user_serializer.save()
+                    user.set_password(combined_values.get('password'))
+                    user.save()
+                    org_data = {
+                        'name': combined_values.get('name'),
+                        'org_code': combined_values.get('org_code'),
+                        'contact_number': combined_values.get('contact_number'),
+                        'website_url': combined_values.get('website_url'),
+                        'gst_number': combined_values.get('gst'),
+                        'company_pan': combined_values.get('company_pan'),
+                        'company_address': combined_values.get('company_address'),
+                        'manager': user.id,
+                    }
+                    org_serializer = OrganizationSerializer(data=org_data)
+                    
+                    if org_serializer.is_valid(raise_exception=True):
+                        org_serializer.save()
+                    subject = "Agency Created Successfully on HireSync"
+                    message = f"""
+Dear {user.username},
+
+Your agency "{org_data['name']}" has been successfully created on HireSync.
+
+Organization Code: {org_data['org_code']}
+Username: {user.username}
+Email: {user.email}
+
+Please log in to the platform to explore the features and manage your agency:
+Login Link: https://hiresync.com/lpgin
+
+If you have any questions or need assistance, feel free to contact support.
+
+Regards,
+HireSync Team
+"""
+                    send_mail(
+                        subject=subject,
+                        message=message,
+                        from_email='',
+                        recipient_list=[user.email],
+                        fail_silently=False,
+                    )
+                    return Response({"message": "Agency created successfully"}, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class LoginView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request, *args, **kwargs):
-        serializer = LoginSerializer(data=request.data)
-        if serializer.is_valid():
-            username = serializer.validated_data["username"]
-            password = serializer.validated_data["password"]
-            user = authenticate(username=username,password=password)
-            if user:
-                role = user.role
-                is_verified = user.is_verified
-                if role !='client':# here I have changed this !=  to ==
-                    is_verified = True
-                print(is_verified)
-                refresh = RefreshToken.for_user(user)
-                token = str(refresh.access_token)
-               
-                
-                return Response(
-                    {"token": str(token), "role": role,"is_verified" : is_verified}, status=status.HTTP_200_OK
-                )
-            else:
-                return Response(
-                    {"error": "Invalid username or password"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-
-class SignupView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request, *args, **kwargs):
-        data = request.data
-        email_token = str(uuid.uuid4())
-        serializer = UserSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            user.email_token = email_token
-            if data['role'] != 'client':
-                user.is_verified = True 
-                user.save()
-            send_email(subject="Email Verification for RMS ",
-                        message=f"This is the link to verify your account, please click on this link {apiurl}/verify/?token={email_token}",
-                        sender = settings.EMAIL_HOST_USER,
-                        receipents_list=data['email']
-                        )
-            user.save()
-            refresh = (RefreshToken.for_user(user))
-            token = str(refresh.access_token)
-
-            return Response(
-                {"token": token,"is_verified":user.is_verified,"role": user.role}, status=status.HTTP_201_CREATED
-            )
-        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-class ClientSignup(APIView):
     def post(self, request):
-        # print(request.data)
-        data = {
-            'username': request.data['username'],
-            'email': request.data['email'],
-            'password': request.data['password'],
-            'role': 'client',
-        }
-        email_token = str(uuid.uuid4())
-        serializer = UserSerializer(data = data)
-        if serializer.is_valid():
-            user = serializer.save()
-            user.email_token = email_token
-            refresh = (RefreshToken.for_user(user))
-            token = str(refresh.access_token)
-            client_data = {
-                'username': request.data['username'],
-                'email': user.pk,
-                'name_of_organization' : request.data['name_of_organization'],
-                'designation': request.data['designation'],
-                'contact_number': request.data['contact_number'],
-                'website_url': request.data['website_url'],
-                'gst':request.data['gst'],
-                'company_pan': request.data['company_pan'],
-                'company_address':request.data['company_address'],
+        email = request.data.get("email")
+        if email is not None:
+            email = email.strip()
+        password = request.data.get("password")
+        if password is not None:
+            password = password.strip()
+        user = authenticate(request, email=email, password=password)
+        if user is not None:
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            message = f"Successfully signed in. If not done by you please change your password."
+            return Response({'access_token': access_token,'role':user.role}, status=status.HTTP_200_OK)
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+class VerifyTokenView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        token = request.data.get("token")
+        if not token:
+            return Response({"error": "Token not provided"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            decoded_token = jwt.decode(token, settings.SIGNING_KEY, algorithms=[settings.JWT_ALGORITHM])
+            return Response({"valid": True, "decoded_token": decoded_token}, status=status.HTTP_200_OK)
+        except jwt.ExpiredSignatureError:
+            return Response({"error": "Token expired"}, status=status.HTTP_401_UNAUTHORIZED)
+        except jwt.InvalidTokenError:
+            return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+class TokenRefreshView(APIView):
+    permission_classes = (IsAuthenticated,)
+    def post(self, request):
+        refresh = RefreshToken.for_user(request.user)
+        access_token = str(refresh.access_token)
+        return Response({'access_token': access_token}, status=status.HTTP_200_OK)
+
+class GetUserDetails(APIView):
+    def get(self,request):
+        try:
+            user = request.user
+            data = {
+                'username' : user.username,
+                'email' : user.email,
+                'role' : user.role,
             }
-            client_serializer = ClientSignupSerializer(data = client_data)
-            if client_serializer.is_valid():
-                instance = client_serializer.save()
-                print(client_serializer.data, "is the client serializer data")
-                send_email(subject="Email Verification for RMS ",
-                        message=f"This is the link to verify your account, please click on this link {apiurl}/verify/?token={email_token}",
-                        sender = settings.EMAIL_HOST_USER,
-                        receipents_list=data['email']
-                        )
-                user.save()
-                return Response(
-                    {"token": token,"is_verified":user.is_verified,"role": user.role}, status=status.HTTP_201_CREATED
-                )
-        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-class Verify_email(APIView):
-    def get(self, request, token):
-        try:
-            user = CustomUser.objects.get(email_token=token)
-            if not user.is_verified:
-                user.is_verified = True
-                user.save()
-                return Response({"message": "Email verification successful.","role":user.role}, status=status.HTTP_200_OK)
-            else:
-                return Response({"message": "Email already verified."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'data':data},status=status.HTTP_200_OK)
         except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+def generate_random_password(length=8):
+    characters = string.ascii_letters + string.digits
+    password = ''.join(random.choice(characters) for _ in range(length))
+    return password
 
-class Resend_verify_email(APIView):
+class ForgotPasswordAPIView(APIView):
     def post(self, request):
+        data = request.data
+        email = data['email']
         try:
-            email_token = str(uuid.uuid4())
-            sender_email = settings.EMAIL_HOST_USER
-            message = f"Now you can verify this email by clicking this link  http://localhost:3000/verify/?token={email_token}"
-            subject = "Verication for RMS portal"
-            user = CustomUser.objects.get(username=request.data['username'])
-            receipents_list = user.email
-            user.email_token = email_token
-            user.save()
-            send_email(sender=sender_email, message=message, subject=subject, receipents_list=receipents_list)
-            return Response({"success":"email sent successfully"},status=status.HTTP_202_ACCEPTED)
-        except Exception as e:
-            return Response({'error':str(e)}, status=status.HTTP_406_NOT_ACCEPTABLE)
-
-class User_view(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-
-    def get(self, request, *args, **kwargs):
-        user = request.user
-        print(user)
-        user_data = {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "role": user.role,
-        }
-        if user_data['role'] == 'client':
-            email_id = CustomUser.objects.get(email=user_data['email']).id
-            client_data = ClientDetails.objects.get(email=email_id)
-            client_serializer = ClientSignupSerializer(client_data)
-            return Response({"data": user_data, "role_data": client_serializer.data}, status=status.HTTP_200_OK)
-
-        elif user_data['role'] == 'manager':
-            return Response({"data": user_data, "role_data": ""}, status=status.HTTP_200_OK)
-
-        elif user_data['role'] == 'recruiter':
-            return Response({"data": user_data, "role_data": ""}, status=status.HTTP_200_OK)
-
-        # Add a fallback response for unexpected roles
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User with this email does not exist.'}, status=404)
         else:
-            return Response({"data": user_data, "role_data": "Unknown role"}, status=status.HTTP_200_OK)
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-    def put(self, request):
+            reset_password_link = f"http://localhost:3000/reset/{uid}/{token}"
+
+            email_template = """
+Hi {{ user.username }},
+Please click the link below to reset your password:
+{{ reset_password_link }}
+"""
+            template = Template(email_template)
+            context = Context({
+                'user': user,
+                'reset_password_link': reset_password_link,
+            })
+            print(reset_password_link)
+            message = template.render(context)
+
+            send_mail('Reset your password', message,'', [email])
+            return Response({'success': 'Password reset email has been sent.'})
+
+class ResetPasswordAPIView(APIView):
+    def get(self, request, uidb64, token):
+        try:
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = CustomUser.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            return Response({'error': 'Invalid token.'}, status=400)
+        else:
+            if default_token_generator.check_token(user, token):
+                return Response({'uidb64': uidb64, 'token': token})
+            else:
+                return Response({'error': 'Invalid token.'}, status=400)
+
+    def post(self, request, uidb64, token):
+        try:
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = CustomUser.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            return Response({'error': 'Invalid token.'}, status=400)
+        else:
+            print(default_token_generator.check_token(user, token))
+            if default_token_generator.check_token(user, token):
+                new_password = request.data.get('password')
+                user.set_password(new_password)
+                user.save()
+                message = f"Password successfully changed. If not done by you please change your password."
+                send_mail(
+                    'Password Changed',
+                    message,
+                    '',
+                    [user.email],
+                    fail_silently=False,
+                )
+                return Response({'success': 'Password has been reset successfully.'})
+            else:
+                return Response({'error': 'Invalid token.'}, status=400)
+
+class changePassword(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
         user = request.user
-        obj = CustomUser.objects.get(username=user)
-        for qun, ans in request.data.items():  # You should use .items() to loop through key-value pairs
-            setattr(obj, qun, ans)
-        obj.save()
-        return Response({"success": "This is the success message"}, status=status.HTTP_200_OK)
+        current_password = request.data.get('currentPassword')
+        new_password = request.data.get('newPassword')
+        confirm_password = request.data.get('confirmPassword')
 
+        if user.check_password(current_password):
+            if new_password == confirm_password:
+                user.set_password(new_password)
+                user.save()
+                message = f"Password successfully changed. If not done by you please change your password."
+                send_mail(
+                    'Password Changed',
+                    message,
+                    '',
+                    [user.email],
+                    fail_silently=False,
+                )
+                return Response({'success': True})
+            else:
+                return Response({'success': False, 'message': 'New passwords do not match.'})
+        else:
+            return Response({'success': False, 'message': 'Invalid current password.'})
 
-
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = CustomUser.objects.all()
-    serializer_class = UserSerializer
-
-    def get_queryset(self):
-        return CustomUser.objects.all()
-
-    def perform_create(self, serializer):
-        serializer.save()
-
-    def update(self, request, *args, **kwargs):
-        return super().update(request, *args, **kwargs)
-
-    def partial_update(self, request, *args, **kwargs):
-        return super().partial_update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        return super().destroy(request, *args, **kwargs)
+class getClientJobposts(APIView):
+    def get(self,request):
+        if request.GET.get('id'):
+            jobpost = JobPostings.objects.get(id=id)
+            serializer = JobPostingsSerializer(jobpost)
+        else:
+            jobpost = JobPostings.objects.filter(username = request.user)
+            serializer = JobPostingsSerializer(jobpost,many=True)
+        return Response(serializer.data)
 
 
 class JobPostingView(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]  
 
-    def get(self, request):
-        job_postings = JobPostings.objects.filter(username=request.user)
-        serializer = JobPostingSerializer(job_postings, many=True)
-        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
-
-    def post(self, request, *args, **kwargs):
-        job_data = request.data['job_data']
-        job_data.update({'username': request.user.id})
-        serializer = JobPostingSerializer(data=job_data)
-        interviewer_data = request.data['interviewers_data']
-        if serializer.is_valid() :
-
-            job_instance = serializer.save(username=request.user)
-            for interviewer in interviewer_data:
-                interviewer['job_id'] = job_instance.id
-            interview_serializer = InterviewerDetailsSerializer(data=interviewer_data,many=True)
-            if(interview_serializer.is_valid()):
-                interview_serializer.save()
-                manager = CustomUser.objects.get(role="manager")
-                manager_email= manager.email
-                subject =  f'Job added by {request.user}'
-                message = f'your Client {request.user} added new Job posts.. go and check it \n this is link go and join \n '
-                sender = settings.EMAIL_HOST_USER
-                receipents_list = manager_email
-                send_email(sender=sender, subject=subject, message=message, receipents_list=receipents_list)
-                return Response({"data":serializer.data,"username":str(request.user)}, status=status.HTTP_201_CREATED)
-        return Response({"error" : serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-class EditJobPostView(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def post(self, request, pk):
+    def post(self, request):
         data = request.data
-        title = request.data['job_title']
-        job_post = JobPostings.objects.get(pk =pk)
-        user = job_post.username
-        job_post.is_approved = False
-        job_post.save()
-        try:
-            job = JobPostingEdited.objects.get(id = pk)
-            serializer = EditJobSerializer(job, data=data)
-            job.edit_status = 'pending'
-            job.save()
-        except JobPostingEdited.DoesNotExist:
-            serializer = EditJobSerializer(data=data)
+        username = request.user
+        organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
 
-        if serializer.is_valid():
-            serializer.save(username = user)
-            return Response({"success": "Successfully modified"}, status=status.HTTP_200_OK)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if not username or username.role != 'client':
+            return Response({"detail": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
 
-    def put(self, request,pk):        
-        try:
-            job_post = JobPostings.objects.get(pk=pk)
-            job_post.is_approved = False
-            receiver_email = CustomUser.objects.get(username = job_post.username).email
-        except JobPostings.DoesNotExist:
-            return Response({"error": "Job post does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = JobPostingSerializer(instance=job_post, data=request.data)
-        if serializer.is_valid():
-            serializer.save( username = job_post.username)
-            subject = f'Job edited by {request.user}'
-            message = f'Your Manager {request.user} has updated your job post. Go and check it!\nThis is the link to see: '
-            sender = settings.EMAIL_HOST_USER
-            receipients_list = receiver_email
-            send_email(sender=sender, subject=subject, message=message , receipents_list=receipients_list)
-            
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class GetAllJobPosts(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-
-    def get(self, request):
-        user = CustomUser.objects.get(username=request.user)
-        if user.role == "manager":
-            job_postings = JobPostings.objects.all()
-            serializer = GetAllJobPostsSerializer(job_postings, many=True)
-            return Response({"data": serializer.data}, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {"error": "Only manager can see the details"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-
-class TandC_for_client(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-
-    def get(self, request):
-        user = CustomUser.objects.get(username=request.user)
-        if user.role == "client":
-            Manager = TermsAndConditions.objects.all()
-            serializer = TandC_Serializer(Manager, many=True)
-            
-            return Response({"data": serializer.data}, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {"error": "Only client can see the Terms and conditions"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-
-class TandC(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-
-    def get(self, request):
-        try:
-            user = TermsAndConditions.objects.get(username=request.user)
-            serializer = TandC_Serializer(user)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except TermsAndConditions.DoesNotExist:
-            return Response(
-                {"error": "TermsAndConditions not found for this user"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-    def put(self, request, *args, **kwargs):
-        try:
-            user = TermsAndConditions.objects.get(username=request.user)
-        except TermsAndConditions.DoesNotExist:
-            user = TermsAndConditions.objects.create(username=request.user)
-
-        serializer = TandC_Serializer(user, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class ParticularJob(APIView):
-
-    permission_classes=[IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request,id):
-        try:
-            user = CustomUser.objects.get(username=request.user)
-        except CustomUser.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        if user.role != 'manager':
-            return Response({"warning": "Only managers can see this page"}, status=status.HTTP_403_FORBIDDEN)
+        if not organization:
+            return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            job_details = JobPostings.objects.get(id=id)
-        except JobPostings.DoesNotExist:
-            return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        interview_details = InterviewerDetails.objects.filter(job_id=id)
-        interview_serializer = InterviewerDetailsSerializer(interview_details, many=True)
-        job_serializer = GetAllJobPostsSerializer(job_details)
-
-        interviewers_edited_data = InterviewerDetailsEdited.objects.filter(job_id=id).filter(status='pending')
-        interviewers_edited_serializer = InterviewerDetailsEditedSerializer(interviewers_edited_data, many=True)
-
-        response_data = {
-            "data": job_serializer.data,
-            "interviewers_data": interview_serializer.data,
-            "interviewers_edited": interviewers_edited_serializer.data
-        }
-
-        return Response(response_data, status=status.HTTP_200_OK)
-        
-
-    def put(self, request, id):
-        try:
-            job_posting = JobPostings.objects.get(id=id)
-            data = request.data
-            interviewers_data = data.get('interviewers_data', [])
-            for interviewer_data in interviewers_data:
-                round_num = interviewer_data.get('round_num')
-                interviewer_name = interviewer_data.get('name')
-                interviewer_email = interviewer_data.get('email')
-                type_of_interview = interviewer_data.get('type_of_interview')
-                
-                interviewer_obj, created = InterviewerDetailsEdited.objects.get_or_create(
-                    job_id=job_posting,
-                    round_num=round_num,
-                    defaults={
-                        'name': interviewer_name,
-                        'email': interviewer_email,
-                        'type_of_interview': type_of_interview
-                    }
+            with transaction.atomic():
+                interview_rounds = data.get('interview_rounds', [])
+                acceptedterms = data.get('accepted_terms', [])
+                job_posting = JobPostings.objects.create(
+                    username=username,
+                    organization=organization,
+                    job_title=data.get('job_title', ''),
+                    job_department=data.get('job_department'),
+                    job_description=data.get('job_description'),
+                    primary_skills=data.get('primary_skills'),
+                    secondary_skills=data.get('secondary_skills'),
+                    years_of_experience=data.get('years_of_experience'),
+                    ctc=data.get('ctc'),
+                    rounds_of_interview = len(interview_rounds),
+                    job_location=data.get('job_location'),
+                    job_type=data.get('job_type'),
+                    job_level=data.get('job_level'),
+                    qualifications=data.get('qualifications'),
+                    timings=data.get('timings'),
+                    other_benefits=data.get('other_benefits'),
+                    working_days_per_week=data.get('working_days_per_week'),
+                    decision_maker=data.get('decision_maker'),
+                    decision_maker_email=data.get('decision_maker_email'),
+                    bond=data.get('bond'),
+                    rotational_shift = data.get('rotational_shift') == "yes",
+                    status='opened',
+                    is_approved=False,
+                    is_assigned=None,
+                    created_at=None  
                 )
-                
-                if not created:
-                    interviewer_obj.name = interviewer_name
-                    interviewer_obj.email = interviewer_email
-                    interviewer_obj.type_of_interview = type_of_interview
-                    interviewer_obj.status = 'pending'
-                    interviewer_obj.edited_by = 'manager'
-                    interviewer_obj.save()
-            
-            serializer = JobPostingSerializer(job_posting, data=data, partial=True)
-            
-            if serializer.is_valid():
-                serializer.save()
-                return Response({'success': "Successfully modified"}, status=status.HTTP_200_OK)
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        except JobPostings.DoesNotExist:
-            return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
-        except InterviewerDetails.DoesNotExist:
-            return Response({"error": "Interviewer details not found"}, status=status.HTTP_404_NOT_FOUND)
+                if interview_rounds:
+                    for round_data in interview_rounds:
+                        InterviewerDetails.objects.create(
+                            job_id=job_posting,
+                            round_num=round_data.get('round_num'),
+                            name=round_data.get('name', ''),
+                            email=round_data.get('email', ''),
+                            type_of_interview=round_data.get('type_of_interview', InterviewerDetails.FACE)
+                        )
+
+                client = ClientDetails.objects.get(user=username)
+                client_message = f"""
+    Dear {username.first_name},
+
+    Your job posting for "{job_posting.job_title}" has been successfully created with the following details:
+
+    **Organization:** {organization.name}
+    **Job Title:** {job_posting.job_title}
+    **Department:** {job_posting.job_department}
+    **Job Location:** {job_posting.job_location}
+    **CTC:** {job_posting.ctc}
+    **Years of Experience Required:** {job_posting.years_of_experience}
+    **Primary Skills:** {', '.join(job_posting.primary_skills or [])}
+    **Secondary Skills:** {', '.join(job_posting.secondary_skills or [])}
+
+    **Accepted Terms:**
+    - Service Fee: {acceptedterms.get('service_fee')}
+    - Replacement Clause: {acceptedterms.get('replacement_clause')}
+    - Invoice After: {acceptedterms.get('invoice_after')} days
+    - Payment Within: {acceptedterms.get('payment_within')} days
+    - Interest Percentage: {acceptedterms.get('interest_percentage')}%
+
+    Thank you for using our platform.
+
+    Best regards,
+    The Recruitment Team
+"""
+
+                manager_message = f"""
+Dear {organization.manager.first_name},
+
+A new job posting has been created for your organization "{organization.name}" by {username.first_name} {username.last_name}.
+
+**Job Title:** {job_posting.job_title}
+**Department:** {job_posting.job_department}
+**Location:** {job_posting.job_location}
+**CTC:** {job_posting.ctc}
+**Years of Experience:** {job_posting.years_of_experience}
+
+**Accepted Terms:**
+- Service Fee: {acceptedterms.get('service_fee')}
+- Replacement Clause: {acceptedterms.get('replacement_clause')}
+- Invoice After: {acceptedterms.get('invoice_after')} days
+- Payment Within: {acceptedterms.get('payment_within')} days
+- Interest Percentage: {acceptedterms.get('interest_percentage')}%
+
+Please review and approve the posting at your earliest convenience.
+
+Best regards,
+The Recruitment Team
+"""
+
+                send_mail(
+                    subject="Job Posting Created Successfully",
+                    message=client_message,
+                    from_email='',
+                    recipient_list=[username.email]
+                )
+
+                send_mail(
+                    subject="New Job Posting Created",
+                    message=manager_message,
+                    from_email='',
+                    recipient_list=[organization.manager.email]
+                )
+
+                clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
+                if clientTerms.count() < 0:
+                    ClientTermsAcceptance.objects.create(client=client,organization=organization,service_fee = acceptedterms.service_fee,replacement_clause = acceptedterms.replacement_clause,invoice_after = acceptedterms.invoice_after,payment_within = acceptedterms.payment_within,interest_percentage = acceptedterms.interest_percentage)
+            return Response(
+                {"detail": "Job posting and interview rounds created successfully", "job_id": job_posting.id},
+                status=status.HTTP_201_CREATED
+            )
+
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"detail": f"An error occurred: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-class GetStaff(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
+    def put(self, request, job_id):
+        job_posting = get_object_or_404(JobPostings, id=job_id)
+
+        data = request.data
+
+        if job_posting.username != request.user:
+            return Response({"detail": "You do not have permission to edit this job posting."}, status=status.HTTP_403_FORBIDDEN)
+
+        job_posting.job_title = data.get('job_title', job_posting.job_title)
+        job_posting.job_department = data.get('job_department', job_posting.job_department)
+        job_posting.job_description = data.get('job_description', job_posting.job_description)
+        job_posting.primary_skills = data.get('primary_skills', job_posting.primary_skills)
+        job_posting.secondary_skills = data.get('secondary_skills', job_posting.secondary_skills)
+        job_posting.years_of_experience = data.get('years_of_experience', job_posting.years_of_experience)
+        job_posting.ctc = data.get('ctc', job_posting.ctc)
+        job_posting.rounds_of_interview = data.get('rounds_of_interview', job_posting.rounds_of_interview)
+        job_posting.job_location = data.get('job_location', job_posting.job_location)
+        job_posting.job_type = data.get('job_type', job_posting.job_type)
+        job_posting.job_level = data.get('job_level', job_posting.job_level)
+        job_posting.qualifications = data.get('qualifications', job_posting.qualifications)
+        job_posting.timings = data.get('timings', job_posting.timings)
+        job_posting.other_benefits = data.get('other_benefits', job_posting.other_benefits)
+        job_posting.working_days_per_week = data.get('working_days_per_week', job_posting.working_days_per_week)
+        job_posting.decision_maker = data.get('decision_maker', job_posting.decision_maker)
+        job_posting.decision_maker_email = data.get('decision_maker_email', job_posting.decision_maker_email)
+        job_posting.bond = data.get('bond', job_posting.bond)
+        job_posting.rotational_shift = data.get('rotational_shift', job_posting.rotational_shift)
+
+        job_posting.save()
+
+        return Response({"detail": "Job posting updated successfully", "id": job_posting.id}, status=status.HTTP_200_OK)
+
+class OrganizationTermsView(APIView):
+    permission_classes = [IsAuthenticated]  
+
     def get(self, request):
-        role = "recruiter"
-        staff= CustomUser.objects.filter(role=role)
-        serializer = GetStaffSerializer(staff, many=True)
+        user = request.user
+        organization = Organization.objects.filter(manager = user).first()
+        organization_terms,_ = OrganizationTerms.objects.get_or_create(organization = organization)
+        serializer = OrganizationTermsSerializer(organization_terms)
         return Response(serializer.data)
 
-class SelectStaff(APIView):
-    permission_classes  = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def post(self, request):
-        client = request.data.get("client")
+    def put(self, request):
+        user = request.user
+        organization = Organization.objects.filter(manager = user).first()
+        organization_terms = get_object_or_404(OrganizationTerms, organization = organization)
+        data = request.data
+        organization_terms.service_fee = data.get('service_fee', organization_terms.service_fee)
+        organization_terms.replacement_clause = data.get('replacement_clause', organization_terms.replacement_clause)
+        organization_terms.invoice_after = data.get('invoice_after', organization_terms.invoice_after)
+        organization_terms.payment_within = data.get('payment_within', organization_terms.payment_within)
+        organization_terms.interest_percentage = data.get('interest_percentage', organization_terms.interest_percentage)
+        organization_terms.save()
+
+        return Response({"detail": "Organization terms updated successfully", "id": organization_terms.id}, status=status.HTTP_200_OK)
+
+class GetOrganizationTermsView(APIView):
+    permission_classes = [IsAuthenticated]  
+
+    def get(self, request):
+        user = request.user
+        org_code = request.GET.get('org_code')
         try:
-            id = request.data.get("id")
-            obj = JobPostings.objects.get(id=id)
-            serializer = JobPostingSerializer(obj)
-            user = CustomUser.objects.get(username = client)
-            obj.is_assigned = user
-            obj.save()
-
-            return Response({"success":serializer.data})
-        except Exception as e:
-            return Response({"error":"there is an error"})
-
-class GetName(APIView):
-    def post(self, request):
-        user = CustomUser.objects.get(id=request.data.get("id")).username
-        return Response({"name":user})
-    
-class GetJobsForStaff(APIView):
-    permission_classes= [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request):
-        try:
-            userid = CustomUser.objects.get(username=request.user).id
-            jobs = JobPostings.objects.filter(is_assigned = userid).filter(status = 'opened')
-            serializer = JobPostingSerializer(jobs,many = True)
-            return Response({"data":serializer.data})
-        except Exception as e:
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-
-class ParticularJobForStaff(APIView):
-    permission_classes=[IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request,id):
-        user = CustomUser.objects.get(username = request.user)
-        if user.role == 'recruiter':
-            try:
-                job_details = JobPostings.objects.get(id=id)
-                interview_details = InterviewerDetails.objects.filter(job_id = id)
-            except JobPostings.DoesNotExist:
-                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            interview_serializer = InterviewerDetailsSerializer(interview_details,many=True)
-            serializer = GetAllJobPostsSerializer(job_details)
-            return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
+            organization = Organization.objects.get(org_code = org_code)
+        except:
+            return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+        client = ClientDetails.objects.get(user=user)
+        clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
+        if clientTerms.count() > 0:
+            organization_terms=clientTerms.first()
         else:
-            return Response({"warning":"only recruiter can see this page"})
-        
-    def put(self, request, id):
-        try:
-            job_posting = JobPostings.objects.get(id=id)
-            data = request.data
-            
-            interviewers_data = data.get('interviewers_data', [])
-            
-            for interviewer_data in interviewers_data:
-                round_num = interviewer_data.get('round_num')
-                interviewer_name = interviewer_data.get('name')
-                interviewer_email = interviewer_data.get('email')
-                type_of_interview = interviewer_data.get('type_of_interview')
-                
-                interviewer_obj, created = InterviewerDetailsEdited.objects.get_or_create(
-                    job_id=job_posting,
-                    round_num=round_num,
-                    defaults={
-                        'name': interviewer_name,
-                        'email': interviewer_email,
-                        'type_of_interview': type_of_interview
-                    }
-                )
-                
-                if not created:
-                    interviewer_obj.name = interviewer_name
-                    interviewer_obj.email = interviewer_email
-                    interviewer_obj.type_of_interview = type_of_interview
-                    interviewer_obj.status = 'pending'
-                    interviewer_obj.edited_by = 'recruiter'
-                    interviewer_obj.save()
-            
-            serializer = JobPostingSerializer(job_posting, data=data, partial=True)
-            
-            if serializer.is_valid():
-                serializer.save()
-                return Response({'success': "Successfully modified"}, status=status.HTTP_200_OK)
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            organization_terms = OrganizationTerms.objects.get(organization = organization)
+        serializer = OrganizationTermsSerializer(organization_terms)
+        return Response(serializer.data)
 
-        except JobPostings.DoesNotExist:
-            return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
-        except InterviewerDetails.DoesNotExist:
-            return Response({"error": "Interviewer details not found"}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-class ParticularJobForClient(APIView):
+class NegotiateTermsView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request,id):
-        user = CustomUser.objects.get(username = request.user)
-        if user.role == 'client':
-            try:
-                job_details = JobPostings.objects.get(id=id)
-                interview_details = InterviewerDetails.objects.filter(job_id = id)
-            except JobPostings.DoesNotExist:
-                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            interview_serializer = InterviewerDetailsSerializer(interview_details,many=True)
-            serializer = GetAllJobPostsSerializer(job_details)
-            return Response({"data":serializer.data, "interviewers_data":interview_serializer.data}, status=status.HTTP_200_OK)
-        else:
-            return Response({"warning":"only client can see this page"})
-    
-class ParticularJobEditClient(APIView):
-    def get(self,request,id):
-        user = CustomUser.objects.get(username = request.user)
-        if user.role == 'client':
-            try:
-                job_details = JobPostingEdited.objects.get(id=id)
-            except JobPostings.DoesNotExist:
-                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-            
-            serializer = GetAllJobPostEditSerializer(job_details)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        else:
-            return Response({"warning":"only client can see this page"})
 
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        if user.role == "manager":
+            organization = Organization.objects.get(manager=user)
+            negotiationrequests = NegotiationRequests.objects.filter(organization=organization)
+        elif user.role == "client":
+            client = ClientDetails.objects.get(user=user)
+            negotiationrequests = NegotiationRequests.objects.filter(client=client)
+        else:
+            return Response({"detail": "You are not authorized to access this page"}, status=status.HTTP_401_UNAUTHORIZED)
         
-class UploadResume(APIView):
-
-    parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def post(self, request,id,  *args, **kwargs):
-        sender = User.objects.get(username=request.user).id
-        job_id = id
-        if not job_id or job_id == 'undefined':
-            return Response({'error': 'Job ID is missing or invalid'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            receiver_name = JobPostings.objects.get(id=job_id).username
-            receiver = User.objects.get(username=receiver_name).id
-        except JobPostings.DoesNotExist:
-            return Response({'error': 'Job posting not found'}, status=status.HTTP_404_NOT_FOUND)
-        except User.DoesNotExist:
-            return Response({'error': 'Receiver not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        resume = request.FILES.get('resume')
-        if not resume:
-            return Response({'error': 'Resume file is missing'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            skillset = json.loads(request.data.get('skillset'))
-        except json.JSONDecodeError:
-            return Response({'error': 'Invalid skillset data'}, status=status.HTTP_400_BAD_REQUEST)
-
-        data = {
-            'job_id': job_id,
-            'resume': resume,
-            'candidate_name': request.data.get('candidate_name'),
-            'candidate_email': request.data.get('candidate_email'),
-            'candidate_phone': request.data.get('candidate_phone'),
-            'other_details': request.data.get('other_details'),
-            'sender': sender,
-            'receiver': receiver,
-            'message': request.data.get('message'),
-            'current_organisation': request.data.get('current_organisation'),
-            'current_job_type': request.data.get('current_job_type'),
-            'alternate_candidate_phone': request.data.get('alternate_candidate_phone'),
-            'date_of_birth': request.data.get('date_of_birth'),
-            'total_years_of_experience': request.data.get('total_years_of_experience'),
-            'years_of_experience_in_cloud': request.data.get('years_of_experience_in_cloud'),
-            'skillset': skillset,
-            'current_ctc': request.data.get('current_ctc'),
-            'expected_ctc': request.data.get('expected_ctc'),
-            'notice_period': request.data.get('notice_period'),
-            'joining_days_required': request.data.get('joining_days_required'),
-            'highest_qualification': request.data.get('highest_qualification'),
-            'contact_number': request.data.get('contact_number'),
-            'alternate_contact_number': request.data.get('alternate_contact_number'),
-            'is_viewed':False,
-            'status':'pending',
-        }
-
-        file_serializer = ResumeUploadSerializer(data=data)
-        if file_serializer.is_valid():
-            file_serializer.save()
-            return Response(file_serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-class ResumeUploadView(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    parser_classes = [MultiPartParser, FormParser]
+        serializer = NegotiationSerializer(negotiationrequests, many=True)
+        return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
         user = request.user
-        if user.role != 'candidate':
-            return Response({"error": "Only candidates can upload resumes"}, status=status.HTTP_403_FORBIDDEN)
-        
-        serializer = ResumeSerializer(data=request.data, partial=True)
-        if serializer.is_valid():
 
-            serializer.save()
+        if user.role != "client":
+            return Response({"detail": "Only clients can create negotiation requests"}, status=status.HTTP_403_FORBIDDEN)
+
+        client = ClientDetails.objects.get(user=user)
+        code = request.data.get('code')
+        organization = Organization.objects.filter(org_code=code).first()
+
+        if not organization:
+            return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            data = request.data
+
             
-            return Response({"message": "Resume uploaded successfully"}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            negotiation_request = NegotiationRequests.objects.create(
+                client=client,
+                organization=organization,
+                service_fee=data.get('service_fee'),
+                replacement_clause=data.get('replacement_clause'),
+                invoice_after=data.get('invoice_after'),
+                payment_within=data.get('payment_within'),
+                interest_percentage=data.get('interest_percentage')
+            )
 
-
-class NotApprovalJobs(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request):
-        try:
-            user = CustomUser.objects.get(username=request.user)
-            user_role = user.role
-
-            if user_role == 'client':
-                user_id = user.id
-
-                job_postings = JobPostingEdited.objects.filter(username=user_id)
-                job_postings_serializer = EditJobSerializer(job_postings, many=True)
-
-                interviewers_data = []
-                jobs = JobPostings.objects.filter(username=user_id)
-                
-                for job in jobs:
-                    interviewers = InterviewerDetailsEdited.objects.filter(job_id=job.id, status='pending')
-                    interviewers_serializer = InterviewerDetailsEditedSerializer(interviewers, many=True)
-                    if  interviewers_serializer.data:
-                        interviewers_data.append({
-                            "job_id": job.id,
-                            "interviewers": interviewers_serializer.data
-                        })
-
-                response_data = {
-                    "job_postings": job_postings_serializer.data,
-                    "interviewers_data": interviewers_data
-                }
-                return Response(response_data)
-            elif user_role == 'manager':
-                data = JobPostingEdited.objects.all()
-                serializer = EditJobSerializer(data,many=True)
-                interviewers_data = InterviewerDetailsEdited.objects.all()
-                i_serializer = InterviewerDetailsEditedSerializer(interviewers_data,many=True)
-                return Response({"data":serializer.data, "interviewers_data":i_serializer.data})
-                
-            else:
-                return Response({"error": "User role not authorized"}, status=status.HTTP_403_FORBIDDEN)
-        except CustomUser.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-class ApproveJob(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def post(self,request,key):
-        job = JobPostings.objects.get(id =key )
-        serializer = JobPostingSerializer(job,data = request.data['data'])
-        if serializer.is_valid():
-            serializer.save()
-            job.is_approved = True
-            jobedit = JobPostingEdited.objects.get(id=key)
-            jobedit.status = 'approved'
-            jobedit.save()
-            manager = CustomUser.objects.get(role="manager")
-            manager_email= manager.email
-            try:
-                send_email(sender=settings.EMAIL_HOST_USER,
-                        subject=f"Your Reqeust has been approved by {request.user}",
-                        message="Your request has been approved, go and assign the clients", 
-                        receipents_list=manager_email)
-                job.save()
-                return Response({"success":"Approved successfully"}, status=status.HTTP_200_OK)
-            except Exception as e:
-                return Response({"error":"check your internet connection/email"})
-        else:
-            return Response({"error":"there is an error"}, status=status.HTTP_400_BAD_REQUEST)
-    
-class RejectJob(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def post(self,request,key):
-        job = JobPostings.objects.get(id =key )
-        job.is_approved = False
-        jobedit = JobPostingEdited.objects.get(id=key)
-        jobedit.status = 'rejected'
-        message = request.data['message']
-        jobedit.message = message
-        jobedit.save()
-        manager = CustomUser.objects.get(role="manager")
-        manager_email= manager.email
-        try:
-            send_email(sender=settings.EMAIL_HOST_USER,
-                    subject=f"Your Reqeust has been Rejected by {request.user}",
-                    message="Your edit request has been rejected", 
-                    receipents_list=manager_email)
-            job.save()
-            return Response({"success":"Rejected successfully"}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error":"check your internet connection/email"})
-
-class ReceivedData(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request):
-        job_counts = CandidateResume.objects.values('job_id').annotate(job_count=Count('job_id'))
-        response_data = [{'job_id': job['job_id'], 'job_count': job['job_count']} for job in job_counts]
-        return Response(response_data)
-        
-class JobResume(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request , id):
-        objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = id)
-        job_details = JobPostings.objects.get(id=id)
-        job_serializer = JobPostingSerializer(job_details)
-        serializer = ResumeUploadSerializer(objects, many = True)
-        return Response({"data":serializer.data,"job_data":job_serializer.data},status=status.HTTP_200_OK)
-
-class CandidateDataResponse(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def post(self, request,id):
-        try:
-            obj = CandidateResume.objects.get(id = id)
-            response = request.data.get('response')
-            job_id = CandidateResume.objects.get(id = id).job_id
-            objects = CandidateResume.objects.filter(receiver = request.user).filter(job_id = job_id)
-            file_serializer = ResumeUploadSerializer(objects , many = True)
-            message = ''
-            if(response == 'Shortlisted'):
-                email = obj.candidate_email
-                full_name = obj.candidate_name
-                last_name = full_name.split()[-1]
-                base_username = last_name.replace(' ', '')
-                while True:
-                    random_number = random.randint(1000, 9999)
-                    username = f"{base_username}{random_number}"
-                    if not User.objects.filter(username=username).exists():
-                        break
-                password = "123"
-                role = 'candidate'
-                data = {
-                    "email": email,
-                    "username": username,
-                    "password": password,
-                    "role": role,
-                }
-                serializer = UserSerializer(data=data)
-                if serializer.is_valid():
-                    serializer.save()
-                    user = CustomUser.objects.get(username= username)
-                    user.is_verified = True
-                    user.save()
-                    obj.is_accepted = True
-                    obj.is_rejected = False
-                    feedback = request.data.get('feedback')
-
-                    obj.message = feedback
-                    obj.on_hold = False
-                    obj.status = 'shortlisted'
-                    obj.save()
-                    subject = "Your account is created in RMS"
-                    description =  f"These are your login credentials, \n username : {username} \n password :{password} \n click here to login http://localhost:3000/"
-                    sender = settings.EMAIL_HOST
-                    receipent_list = "sivakalkipusarla6@gmail.com"
-                    send_email(subject=subject, message= description, sender=sender, receipents_list=receipent_list)
-                else:
-                    obj.is_accepted = True
-                    obj.is_rejected = False
-                    obj.on_hold = False
-                    feedback = request.data.get('feedback')
-                    obj.message = feedback
-                    obj.status = 'shortlisted'
-                    obj.save()
-                    return Response({"success": "Account already created", "details": serializer.errors,"data":file_serializer.data}, status=status.HTTP_200_OK)
-            if(response == 'Reject'):
-                obj.is_accepted = False
-                obj.is_rejected = True
-                obj.on_hold = False
-                feedback = request.data.get('feedback')
-                obj.message = feedback
-                obj.status = 'rejected'
-            if(response == 'Hold'):
-                obj.is_accepted = False
-                obj.is_rejected = False
-                obj.on_hold = True
-                obj.status = 'hold'
-            obj.save()
             
-            return Response({"success":"Your response saved successfully","message":message,"data":file_serializer.data})  
-        except Exception as e:
-            return Response({"error":str(e)})    
-        
-class ViewedCandidateResume(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def put(self, request, id):
-        try:
-            obj = CandidateResume.objects.get(id = id)
-            obj.is_viewed = True
-            obj.save()
-            return Response({"success":"edited successfully"}, status= status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":"there is an error"})
+            client_email_message = f"""
+Dear {client.user.first_name},
 
-class FeedbackResume(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def put(self, request, id):
-        try:
-            obj = CandidateResume.objects.get(id = id)
-            obj.message = request.data.get('feedback')
-            obj.save()
-            return Response({"success":"edited successfully"}, status= status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error":"there is an error"})
+Your negotiation request has been successfully submitted to {organization.name}. The details of your request are as follows:
 
-class ViewApplication(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request,id=None):
-        user = CustomUser.objects.get(username = request.user)
-        if(user.role == 'recruiter'):
-            if id:
-                objects = CandidateResume.objects.filter(sender = request.user,job_id=id)
-            else:
-                objects = CandidateResume.objects.filter(sender = request.user)
-            serializer = ResumeUploadSerializer(objects, many=True)
-            return Response({"data":serializer.data}, status=status.HTTP_200_OK)
-        if(user.role == 'manager'):
-            if id:
-                objects = CandidateResume.objects.filter(job_id=id)
-            else:
-                objects = CandidateResume.objects.all()
-            serializer = ResumeUploadSerializer(objects,many = True)
-            return Response({"data":serializer.data},status= status.HTTP_200_OK)
-        if(user.role=='client'):
-            if id:
-                objects = CandidateResume.objects.filter(receiver= request.user,job_id=id)
-            else:
-                objects = CandidateResume.objects.filter(receiver= request.user)
-            serializer = ResumeUploadSerializer(objects,many = True)
-            return Response({"data":serializer.data},status= status.HTTP_200_OK)
+**Service Fee:** {data.get('service_fee')}
+**Replacement Clause:** {data.get('replacement_clause')}
+**Invoice After:** {data.get('invoice_after')} days
+**Payment Within:** {data.get('payment_within')} days
+**Interest Percentage:** {data.get('interest_percentage')}%
 
-class ParticularApplication(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request, id):
-        obj = CandidateResume.objects.get(id = id)
-        serializer = ResumeUploadSerializer(obj)
-        return Response({"data":serializer.data},status=status.HTTP_200_OK) 
+We will notify you as soon as the organization manager reviews your request.
 
-class SearchJobTitles(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request):
-        search_term = request.GET.get('search',"")
-        if search_term:
-            job_titles = JobPostings.objects.filter(job_title__icontains = search_term).values_list('job_title',flat=True).distinct()
-            jobs = []
-            for job_title in job_titles:
-                total_jobs= JobPostings.objects.filter(job_title = job_title)
-                for job in total_jobs:
-                    if job:
-                        jobs.append(job)
-            serializer = JobPostingSerializer(jobs, many = True)
-            return Response({"data":serializer.data, "titles":job_titles}, status=status.HTTP_200_OK)
-        return Response([])
+Best regards,  
+The Negotiation Team
+"""
 
-class CandidateApplications(APIView):   
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request):
-        user_email = CustomUser.objects.get(username = request.user).email
-        objects = CandidateResume.objects.filter(candidate_email = user_email).select_related('job_id')
-        serializer = CandidateApplicationsSerializer(objects, many = True)
-        return Response({"success":"true","data":serializer.data})
-
-class InterviewsScheduleList(APIView):
-    def post(self,request):
-        try:
-            dataaa = request.data
-            recruiter_id = CustomUser.objects.get(username=request.user).id
             
-            job_id = dataaa.get('selectedJobId', None)
-            if job_id is None:
-                raise ValueError("No job_id found in request data")
+            manager_email_message = f"""
+Dear {organization.manager.first_name},
+
+A new negotiation request has been submitted by {client.user.first_name} {client.user.last_name} from {client.organization.name}. Here are the details:
+
+**Service Fee:** {data.get('service_fee')}
+**Replacement Clause:** {data.get('replacement_clause')}
+**Invoice After:** {data.get('invoice_after')} days
+**Payment Within:** {data.get('payment_within')} days
+**Interest Percentage:** {data.get('interest_percentage')}%
+
+Please review this request at your earliest convenience.
+
+Best regards,  
+The Negotiation Team
+"""
+
             
-            resume_id = dataaa.get('selectedCandidate', None)
-            if resume_id is None:
-                raise ValueError("No resume_id found in request data")
-            
-            data = {
-                "event_description": dataaa.get('eventDetails', ''),
-                "round_num": dataaa.get('selectedRound', ''),
-                "job_id": job_id,
-                "resume_id": resume_id,
-                "interview_time": dataaa.get('datetime', ''),
-                "recruiter_id": recruiter_id
-            }
-            
-            serializer = InterviewManageSerializer(data=data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({"success": "Event successfully added"}, status=status.HTTP_201_CREATED)
-            else:
-                return Response({"error": "There is an error in the input"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        except CustomUser.DoesNotExist:
-            return Response({"error": "Recruiter does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        
-        except JobPostings.DoesNotExist:
-            return Response({"error": "JobPostings does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        
+            send_mail(
+                subject="Negotiation Request Submitted",
+                message=client_email_message,
+                from_email='',
+                recipient_list=[client.user.email]
+            )
+
+            send_mail(
+                subject="New Negotiation Request Received",
+                message=manager_email_message,
+                from_email='',
+                recipient_list=[organization.manager.email]
+            )
+
+            return Response({"detail": "Negotiation request created successfully"}, status=status.HTTP_201_CREATED)
+
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def get(self,request):
-        user_id = CustomUser.objects.get(username = request.user).id
-        objects = InterviewsSchedule.objects.filter(recruiter_id=user_id)
-        try:
-            serializer = InterviewManageSerializer(objects, many = True)
-            return Response({"success":serializer.data},status = status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error":serializer.errors},status = status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-class JobDetailsForInterviews(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request):
-        user_id = CustomUser.objects.get(username = request.user).id
-        jobs = JobPostings.objects.filter(is_assigned = user_id)
-        candidates = CandidateResume.objects.filter( 
-                                Q(status='shortlisted') |
-                                Q(status='round1') |
-                                Q(status='round2') |
-                                Q(status='round3'))
-        
-        data = []
-        for job in jobs:
-            json_data={
-                "rounds_of_interview": job.rounds_of_interview,
-                "job_title":job.job_title,
-                "id":job.id
-            }
-            data.append(json_data)
-        try:
-            serializer = JobDetailsForInterviewSerializer(data,many = True)
-            candidateSerializer = CandidateApplicationsSerializer(candidates, many =True)
-            return Response({'data':serializer.data,"candidates_data":candidateSerializer.data},status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
-
-class RecruiterDataForClient(APIView):
-    def get(self, request ,id):
-        recruiter = JobPostings.objects.get(id= id).is_assigned
-        recruiter_name = CustomUser.objects.get(username = recruiter).username
-        print(recruiter_name)
-        resume_sent = CandidateResume.objects.filter(job_id = id).count()
-        resume_selected = CandidateResume.objects.filter(job_id=id).filter(status = 'shortlisted').count()
-        resume_rejected = CandidateResume.objects.filter(job_id = id).filter(status='rejected').count()
-        resume_pending = CandidateResume.objects.filter(job_id = id).filter(status='pending').count()
-        data = {
-            "recruiter_name":recruiter_name,
-            "resume_sent":resume_sent,
-            "resume_selected":resume_selected,
-            "resume_rejected":resume_rejected,
-            "resume_pending" : resume_pending,
-        }
-        return Response({'data':data},status=status.HTTP_200_OK)
-
-class PromoteCandidates(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request,id=None):
-        if id:
-            candidates = CandidateResume.objects.filter(job_id = id)
-        candidates = CandidateResume.objects.filter(receiver = request.user)
-        serializer = CandidateApplicationsSerializer(candidates , many = True)
-        return Response({"data":serializer.data},status=status.HTTP_200_OK)
-
-    def post(self, request):
+    def put(self, request):
         data = request.data
-        try:
-            candidate = CandidateResume.objects.get(id=data['id'])
-        except CandidateResume.DoesNotExist:
-            return Response({"error": "Candidate not found"}, status=status.HTTP_404_NOT_FOUND)
-        rounds = InterviewerDetails.objects.filter(job_id=data['job_id']).count()
-        current_status = candidate.status
-        try:
-            if current_status == 'shortlisted':
-                candidate.status = 'round1'
-            elif current_status.startswith('round'):
-                current_round = int(current_status.replace('round', ''))
-                next_round = current_round + 1
-                if next_round > rounds:
-                    candidate.status = 'accepted'
-                else:
-                    candidate.status = f'round{next_round}'
-            else:
-                return Response({"error": "Invalid candidate status"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            candidate.save()
-
-            round_num = int(candidate.status.replace('round', '')) if 'round' in candidate.status else None
-            
-            if round_num:
-                round_data = {
-                    "round_num": round_num,
-                    "job_id": data['job_id'],
-                    "candidate": data['id'],
-                    "feedback": data.get('feedback', ''),
-                }
-
-                candidate_serializer = RoundsDataSerializer(data=round_data)
-                if candidate_serializer.is_valid():
-                    saved_instance = candidate_serializer.save()
-                    if not saved_instance:
-                        raise ValueError("Saved instance is None")
-                else:
-                    return Response({"error": candidate_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"success": "Successfully promoted"}, status=status.HTTP_200_OK)
-
-class CloseJobs(APIView):
-    def get(self, request):
-        user_id = CustomUser.objects.get(username = request.user).id
-        jobs = JobPostings.objects.filter(is_assigned = user_id)
-        data = []
-        for job in jobs:
-            sent = CandidateResume.objects.filter(sender= user_id).filter(job_id = job.id).count()
-            accepted = CandidateResume.objects.filter(sender= user_id).filter(job_id = job.id).filter(status = 'accepted').count()
-            rejected = CandidateResume.objects.filter(sender= user_id).filter(job_id = job.id).filter(status = 'rejected').count()
-            small_data = {
-                "sent" : sent,
-                "rejected" : rejected,
-                "accepted":accepted,
-                "job_id":job.id,
-                "status":job.status,
-                "job_title":job.job_title
-            }
-            data.append(small_data)
-
-        return Response({"success":"is the success","data":data})
-    
-class CloseParticularJob(APIView):
-    def post(self, request, id):
-        job = JobPostings.objects.get(id = id)
-        job.status = 'closed'
-        job.save()
-        user_id = CustomUser.objects.get(username = request.user).id
-        candidates = CandidateResume.objects.filter(sender= user_id).filter(job_id = id).filter(status = 'accepted')
-        for candidate in candidates:
-            name_parts = candidate.candidate_name.split()        
-            if len(name_parts) == 1:
-                first_name = name_parts[0]
-                middle_name = ''
-                last_name = ''
-            elif len(name_parts) == 2:
-                first_name = name_parts[0]
-                middle_name = ''
-                last_name = name_parts[1]
-            else:
-                first_name = name_parts[0]
-                middle_name = ' '.join(name_parts[1:-1])
-                last_name = name_parts[-1]
-            
-            small_data = {
-                "first_name": first_name,
-                "last_name": last_name,
-                "middle_name": middle_name,
-                "resume": candidate.resume
-            }
-            print(small_data,"is the data")
-            resumeBank_serializer = ResumeBankSerializer(data = small_data)
-            if(resumeBank_serializer.is_valid()):
-                resume_bank_instance = resumeBank_serializer.save()
-                resume_bank_instance.freeze_resume()
-                print("success")
-            else:
-                print(resumeBank_serializer.errors)
-                return Response({"error":resumeBank_serializer.errors})
-        return Response({"success":"successfully closed job posting"})
-    
-class GetResumeBank(APIView):
-    def get(self, request):
-        resumes = ResumeBank.objects.all()
-        resume_serializer = ResumeBankSerializer(resumes,many = True)
-        return Response({"data":resume_serializer.data},status=status.HTTP_200_OK)
-
-class ParticularInterviewersEdited(APIView):
-    def get(self, request, id):
-        interviewers = InterviewerDetailsEdited.objects.filter(job_id = id)
-        serializer = InterviewerDetailsEditedSerializer(interviewers,many = True)
-        return Response({"data":serializer.data},status=status.HTTP_200_OK)
-    
-class AcceptInterviewersEdited(APIView):
-     def get(self, request, id):
-        try:
-            edited_interviewers = InterviewerDetailsEdited.objects.filter(job_id=id)
-            
-            interviewers = InterviewerDetails.objects.filter(job_id=id)
-            
-            for edited_interviewer in edited_interviewers:
-                edited_interviewer.status = 'accepted'
-                edited_interviewer.save()
-                round_num = edited_interviewer.round_num
-                name = edited_interviewer.name
-                email = edited_interviewer.email
-                type_of_interview = edited_interviewer.type_of_interview
-                
-                interviewer = interviewers.filter(round_num=round_num).first()
-                
-                if interviewer:
-                    interviewer.name = name
-                    interviewer.email = email
-                    interviewer.type_of_interview = type_of_interview
-                    interviewer.save()
-                else:
-                    InterviewerDetails.objects.create(
-                        job_id=id,
-                        round_num=round_num,
-                        name=name,
-                        email=email,
-                        type_of_interview=type_of_interview
-                    )
-            
-            interviewers_updated = InterviewerDetails.objects.filter(job_id=id)
-            serializer = InterviewerDetailsSerializer(interviewers_updated, many=True)
-            return Response(serializer.data)
-        
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-class RejectInterviewersEdited(APIView):
-    def get(self,request,id):
-        interviewers_edited = InterviewerDetailsEdited.objects.filter(job_id = id)
-        for interviewer in interviewers_edited:
-            interviewer.status = 'Rejected'
-            interviewer.save()
-        
-        return Response({"success":"success"},status = status.HTTP_200_OK)
-        
-class TermsAndConditionsEditedView(APIView):
-    def post(self, request):
-        print(request.data)
-        user = CustomUser.objects.get(username=request.user)
-        email = user.email
-        data = {
-            'username': user.pk,
-            'terms_and_conditions': request.data['negotiationText']
-        }
-
-        try:
-            user_tandc_instance = TermsAndConditionsEdited.objects.get(username=user)
-            serializer = TermsAndConditionsEditedSerializer(user_tandc_instance, data=data, partial=True)
-        except TermsAndConditionsEdited.DoesNotExist:
-            serializer = TermsAndConditionsEditedSerializer(data=data)
-
-        if serializer.is_valid():
-            serializer.save()
-            subject = 'Request From client'
-            sender = settings.EMAIL_HOST_USER
-            recipients_list = [email]
-            message = f'Your client {request.user} has some negotiations with you. You can check those negotiations.'
-
-            send_mail(subject, message, sender, recipients_list)
-            
-            return Response({"success": "Successfully sent a request"}, status=status.HTTP_200_OK)
-        else:
-            print(serializer.errors)
-            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-    
-    def get(self, request):
-        data = TermsAndConditionsEdited.objects.all()
-        serializer = TermsAndConditionsEditedSerializer(data , many = True)
-        return Response({"data":serializer.data},status = status.HTTP_200_OK)
-    
-class AddRecruiter(APIView):
-    def post(self, request):
-        print(request.data)
-        username = request.data['username']
-        password = generate_passwrord()
-        data= {
-            "username": username,
-            "password": password,
-            "role" : "recruiter",
-            "email": request.data['email'],
-            "is_verified": True
-        }
-        serializer = UserSerializer(data =data)
-        if(serializer.is_valid()):
-            print("enterd here")
-            serializer.save()
-            send_email(subject="Your account created at RMS",
-                        message=f"Your account is created at RMS \n These are your login credentials \n username:{username} \n password:{password} \n click the link {apiurl}",
-                        sender = settings.EMAIL_HOST_USER,
-                        receipents_list=data['email']
-                        )
-            return Response({"success":"successfully account created"},status=status.HTTP_201_CREATED)
-        print(serializer.errors)
-        return Response({"error":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
-
-class GetCandidatesOfJob(APIView):
-    def get(self,request,id):
-        candidates = CandidateResume.objects.filter(job_id = id).filter(sender = request.user).filter(status = "accepted")
-        serializer = CandidateApplicationsSerializer(candidates,many = True)
-        return Response({"data":serializer.data},status=status.HTTP_200_OK)
-    
-    def post(self, request, id):
-        resumes_data = request.data.get('candidates', [])
-        freeze_time = int(request.data.get('freeze_time', 1))
-        all_candidates = []
-        for resume_data in resumes_data:
-            resume_file = CandidateResume.objects.filter(job_id=id, candidate_name=resume_data.get('fullName')).first()
-            print(resume_file)
-            
-            data = {
-                "first_name": resume_data.get('first_name', ''),
-                "last_name": resume_data.get('last_name', ''),
-                "middle_name": resume_data.get('middle_name', ''),
-                "age": resume_data.get('age', None),
-                "gender": resume_data.get('gender', ''),
-                "position": resume_data.get('position', ''),
-                "address": resume_data.get('address', ''),
-                "cover_letter": resume_data.get('cover_letter', ''),
-                "resume": resume_file.resume if resume_file else None,
-            }
-            all_candidates.append(data)
-        
-        serializer = ResumeBankSerializer(data=all_candidates, many=True)
-        if serializer.is_valid():
-            instances = serializer.save()
-            print(instances)
-            for instance in instances:
-                instance.freeze_resume(freeze_time)
-            job = JobPostings.objects.get(id = id)
-            job.status = "closed"
-            job.save()
-            return Response({"success": "Data Added Successfully"}, status=status.HTTP_201_CREATED)
-        
-        return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-    
-class ForgotPwdView(APIView):
-    def post(self, request):
-        mail = request.data.get('email')
-        try:
-            send_email(subject="RMS Application",
-                            message=f"This is the link to reset your password for RMS Application {apiurl}/set_password/{mail}",
-                            sender = settings.EMAIL_HOST_USER,
-                            receipents_list=mail
-                        )
-            return Response({"success":"Mail sent successfully"})
-        except Exception as e:
-            return Response({"error":str(e)})
-        
-class SetPassword(APIView):
-   def post(self, request):
-        mail = request.data.get('email')
-        try:
-            user = CustomUser.objects.get(email=mail)
-        except CustomUser.DoesNotExist:
-            return Response({"error": "User does not exist"}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.set_password(request.data.get('password'))
-        print(user.password ,user.username ,"is the password")
-        user.save()
-        
-        send_mail(
-            subject="RMS Application",
-            message="Your password is updated successfully, you can login now",
-            from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[mail],
-        )
-        
-        return Response({"success": "Password Updated Successfully"}, status=status.HTTP_200_OK)
-   
-class GetRole(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self,request):
-        print(request.user,"is the iser")
-        user = CustomUser.objects.get(username = request.user)
-        return Response({"role":user.role}, status = status.HTTP_200_OK)
-    
-
-class ClientDetailActivities(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-
-    def get(self, request):
-        try:
-            jobs = JobPostings.objects.all()
-            serializer = GetAllJobPostsSerializer(jobs, many=True)
-            data = serializer.data
-
-            for job in data:
-                try:
-                    recruiter = CustomUser.objects.get(id=job['is_assigned']).username
-                    job['recruiter_name'] = recruiter
-                except CustomUser.DoesNotExist:
-                    job['recruiter_name'] = ''
-                except Exception as e:
-                    job['recruiter_name'] = ''
-                    print(f"Error fetching recruiter: {str(e)}")
-
-                try:
-                    job['candidates'] = CandidateResume.objects.filter(job_id=job['id']).count()
-                except Exception as e:
-                    job['candidates'] = 0
-                    print(f"Error counting candidates: {str(e)}")
-
-                try:
-                    job['candidates_shortlisted'] = CandidateResume.objects.filter(
-                        job_id=job['id']
-                    ).filter(
-                        ~Q(status='rejected') & ~Q(status='hold')
-                    ).count()
-                except Exception as e:
-                    job['candidates_shortlisted'] = 0
-                    print(f"Error counting shortlisted candidates: {str(e)}")
-
-                try:
-                    started_at = CandidateResume.objects.filter(job_id=job['id']).order_by('started_at').first()
-                    if started_at:
-                        job['started_at'] = started_at.started_at
-                    else:
-                        job['started_at'] = None
-                except Exception as e:
-                    job['started_at'] = None
-                    print(f"Error fetching earliest resume date: {str(e)}")
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({"data": data}, status=status.HTTP_200_OK)
-    
-
-class BussinessByClient(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request):
-        return Response({"success":"it's success"},status=status.HTTP_200_OK)
-
-class RecruiterSummary(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request):
-        try:
-            candidates = CustomUser.objects.filter(role='recruiter')
-            userSerializer = UserSerializer(candidates,many = True)
-            data = []
-            for candidate in userSerializer.data:
-                clients = JobPostings.objects.filter(is_assigned=candidate['id'])
-                client_serializer = GetAllJobPostsSerializer(clients,many=True)
-                for client in client_serializer.data:
-                    resumes = CandidateResume.objects.filter(job_id=client['id']).count()
-                    resumes_selected = CandidateResume.objects.filter(job_id=client['id'], status='accepted').count()
-                    number_of_rounds = client['rounds_of_interview']
-
-                    round_counts = {}
-                    for i in range(1, number_of_rounds + 1):
-                        round_key = f'round{i}_mem'
-                        round_value = CandidateResume.objects.filter(job_id=client['id'], status=f'round{i}').count()
-                        round_counts[round_key] = round_value
-
-                    resumes_shortlisted = CandidateResume.objects.filter(job_id=client['id'], status='shortlisted').count()
-
-                    small_data = {
-                        'name': candidate['username'],
-                        'client_name': client['username'],
-                        'job_title': client['job_title'],
-                        'job_department': client['job_department'],
-                        'num_of_positions': 1,
-                        'resumes_sent': resumes,
-                        'resumes_accepted': resumes_selected,
-                        'resumes_shortlisted': resumes_shortlisted,
-                        'status':client['status']
-                    }
-
-                    small_data.update(round_counts)
-                    data.append(small_data)
-
-            return Response({"data": data}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class RecruiterDash(APIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [JWTAuthentication]
-    def get(self, request):
         user = request.user
+
+        if user.role != "manager":
+            return Response({"detail": "Only managers can update negotiation requests"}, status=status.HTTP_403_FORBIDDEN)
+
         try:
-            userSerializer = UserSerializer(user)
-            candidate = userSerializer.data
-            data = []
-            clients = JobPostings.objects.filter(is_assigned=candidate['id'])
-            client_serializer = GetAllJobPostsSerializer(clients,many=True)
-            for client in client_serializer.data:
-                resumes = CandidateResume.objects.filter(job_id=client['id']).count()
-                resumes_selected = CandidateResume.objects.filter(job_id=client['id'], status='accepted').count()
-                number_of_rounds = client['rounds_of_interview']
+            negotiation_request = NegotiationRequests.objects.get(id=data.get('id'))
 
-                round_counts = {}
-                for i in range(1, number_of_rounds + 1):
-                    round_key = f'round{i}_mem'
-                    round_value = CandidateResume.objects.filter(job_id=client['id'], status=f'round{i}').count()
-                    round_counts[round_key] = round_value
+            
+            if data.get('status') == "accepted":
+                negotiation_request.is_accepted = True
+                negotiation_request.save()
 
-                resumes_shortlisted = CandidateResume.objects.filter(job_id=client['id'], status='shortlisted').count()
+                
+                ClientTermsAcceptance.objects.create(
+                    client=negotiation_request.client,
+                    organization=negotiation_request.organization,
+                    service_fee=negotiation_request.service_fee,
+                    replacement_clause=negotiation_request.replacement_clause,
+                    invoice_after=negotiation_request.invoice_after,
+                    payment_within=negotiation_request.payment_within,
+                    interest_percentage=negotiation_request.interest_percentage
+                )
 
-                small_data = {
-                    'name': candidate['username'],
-                    'client_name': client['username'],
-                    'id':client['id'],
-                    'job_title': client['job_title'],
-                    'job_department': client['job_department'],
-                    'num_of_positions': 1,
-                    'resumes_sent': resumes,
-                    'resumes_accepted': resumes_selected,
-                    'resumes_shortlisted': resumes_shortlisted,
-                    'status':client['status']
-                }
+                
+                client_email_message = f"""
+Dear {negotiation_request.client.user.first_name},
 
-                small_data.update(round_counts)
-                data.append(small_data)
+Your negotiation request with {negotiation_request.organization.name} has been accepted. Here are the agreed terms:
 
-            return Response({"data": data}, status=status.HTTP_200_OK)
+**Service Fee:** {negotiation_request.service_fee}
+**Replacement Clause:** {negotiation_request.replacement_clause}
+**Invoice After:** {negotiation_request.invoice_after} days
+**Payment Within:** {negotiation_request.payment_within} days
+**Interest Percentage:** {negotiation_request.interest_percentage}%
+
+Thank you for negotiating with us. We look forward to a successful collaboration.
+
+Best regards,  
+{negotiation_request.organization.name} Team
+                """
+                send_mail(
+                    subject="Negotiation Request Accepted",
+                    message=client_email_message,
+                    from_email="",
+                    recipient_list=[negotiation_request.client.user.email]
+                )
+
+            elif data.get('status') == "rejected":
+                negotiation_request.is_accepted = False
+                negotiation_request.save()
+
+                
+                client_email_message = f"""
+Dear {negotiation_request.client.user.first_name},
+
+We regret to inform you that your negotiation request with {negotiation_request.organization.name} has been rejected.
+
+Please feel free to reach out to discuss any other possible terms.
+
+Best regards,  
+{negotiation_request.organization.name} Team
+                """
+                send_mail(
+                    subject="Negotiation Request Rejected",
+                    message=client_email_message,
+                    from_email="",
+                    recipient_list=[negotiation_request.client.user.email]
+                )
+
+            else:
+                return Response({"detail": "Invalid status provided. Please use 'accepted' or 'rejected'."}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({"detail": "Negotiation request updated successfully"}, status=status.HTTP_200_OK)
+
+        except NegotiationRequests.DoesNotExist:
+            return Response({"detail": "Negotiation request not found"}, status=status.HTTP_404_NOT_FOUND)
+        
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-
-
-class WorkToRecruiter(APIView):
-    def get(self,request):
+class OrgJobPostings(APIView):
+    def get(self, request,*args, **kwargs):
         try:
-            jobs = JobPostings.objects.all()
-            serializer = GetAllJobPostsSerializer(jobs,many=True)
-            print(serializer.data)
-            Recruiters = CustomUser.objects.filter(role='recruiter')
-            recruiter_serializer = UserSerializer(Recruiters,many=True)
+            user = request.user
+            org = Organization.objects.get(manager=user)
+            job_postings = JobPostings.objects.filter(organization=org)
+            serializer = JobPostingsSerializer(job_postings, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
-            print(e)
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-        return Response({"data":serializer.data,"recruiter_data":recruiter_serializer.data},status=status.HTTP_200_OK)
-    
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+class JobDetailsAPIView(APIView):
+    def get(self, request, *args, **kwargs):
+        try:
+            job_id = request.GET.get('job_id')
+            job_posting = JobPostings.objects.get(id=job_id)
+            serializer = JobPostingsSerializer(job_posting)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except JobPostings.DoesNotExist:
+            return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+
+class RecruitersView(APIView):
+    def get(self, request,*args, **kwargs):
+        try:
+            user = request.user
+            org = Organization.objects.get(manager=user)
+            serializer = OrganizationSerializer(org)
+            return Response(serializer.data["recruiters"], status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    def post(self, request):
+        try:
+            user = request.user
+            org = Organization.objects.get(manager=user)
+
+            username = request.data.get('username')
+            email = request.data.get('email')
+
+            password = generate_random_password()
+
+            user_serializer = CustomUserSerializer(data={
+                'email': email,
+                'username': username,
+                'role': CustomUser.RECRUITER,
+                'credit': 0,
+                'password': password,
+            })
+
+            if user_serializer.is_valid(raise_exception=True):
+                new_user = user_serializer.save()
+                new_user.set_password(password)
+                new_user.save()
+                
+                org.recruiters.add(new_user)
+
+                subject = "Account Created on HireSync"
+                message = f"""
+Dear {username},
+
+Welcome to HireSync! Your recruiter account has been successfully created.
+
+Here are your account details:
+Username: {username}
+Email: {email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+
+                send_mail(
+                    subject=subject,
+                    message=message,
+                    from_email='',
+                    recipient_list=[email],
+                    fail_silently=False,
+                )
+
+                return Response(
+                    {"message": "Recruiter account created successfully, and email sent."},
+                    status=status.HTTP_201_CREATED
+                )
+
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Organization not found for the current user."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class UpdateRecruiterView(APIView):
     def post(self,request):
         try:
-            job= JobPostings.objects.get(id = request.data['jobId'])
-            recruiterpk = CustomUser.objects.get(id=request.data['recruiterId'])
-            job.is_assigned = recruiterpk
-            job.save()
-            return Response({"success":"data successfully modified"},status=status.HTTP_202_ACCEPTED)
+            user = request.user
+            org = Organization.objects.get(manager=user)
+            if org:
+                job_id = request.data.get('job_id')
+                job = JobPostings.objects.get(id=job_id,organization = org)
+                recruiter_id = request.data.get('recruiter_id')
+                recruiter = CustomUser.objects.get(id=recruiter_id)
+                job.is_assigned = recruiter
+                job.save()
+                return Response({"detail":"Recruiter Assigned Successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+
+class RecJobPostings(APIView):
+    def get(self, request,*args, **kwargs):
+        try:
+            user = request.user
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job_postings = JobPostings.objects.filter(organization=org, is_assigned = user)
+            serializer = JobPostingsSerializer(job_postings,many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+
+class RecJobDetails(APIView):
+    def get(self, request, job_id):
+        try:
+            user = request.user
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id, organization=org)
+            serializer = JobPostingsSerializer(job)
+            summary = summarize_jd(job)
+            return Response({'jd':serializer.data,'summary':summary}, status=status.HTTP_200_OK)
+        except:
+            return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class GenerateQuestions(APIView):
+    def get(self, request, job_id):
+        try:
+            user = request.user
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id, organization=org)
+            questions = generate_questions_with_gemini(job)
+            return Response(questions, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+class AnalyseResume(APIView):
+    def post(self, request, job_id):
+        try:
+            user = request.user
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id, organization=org)
+            resume = request.FILES.get('resume')
+            resume = extract_text_from_file(resume)
+            analysis = analyse_resume(job, resume)
+            return Response(analysis, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+class ScreenResume(APIView):
+    def post(self, request, job_id):
+        try:
+            user = request.user
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id, organization=org)
+            resume = request.FILES.get('resume')
+            resume = extract_text_from_file(resume)
+            analysis = screen_profile_ai(job,resume)
+            return Response(analysis, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)

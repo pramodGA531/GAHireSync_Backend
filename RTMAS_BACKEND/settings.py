@@ -156,23 +156,28 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "app.CustomUser"
 
+JWT_ALGORITHM = 'HS256'
+
+SIGNING_KEY = os.environ.get('SIGNING_KEY')
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        # 'rest_framework.authentication.SessionAuthentication',
-        # "rest_framework.authentication.TokenAuthentication",
+    'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
-    ],
+    ),
 }
+
+AUTHENTICATION_BACKENDS = [
+    'app.backends.CustomUserAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=600),  # Example lifetime
-}
-
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=30), 
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=60), 
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'SIGNING_KEY': SIGNING_KEY,
+} 
 
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -183,3 +188,8 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
+
+
+
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
