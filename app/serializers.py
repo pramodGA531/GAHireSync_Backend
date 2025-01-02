@@ -23,7 +23,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
-    recruiters = CustomUserSerializer(many=True)
+    recruiters = CustomUserSerializer(many=True,read_only=True)
     class Meta:
         model = Organization
         fields = '__all__'  
