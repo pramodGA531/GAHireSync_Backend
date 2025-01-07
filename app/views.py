@@ -346,6 +346,7 @@ class JobPostingView(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
+                        print(round_data)
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
