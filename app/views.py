@@ -814,8 +814,8 @@ class RecJobDetails(APIView):
     def get(self, request, job_id):
         try:
             user = request.user
-            org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
+            # org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id)
             serializer = JobPostingsSerializer(job)
             summary = summarize_jd(job)
             return Response({'jd':serializer.data,'summary':summary}, status=status.HTTP_200_OK)
