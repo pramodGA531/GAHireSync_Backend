@@ -353,7 +353,6 @@ class JobPostingView(APIView):
                             email=round_data.get('email', ''),
                             type_of_interview=round_data.get('type_of_interview', 'face_to_face')
                         )
-                    print("Created")
                 client = ClientDetails.objects.get(user=username)
                 client_message = f"""
     Dear {username.first_name},
@@ -388,12 +387,7 @@ A new job posting has been created for your organization "{organization.name}" b
 **CTC:** {job_posting.ctc}
 **Years of Experience:** {job_posting.years_of_experience}
 
-**Accepted Terms:**
-- Service Fee: {acceptedterms.get('service_fee')}
-- Replacement Clause: {acceptedterms.get('replacement_clause')}
-- Invoice After: {acceptedterms.get('invoice_after')} days
-- Payment Within: {acceptedterms.get('payment_within')} days
-- Interest Percentage: {acceptedterms.get('interest_percentage')}%
+
 
 Please review and approve the posting at your earliest convenience.
 
