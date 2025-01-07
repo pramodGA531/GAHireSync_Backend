@@ -346,7 +346,6 @@ class JobPostingView(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
-                        print(round_data.get('round_num'))
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
@@ -370,12 +369,7 @@ class JobPostingView(APIView):
     **Primary Skills:** {', '.join(job_posting.primary_skills or [])}
     **Secondary Skills:** {', '.join(job_posting.secondary_skills or [])}
 
-    **Accepted Terms:**
-    - Service Fee: {acceptedterms.get('service_fee')}
-    - Replacement Clause: {acceptedterms.get('replacement_clause')}
-    - Invoice After: {acceptedterms.get('invoice_after')} days
-    - Payment Within: {acceptedterms.get('payment_within')} days
-    - Interest Percentage: {acceptedterms.get('interest_percentage')}%
+  
 
     Thank you for using our platform.
 
