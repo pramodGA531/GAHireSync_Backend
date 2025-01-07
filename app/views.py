@@ -814,10 +814,13 @@ class RecJobDetails(APIView):
     def get(self, request, job_id):
         try:
             user = request.user
-            # org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id)
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id, organization=org)
             serializer = JobPostingsSerializer(job)
-            summary = summarize_jd(job)
+            try:
+                summary = summarize_jd(job)
+            except:
+                summary = ''
             return Response({'jd':serializer.data,'summary':summary}, status=status.HTTP_200_OK)
         except:
             return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
