@@ -353,7 +353,7 @@ class JobPostingView(APIView):
                             email=round_data.get('email', ''),
                             type_of_interview=round_data.get('type_of_interview', 'face_to_face')
                         )
-
+                    print("Created")
                 client = ClientDetails.objects.get(user=username)
                 client_message = f"""
     Dear {username.first_name},
