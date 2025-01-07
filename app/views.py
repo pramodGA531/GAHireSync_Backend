@@ -351,7 +351,7 @@ class JobPostingView(APIView):
                             round_num=round_data.get('round_num'),
                             name=round_data.get('name', ''),
                             email=round_data.get('email', ''),
-                            type_of_interview=round_data.get('type_of_interview', InterviewerDetails.FACE)
+                            type_of_interview=round_data.get('type_of_interview', 'face_to_face')
                         )
 
                 client = ClientDetails.objects.get(user=username)
