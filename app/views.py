@@ -135,6 +135,7 @@ HireSync Team
                     return Response({"message": "Agency created successfully"}, status=status.HTTP_201_CREATED)
         
         except Exception as e:
+            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class LoginView(APIView):
@@ -185,6 +186,7 @@ class GetUserDetails(APIView):
                 'email' : user.email,
                 'role' : user.role,
             }
+            print(data, " is the user data")
             return Response({'data':data},status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -289,14 +291,19 @@ class changePassword(APIView):
 
 class getClientJobposts(APIView):
     def get(self,request):
-        if request.GET.get('id'):
-            jobpost = JobPostings.objects.get(id=id)
-            serializer = JobPostingsSerializer(jobpost)
-        else:
-            jobpost = JobPostings.objects.filter(username = request.user)
-            serializer = JobPostingsSerializer(jobpost,many=True)
-        return Response(serializer.data)
-
+        print(request.GET.get('id'))
+        try:
+            if request.GET.get('id'):
+                id = request.GET.get('id')
+                jobpost = JobPostings.objects.get(id=id)
+                serializer = JobPostingsSerializer(jobpost)
+            else:
+                jobpost = JobPostings.objects.filter(username = request.user)
+                serializer = JobPostingsSerializer(jobpost,many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            print(str(e))
+            return Response(status=status.HTTP_400_BAD_REQUEST, errorData = (str(e)))
 
 class JobPostingView(APIView):
     permission_classes = [IsAuthenticated]  
@@ -324,10 +331,10 @@ class JobPostingView(APIView):
                     job_description=data.get('job_description'),
                     primary_skills=data.get('primary_skills'),
                     secondary_skills=data.get('secondary_skills'),
-                    years_of_experience=data.get('years_of_experience'),
-                    ctc=data.get('ctc'),
+                    years_of_experience=data.get('years_of_experience','Not Specified'),
+                    ctc=data.get('ctc',"Not Specified"),
                     rounds_of_interview = len(interview_rounds),
-                    job_location=data.get('job_location'),
+                    job_locations=data.get('job_locations'),
                     job_type=data.get('job_type'),
                     job_level=data.get('job_level'),
                     qualifications=data.get('qualifications'),
@@ -338,10 +345,20 @@ class JobPostingView(APIView):
                     decision_maker_email=data.get('decision_maker_email'),
                     bond=data.get('bond'),
                     rotational_shift = data.get('rotational_shift') == "yes",
+                    age = data.get('age_limit'),
+                    gender = data.get('gender'), 
+                    industry = data.get('industry'),
+                    differently_abled = data.get('differently_abled'),
+                    visa_status = data.get('visa_status'),
+                    time_period = data.get('time_period'),
+                    notice_period = data.get('notice_period'),
+                    notice_time = data.get('notice_time'),
+                    qualification_department = data.get('qualification_department'),
+                    languages = data.get('languages'),
                     status='opened',
                     is_approved=False,
                     is_assigned=None,
-                    created_at=None  
+                    created_at=None
                 )
 
                 if interview_rounds:
@@ -362,7 +379,7 @@ class JobPostingView(APIView):
     **Organization:** {organization.name}
     **Job Title:** {job_posting.job_title}
     **Department:** {job_posting.job_department}
-    **Job Location:** {job_posting.job_location}
+    **Job Location:** {job_posting.job_locations}
     **CTC:** {job_posting.ctc}
     **Years of Experience Required:** {job_posting.years_of_experience}
     **Primary Skills:** {', '.join(job_posting.primary_skills or [])}
@@ -383,7 +400,7 @@ A new job posting has been created for your organization "{organization.name}" b
 
 **Job Title:** {job_posting.job_title}
 **Department:** {job_posting.job_department}
-**Location:** {job_posting.job_location}
+**Location:** {job_posting.job_locations}
 **CTC:** {job_posting.ctc}
 **Years of Experience:** {job_posting.years_of_experience}
 
@@ -418,6 +435,7 @@ The Recruitment Team
             )
 
         except Exception as e:
+            print("error is ",str(e))
             return Response(
                 {"detail": f"An error occurred: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -439,7 +457,7 @@ The Recruitment Team
         job_posting.years_of_experience = data.get('years_of_experience', job_posting.years_of_experience)
         job_posting.ctc = data.get('ctc', job_posting.ctc)
         job_posting.rounds_of_interview = data.get('rounds_of_interview', job_posting.rounds_of_interview)
-        job_posting.job_location = data.get('job_location', job_posting.job_location)
+        job_posting.job_locations = data.get('job_locations', job_posting.job_locations)
         job_posting.job_type = data.get('job_type', job_posting.job_type)
         job_posting.job_level = data.get('job_level', job_posting.job_level)
         job_posting.qualifications = data.get('qualifications', job_posting.qualifications)
@@ -450,6 +468,15 @@ The Recruitment Team
         job_posting.decision_maker_email = data.get('decision_maker_email', job_posting.decision_maker_email)
         job_posting.bond = data.get('bond', job_posting.bond)
         job_posting.rotational_shift = data.get('rotational_shift', job_posting.rotational_shift)
+        job_posting.age = data.get('age_limit', job_posting.age)
+        job_posting.gender = data.get('gender', job_posting.gender)
+        job_posting.industry = data.get('industry', job_posting.industry)
+        job_posting.differently_abled = data.get('differently_abled', job_posting.differently_abled)
+        job_posting.visa_status = data.get('visa_status', job_posting.visa_status)
+        job_posting.time_period = data.get('time_period', job_posting.time_period)
+        job_posting.notice_period = data.get('notice_period', job_posting.notice_period)
+        job_posting.languages = data.get('languages', job_posting.languages)
+        job_posting.notice_time = data.get('notice_time', job_posting.notice_time)
 
         job_posting.save()
 

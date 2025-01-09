@@ -128,14 +128,14 @@ class JobPostings(models.Model):
     job_description = models.TextField()
     primary_skills = models.TextField()
     secondary_skills = models.TextField(blank=True, null=True)
-    years_of_experience = models.IntegerField()
+    years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
-    job_location = models.CharField(max_length=100)
+    job_locations = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100, )
     job_level = models.CharField(max_length=100, )
     qualifications = models.TextField()
-    timings = models.CharField(max_length=100, )
+    timings = models.CharField(max_length=100 )
     other_benefits = models.TextField()
     working_days_per_week = models.IntegerField(default=5)
     decision_maker = models.CharField(max_length=100, )
@@ -146,12 +146,29 @@ class JobPostings(models.Model):
     is_approved = models.BooleanField(default=True)
     is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs', on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"}, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
+    age = models.CharField(max_length=255 , default = "")
+    gender = models.CharField(max_length = 100 , default = "")
+    visa_status = models.CharField(max_length=100, default=  "")
+    time_period = models.CharField(max_length=50 , default="")
+    qualification_department = models.CharField(max_length=50, default= '')
+    notice_period = models.CharField(max_length=30, default="")
+    notice_time = models.CharField(max_length=30, default="")
+    industry = models.CharField(max_length=40 , default = "")
+    differently_abled = models.CharField(max_length=40, default=" ")
+    languages = models.CharField(max_length=100 , default=" ")
+
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
 
     def get_secondary_skills_list(self):
         return self.secondary_skills.split(",") if self.secondary_skills else []
+    
+    def get_locations(self):
+        return self.job_locations.split(",") if self.job_locations else []
+    
+    def get_languages(self):
+        return self.languages.split(",") if self.languages else []
 
     def __str__(self):
         return self.job_title
@@ -173,7 +190,8 @@ class InterviewerDetails(models.Model):
     round_num = models.IntegerField()
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    type_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW)
+    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW, default='')
+    type_of_interview = models.CharField(max_length=35, default='')
 
     def __str__(self):
         return self.name
