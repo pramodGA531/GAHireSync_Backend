@@ -12,6 +12,8 @@ from .models import (
     InterviewSchedule,
     CandidateEvaluation,
     ClientTermsAcceptance,
+    JobPostingsEditedVersion,
+    InterviewerDetailsEditedVersion
 )
 
 @admin.register(CustomUser)
@@ -94,3 +96,12 @@ class ClientTermsAcceptanceAdmin(admin.ModelAdmin):
     list_display = ('client', 'accepted_date', 'valid_until')
     search_fields = ('client__name_of_organization',)
     ordering = ('-accepted_date',)
+
+@admin.register(JobPostingsEditedVersion)
+class JobPostingEditedVersionAdmin(admin.ModelAdmin):
+    list_display= ('id','edited_by','job_title')
+
+
+@admin.register(InterviewerDetailsEditedVersion)
+class InterviewerDetailsEditedVersionAdmin(admin.ModelAdmin):
+    list_display = ('job_id','round_num','name')

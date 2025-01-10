@@ -64,6 +64,7 @@ class JobPostingsSerializer(serializers.ModelSerializer):
     username = CustomUserSerializer()
     organization = OrganizationSerializer()
     interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
+    
 
     class Meta:
         model = JobPostings
@@ -95,3 +96,19 @@ class ClientTermsAcceptanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientTermsAcceptance
         fields = '__all__'  
+
+class JobPostEditedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostingsEditedVersion
+        fields = '__all__'
+
+class JobPostEditedSerializerMinFields(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostingsEditedVersion
+        fields = ['id', 'job_title', 'organization','edited_by','created_at','is_accepted']
+
+
+class InterviewDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewerDetails
+        fields = '__all__'

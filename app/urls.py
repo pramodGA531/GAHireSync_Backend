@@ -13,9 +13,12 @@ urlpatterns = [
     path('changepassword/', changePassword.as_view(), name='changepassword'),
 
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
+    path('client/not-approval-jobs', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
 
     path('job-postings/', JobPostingView.as_view(), name='create-job-posting'),
     path('org-job-postings/', OrgJobPostings.as_view(), name='org-job-posting'),
+    path('org-particular-job/',OrgParticularJobPost.as_view(), name='org-particular-job'),
+    path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
     path('job-details/recruiter/<int:job_id>', RecJobDetails.as_view(), name='rec-job-details'),

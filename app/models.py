@@ -172,6 +172,59 @@ class JobPostings(models.Model):
 
     def __str__(self):
         return self.job_title
+    
+
+class JobPostingsEditedVersion(models.Model):
+    id = models.ForeignKey(JobPostings, on_delete= models.CASCADE, primary_key=True)
+    edited_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"})
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, default="")
+    job_title = models.CharField(max_length=255, )
+    job_department = models.CharField(max_length=100, )
+    job_description = models.TextField()
+    primary_skills = models.TextField()
+    secondary_skills = models.TextField(blank=True, null=True)
+    years_of_experience = models.TextField(max_length=100)
+    ctc = models.CharField(max_length=50)
+    rounds_of_interview = models.IntegerField()
+    job_locations = models.CharField(max_length=100)
+    job_type = models.CharField(max_length=100, )
+    job_level = models.CharField(max_length=100, )
+    qualifications = models.TextField()
+    timings = models.CharField(max_length=100 )
+    other_benefits = models.TextField()
+    working_days_per_week = models.IntegerField(default=5)
+    decision_maker = models.CharField(max_length=100, )
+    decision_maker_email = models.CharField(max_length=100, )
+    bond = models.TextField(max_length=255, )
+    rotational_shift = models.BooleanField()
+    age = models.CharField(max_length=255 , default = "")
+    gender = models.CharField(max_length = 100 , default = "")
+    visa_status = models.CharField(max_length=100, default=  "")
+    time_period = models.CharField(max_length=50 , default="")
+    qualification_department = models.CharField(max_length=50, default= '')
+    notice_period = models.CharField(max_length=30, default="")
+    notice_time = models.CharField(max_length=30, default="")
+    industry = models.CharField(max_length=40 , default = "")
+    differently_abled = models.CharField(max_length=40, default=" ")
+    languages = models.CharField(max_length=100 , default=" ")
+    is_accepted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+
+    def get_primary_skills_list(self):
+        return self.primary_skills.split(",") if self.primary_skills else []
+
+    def get_secondary_skills_list(self):
+        return self.secondary_skills.split(",") if self.secondary_skills else []
+    
+    def get_locations(self):
+        return self.job_locations.split(",") if self.job_locations else []
+    
+    def get_languages(self):
+        return self.languages.split(",") if self.languages else []
+
+    def __str__(self):
+        return self.job_title
 
 
 # Interviewer Details Model
@@ -187,6 +240,27 @@ class InterviewerDetails(models.Model):
     ]
 
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    round_num = models.IntegerField()
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW, null=True, blank=True)
+    type_of_interview = models.CharField(max_length=35, default='')
+
+    def __str__(self):
+        return self.name
+    
+class InterviewerDetailsEditedVersion(models.Model):
+    FACE = 'face_to_face'
+    ONLINE = 'online'
+    TELEPHONE = 'telephone'
+
+    MODE_OF_INTERVIEW = [
+        (FACE, 'face_to_face'),
+        (ONLINE, 'online'),
+        (TELEPHONE, 'telephone'),
+    ]
+
+    job_id = models.ForeignKey(JobPostingsEditedVersion, on_delete=models.CASCADE)
     round_num = models.IntegerField()
     name = models.CharField(max_length=100)
     email = models.EmailField()
