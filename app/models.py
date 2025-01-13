@@ -146,16 +146,16 @@ class JobPostings(models.Model):
     is_approved = models.BooleanField(default=True)
     is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs', on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"}, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
-    age = models.CharField(max_length=255 , default = "")
-    gender = models.CharField(max_length = 100 , default = "")
-    visa_status = models.CharField(max_length=100, default=  "")
-    time_period = models.CharField(max_length=50 , default="")
-    qualification_department = models.CharField(max_length=50, default= '')
-    notice_period = models.CharField(max_length=30, default="")
-    notice_time = models.CharField(max_length=30, default="")
-    industry = models.CharField(max_length=40 , default = "")
-    differently_abled = models.CharField(max_length=40, default=" ")
-    languages = models.CharField(max_length=100 , default=" ")
+    age = models.CharField(max_length=255 )
+    gender = models.CharField(max_length = 100 ,)
+    visa_status = models.CharField(max_length=100, )
+    time_period = models.CharField(max_length=50 ,default=" ",blank=True )
+    qualification_department = models.CharField(max_length=50,)
+    notice_period = models.CharField(max_length=30,)
+    notice_time = models.CharField(max_length=30, default=" ",blank=True)
+    industry = models.CharField(max_length=40 ,)
+    differently_abled = models.CharField(max_length=40,)
+    languages = models.CharField(max_length=100 ,)
 
 
     def get_primary_skills_list(self):
@@ -175,8 +175,18 @@ class JobPostings(models.Model):
     
 
 class JobPostingsEditedVersion(models.Model):
+    ACCEPTED = 'accepted'
+    REJECTED = 'rejected'
+    PENDING = 'pending'
+
+    STATUS_CHOICES = [
+        (ACCEPTED,'accepted'),
+        (REJECTED,'rejected'),
+        (PENDING,'pending'),
+    ]
     id = models.ForeignKey(JobPostings, on_delete= models.CASCADE, primary_key=True)
-    edited_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"})
+    username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"client"},related_name="job_post_by_client")
+    edited_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"},related_name="job_post_edited_by_manager")
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, default="")
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
@@ -197,19 +207,18 @@ class JobPostingsEditedVersion(models.Model):
     decision_maker_email = models.CharField(max_length=100, )
     bond = models.TextField(max_length=255, )
     rotational_shift = models.BooleanField()
-    age = models.CharField(max_length=255 , default = "")
-    gender = models.CharField(max_length = 100 , default = "")
-    visa_status = models.CharField(max_length=100, default=  "")
-    time_period = models.CharField(max_length=50 , default="")
-    qualification_department = models.CharField(max_length=50, default= '')
-    notice_period = models.CharField(max_length=30, default="")
-    notice_time = models.CharField(max_length=30, default="")
-    industry = models.CharField(max_length=40 , default = "")
-    differently_abled = models.CharField(max_length=40, default=" ")
-    languages = models.CharField(max_length=100 , default=" ")
-    is_accepted = models.BooleanField(default=False)
+    age = models.CharField(max_length=255 , )
+    gender = models.CharField(max_length = 100 , )
+    visa_status = models.CharField(max_length=100, )
+    time_period = models.CharField(max_length=50 , default=" ",blank=True)
+    qualification_department = models.CharField(max_length=50,)
+    notice_period = models.CharField(max_length=30,default=" ",blank=True )
+    notice_time = models.CharField(max_length=30, default=" ")
+    industry = models.CharField(max_length=40 , )
+    differently_abled = models.CharField(max_length=40, )
+    languages = models.CharField(max_length=100 , )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
-
+    status = models.TextField(choices=STATUS_CHOICES, default='pending')
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
@@ -305,7 +314,8 @@ class CandidateResume(models.Model):
     current_job_type = models.CharField(max_length=50, null=True, blank=True, choices=EMPLOYMENT_TYPE_CHOICES, default=PERMANENT)
     date_of_birth = models.DateField(null=True, blank=True)
     experience = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
-    current_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    current_ctc = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     notice_period = models.IntegerField(default=0)
     job_status = models.CharField(max_length=30, choices=JOB_STATUS, default=WORKING)
 

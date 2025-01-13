@@ -12,6 +12,9 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from datetime import datetime
+
 
 import jwt
 import string 
@@ -487,26 +490,105 @@ class JobEditRequestsView(APIView):
         try:
             user = request.user
             if(user.role != 'client'):
-                return Response({"details":"You are not allowed to view this"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error":"You are not allowed to view this"}, status=status.HTTP_400_BAD_REQUEST)
             if(request.GET.get('id')):
                 id = request.GET.get('id')
-                edited_job = JobPostingsEditedVersion.objects.filter(edited_by = user).get(id = id)
-                if(edited_job.is_accepted):
-                    return Response({"details":"You have already accepted to that job post edit"}, status = status.HTTP_400_BAD_REQUEST)
-                if not edited_job:
-                    return Response({"details":"There is no edited job with that id"}, status = status.HTTP_400_BAD_REQUEST)
-                serialized_edited_job = JobPostEditedSerializer(edited_job)
-                return Response(serialized_edited_job.data, status = status.HTTP_200_OK)
+                try:
+                    job = JobPostings.objects.get(id = id)
+                    edited_job = JobPostingsEditedVersion.objects.get(id = id)
+                    if(edited_job.status != 'pending'):
+                        return Response({"error":"You have already reacted to this job post edit"}, status = status.HTTP_400_BAD_REQUEST)
+                    serialized_edited_job = JobPostEditedSerializer(edited_job)
+                    serialized_job = JobPostingsSerializer(job)
+                    return Response({"data":serialized_edited_job.data,"job":serialized_job.data}, status = status.HTTP_200_OK)
+                except JobPostings.DoesNotExist:
+                    return Response({"error":"job posting not found"},status = status.HTTP_400_BAD_REQUEST)
+                except JobPostingsEditedVersion.DoesNotExist:
+                    return Response({"error":"Job posting edited not found"},status = status.HTTP_400_BAD_REQUEST)
             else:
-                edited_jobs = JobPostingsEditedVersion.objects.filter(edited_by = user)
+                edited_jobs = JobPostingsEditedVersion.objects.filter(username = user)
                 if not edited_jobs:
                     return Response({"details":"There are no Edit Job Requests"}, status = status.HTTP_200_OK)
-                serialized_edited_jobs = JobPostEditedSerializer(edited_jobs,many=True)
-                print(serialized_edited_jobs.data)
+                serialized_edited_jobs = JobPostEditedSerializerMinFields(edited_jobs,many=True)
                 return Response(serialized_edited_jobs.data, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"details":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class AcceptJobEditRequestView(APIView):
+    def get(self, request):
+        try:
+            id = request.GET.get('id')
+            user = request.user
+            if user.role != 'client':
+                return Response({"error":"You are not allowed to do this request"}, status=status.HTTP_400_BAD_REQUEST)
+            edited_job = JobPostingsEditedVersion.objects.get(id=id)
+            if not edited_job:
+                return Response({"error":"Unable to process your request"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            edited_job = JobPostingsEditedVersion.objects.get(id=id)
+            job_post = JobPostings.objects.get(id=id)
+
+            # Serialize the edited_job data
+            edited_data_serializer = JobPostUpdateSerializer(edited_job)
+            edited_data = edited_data_serializer.data
+            if 'notice_time' not in edited_data:
+                edited_data['notice_time'] = ''
+            if 'time_period' not in edited_data:
+                edited_data['time_period'] = ''
+            # Update the job_post fields using the serialized data
+            print(edited_data, "is the edited data")
+            job_post_serializer = JobPostUpdateSerializer(instance=job_post, data=edited_data, partial=True)
+            if job_post_serializer.is_valid():
+                job_post_serializer.save()
+            else:
+                print(job_post_serializer.errors)
+                return Response(job_post_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            edited_interviewers = InterviewerDetailsEditedVersion.objects.filter(job_id= id)
+            edited_inter_serializer = InterviewDetailsEditedSerializer(edited_interviewers,many = True)
+            edited_inter_data = edited_inter_serializer.data
+
+            for interviewer in edited_inter_data:
+                interviewer_instance = InterviewerDetails.objects.get(job_id = job_post, round_num = interviewer['round_num'] )
+                interviewer_edit_serializer = InterviewerDetailsSerializer(instance = interviewer_instance, data = interviewer, partial = True)
+                if(interviewer_edit_serializer.is_valid()):
+                    interviewer_edit_serializer.save()
+                else:
+                    return Response(interviewer_edit_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            job_edit_status = JobPostingsEditedVersion.objects.get(id = id)
+            job_edit_status.status = 'accepted'
+            job_edit_status.save()
+            return Response({"message": "Job edit request accepted successfully"}, status = status.HTTP_200_OK)
+
+        except JobPostingsEditedVersion.DoesNotExist:
+            return Response({"error": "Edited job post not found"}, status=status.HTTP_404_NOT_FOUND)
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class RejectJobEditRequestView(APIView):
+    def get(self, request):
+        try:
+            if(not request.user):
+                return Response({"error":"You are not an user"},status=status.HTTP_400_BAD_REQUEST)
+            if not request.user.role =='client':
+                return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
+            id = request.GET.get('id')
+            job = JobPostings.objects.get(id=id)
+            edited_job =JobPostingsEditedVersion.objects.get(id = job)
+            edited_job.status = 'rejected'
+            edited_job.save()
+            return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
+        except JobPostings.DoesNotExist:
+            return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
+        except JobPostingsEditedVersion.DoesNotExist:
+            return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(e)
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
 class OrganizationTermsView(APIView):
     permission_classes = [IsAuthenticated]  
@@ -753,6 +835,14 @@ class OrgParticularJobPost(APIView):
                 id = request.GET.get('id')
                 if(id==None):
                     return Response({"error":"ID is not mentioned"}, status= status.HTTP_400_BAD_REQUEST)
+                try:
+                    jobEditedPost = JobPostingsEditedVersion.objects.get(id=id).status
+                    if jobEditedPost=='pending': 
+                        print("your job edit request is in pending")    
+                        return Response({"error":"Your have already sent an edit request to this job post"}, status = status.HTTP_400_BAD_REQUEST)
+                except JobPostingsEditedVersion.DoesNotExist:
+                    pass
+                
                 jobPost = JobPostings.objects.get(id = id)
                 jobPost_serializer = JobPostingsSerializer(jobPost)
                 return Response(jobPost_serializer.data, status=status.HTTP_200_OK) 
@@ -799,12 +889,22 @@ class OrgJobEdits(APIView):
         
         if not job:
             return Response({"detail":"Invalid Job ID"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            job_edited_post = JobPostingsEditedVersion.objects.get(id=id)
+            if(job_edited_post) and job_edited_post.status != 'pending':
+                job_edited_post.delete()
+                InterviewerDetailsEditedVersion.objects.filter(job_id=id).delete()
+        except JobPostingsEditedVersion.DoesNotExist:
+            pass
 
         try:
             with transaction.atomic():
                 interview_rounds = data.get('interview_details', [])
+                client = JobPostings.objects.get(id=id).username
                 job_posting = JobPostingsEditedVersion.objects.create(
                     id = job,
+                    username = client,
                     edited_by=username,
                     organization=organization,
                     job_title=data.get('job_title', ''),
@@ -836,6 +936,7 @@ class OrgJobEdits(APIView):
                     notice_time = data.get('notice_time',''),
                     qualification_department = data.get('qualification_department'),
                     languages = data.get('languages'),
+                    status = 'pending'
                 )
 
                 if interview_rounds:
@@ -929,6 +1030,17 @@ class JobDetailsAPIView(APIView):
         except JobPostings.DoesNotExist:
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
 
+class JobEditStatusAPIView(APIView):
+    def get(self, request):
+        try:
+            job_id = request.GET.get('id')
+            job_edit_post = JobPostingsEditedVersion.objects.get(id=job_id)
+            return Response({"status":job_edit_post.status}, status=status.HTTP_200_OK)
+        except JobPostingsEditedVersion.DoesNotExist:
+            return Response({'notFound':"Job edit post not found"},status= status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
 class RecruitersView(APIView):
     def get(self, request,*args, **kwargs):
         try:
@@ -1089,3 +1201,76 @@ class ScreenResume(APIView):
             return Response(analysis, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
+
+class CandidateResumeView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        try:
+            job_id = request.GET.get('id')
+            if not job_id:
+                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            if not user or user.role != 'recruiter':
+                return Response({"error": "You are not allowed to handle this request"}, status=status.HTTP_400_BAD_REQUEST)
+
+            job = JobPostings.objects.get(id=job_id)
+            receiver = job.username
+
+            if 'resume' not in request.FILES:
+                return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            data = request.data
+            date_string = data.get('date_of_birth', '')
+
+            try:
+                date_of_birth = datetime.strptime(date_string, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
+            resume_file = request.FILES['resume']  # Get the resume file
+            candidate_name = data.get('candidate_name')
+            candidate_email = data.get('candidate_email')
+            contact_number = data.get('contact_number')
+            alternate_contact_number = data.get('alternate_contact_number', '')
+            other_details = data.get('other_details', '')
+            current_organization = data.get('current_organization', '')
+            current_job_location = data.get('current_job_location', '')
+            current_job_type = data.get('current_job_type', '')
+            date_of_birth = date_string
+            experience = data.get('experience', '')
+            current_ctc = data.get('current_ctc', '')
+            expected_ctc = data.get('expected_ctc', '')
+            notice_period = data.get('notice_period', '')
+            job_status = data.get('job_status', '')
+
+            # Create a new CandidateResume instance
+            candidate_resume = CandidateResume.objects.create(
+                resume=resume_file,
+                job_id=job,
+                candidate_name=candidate_name,
+                candidate_email=candidate_email,
+                contact_number=contact_number,
+                alternate_contact_number=alternate_contact_number,
+                other_details=other_details,
+                sender=user,
+                receiver=receiver,
+                current_organisation=current_organization,
+                current_job_location=current_job_location,
+                current_job_type=current_job_type,
+                date_of_birth=date_of_birth,
+                experience=experience,
+                current_ctc=current_ctc,
+                expected_ctc=expected_ctc,
+                notice_period=notice_period,
+                job_status=job_status,
+            )
+
+            # Return a success response
+            return Response({"message": "Candidate added successfully!"}, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

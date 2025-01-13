@@ -97,18 +97,75 @@ class ClientTermsAcceptanceSerializer(serializers.ModelSerializer):
         model = ClientTermsAcceptance
         fields = '__all__'  
 
+class InterviewDetailsEditedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewerDetailsEditedVersion
+        fields = '__all__'
+
 class JobPostEditedSerializer(serializers.ModelSerializer):
+    interview_details  = InterviewDetailsEditedSerializer(many=True, read_only=True, source='interviewerdetailseditedversion_set')
+    edited_by_username = serializers.SerializerMethodField()
     class Meta:
         model = JobPostingsEditedVersion
         fields = '__all__'
+
+    def get_edited_by_username(self,obj):
+        return obj.edited_by.username if obj.edited_by else None
+    
+    
 
 class JobPostEditedSerializerMinFields(serializers.ModelSerializer):
+    edited_by_username = serializers.SerializerMethodField()
+    organization_name = serializers.SerializerMethodField()
+    organization_code = serializers.SerializerMethodField()
     class Meta:
         model = JobPostingsEditedVersion
-        fields = ['id', 'job_title', 'organization','edited_by','created_at','is_accepted']
+        fields = ['id', 'job_title', 'organization','edited_by','created_at','status', 'edited_by_username','organization_name','organization_code' ]
 
+    def get_edited_by_username(self,obj):
+        return obj.edited_by.username if obj.edited_by else None
+    
+    def get_organization_name(self, obj):
+        return obj.organization.name if obj.organization else None
+    
+    def get_organization_code(self,obj):
+        return obj.organization.org_code if obj.organization else None
 
-class InterviewDetailsSerializer(serializers.ModelSerializer):
+class JobPostUpdateSerializer(serializers.ModelSerializer):
+
+    notice_time = serializers.CharField(required=False, allow_blank=True)
+    time_period = serializers.CharField(required=False, allow_blank=True)
     class Meta:
-        model = InterviewerDetails
-        fields = '__all__'
+        model = JobPostings
+        fields = [
+            "organization",
+            "job_title",
+            "job_department",
+            "job_description",
+            "primary_skills",
+            "secondary_skills",
+            "years_of_experience",
+            "ctc",
+            "rounds_of_interview",
+            "job_locations",
+            "job_type",
+            "job_level",
+            "qualifications",
+            "qualification_department",
+            "timings",
+            "other_benefits",
+            "working_days_per_week",
+            "decision_maker",
+            "decision_maker_email",
+            "bond",
+            "rotational_shift",
+            "age",
+            "gender",
+            "visa_status",
+            "time_period",
+            "notice_period",
+            "notice_time",
+            "industry",
+            "differently_abled",
+            "languages",
+        ]
