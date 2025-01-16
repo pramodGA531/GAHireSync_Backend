@@ -13,7 +13,9 @@ from .models import (
     CandidateEvaluation,
     ClientTermsAcceptance,
     JobPostingsEditedVersion,
-    InterviewerDetailsEditedVersion
+    InterviewerDetailsEditedVersion,
+    PrimarySkillSet,
+    SecondarySkillSet,
 )
 
 @admin.register(CustomUser)
@@ -65,9 +67,9 @@ class InterviewerDetailsAdmin(admin.ModelAdmin):
 
 @admin.register(CandidateResume)
 class CandidateResumeAdmin(admin.ModelAdmin):
-    list_display = ('candidate_name', 'candidate_email', 'current_organisation', 'job_id')
+    list_display = ('candidate_name', 'candidate_email', 'current_organisation',)
     search_fields = ('candidate_name', 'candidate_email', 'job_id__job_title')
-    list_filter = ('job_id',)
+    # list_filter = ('job_id',)
     ordering = ('candidate_name',)
 
 @admin.register(JobApplication)
@@ -105,3 +107,6 @@ class JobPostingEditedVersionAdmin(admin.ModelAdmin):
 @admin.register(InterviewerDetailsEditedVersion)
 class InterviewerDetailsEditedVersionAdmin(admin.ModelAdmin):
     list_display = ('job_id','round_num','name')
+
+admin.site.register(PrimarySkillSet)
+admin.site.register(SecondarySkillSet)

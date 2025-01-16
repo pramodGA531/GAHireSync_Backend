@@ -14,7 +14,8 @@ urlpatterns = [
 
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
-    path('client/job-edit-details',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
+    path('client/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
+    path('client/get-resumes/',GetResumeView.as_view(),name = 'get-resumes'),
 
     path('job-postings/', JobPostingView.as_view(), name='create-job-posting'),
     path('org-job-postings/', OrgJobPostings.as_view(), name='org-job-posting'),
@@ -22,7 +23,7 @@ urlpatterns = [
     path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
-    path('job-details/recruiter/<int:job_id>', RecJobDetails.as_view(), name='rec-job-details'),
+    path('job-details/recruiter/<int:job_id>/', RecJobDetails.as_view(), name='rec-job-details'),
     path('accept-job-post/',AcceptJobEditRequestView.as_view(),name = 'accept-job-post'),
     path('reject-job-post/',RejectJobEditRequestView.as_view(),name='reject-job-post'),
 
@@ -35,7 +36,9 @@ urlpatterns = [
     path('organization-terms/', OrganizationTermsView.as_view(), name='organization-terms'),
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
+    path('client/reject-application/',RejectApplicationView.as_view(), name ='reject-application'),
+
     path('negotiate-terms/', NegotiateTermsView.as_view(), name='negotiate-terms'),
-    path('agency/recruiters/', RecruitersView.as_view(), name='aagency-recruiters'),
+    path('agency/recruiters/', RecruitersView.as_view(), name='agency-recruiters'),
     path('assign-recruiter/', UpdateRecruiterView.as_view(), name='update-recruiters'),
 ]

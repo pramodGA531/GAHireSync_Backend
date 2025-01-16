@@ -70,6 +70,7 @@ class Organization(models.Model):
 class OrganizationTerms(models.Model):
     organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name="terms")
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
+    description = models.TextField(default ='')
     replacement_clause = models.IntegerField(default=90)
     invoice_after = models.IntegerField(default=30)
     payment_within = models.IntegerField(default=7)
@@ -156,7 +157,8 @@ class JobPostings(models.Model):
     industry = models.CharField(max_length=40 ,)
     differently_abled = models.CharField(max_length=40,)
     languages = models.CharField(max_length=100 ,)
-
+    num_of_positions = models.IntegerField(default=1)
+    job_close_duration = models.DateField(null=True)
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
@@ -184,6 +186,9 @@ class JobPostingsEditedVersion(models.Model):
         (REJECTED,'rejected'),
         (PENDING,'pending'),
     ]
+
+   
+
     id = models.ForeignKey(JobPostings, on_delete= models.CASCADE, primary_key=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"client"},related_name="job_post_by_client")
     edited_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"},related_name="job_post_edited_by_manager")
@@ -219,6 +224,8 @@ class JobPostingsEditedVersion(models.Model):
     languages = models.CharField(max_length=100 , )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     status = models.TextField(choices=STATUS_CHOICES, default='pending')
+    num_of_positions = models.IntegerField(default= 1)
+    job_close_duration = models.DateField(null=True)
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
@@ -248,12 +255,22 @@ class InterviewerDetails(models.Model):
         (TELEPHONE, 'telephone'),
     ]
 
+    TECHNICAL = 'technical'
+    NONTECHNICAL = 'non-technical'
+    ASSIGNMENT = 'assignment'
+
+    TYPE_OF_INTERVIEW = [
+        (TECHNICAL , 'technical'),
+        (NONTECHNICAL , 'non-technical'),
+        (ASSIGNMENT , 'assignment'),
+    ]
+
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     round_num = models.IntegerField()
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW, null=True, blank=True)
-    type_of_interview = models.CharField(max_length=35, default='')
+    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW)
+    type_of_interview = models.CharField(max_length=35, choices = TYPE_OF_INTERVIEW)
 
     def __str__(self):
         return self.name
@@ -262,6 +279,10 @@ class InterviewerDetailsEditedVersion(models.Model):
     FACE = 'face_to_face'
     ONLINE = 'online'
     TELEPHONE = 'telephone'
+
+    TECHNICAL = 'technical'
+    NONTECHNICAL = 'non-technical'
+    ASSIGNMENT = 'assignment'
 
     MODE_OF_INTERVIEW = [
         (FACE, 'face_to_face'),
@@ -273,8 +294,8 @@ class InterviewerDetailsEditedVersion(models.Model):
     round_num = models.IntegerField()
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW, default='')
-    type_of_interview = models.CharField(max_length=35, default='')
+    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW)
+    type_of_interview = models.CharField(max_length=35, choices = InterviewerDetails.TYPE_OF_INTERVIEW)
 
     def __str__(self):
         return self.name
@@ -299,16 +320,14 @@ class CandidateResume(models.Model):
         (SERVING_NOTICE, 'serving_notice'),
     ]
 
+    id = models.AutoField(primary_key=True)
     resume = models.FileField(upload_to='Resumes/')
-    job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
+    # job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
     candidate_name = models.CharField(max_length=40, null=True, )
     candidate_email = models.EmailField(null=True, )
     contact_number = models.CharField(max_length=15, null=True, )
     alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
     other_details = models.CharField(max_length=100, null=True, blank=True, )
-    sender = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
-    receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
-    message = models.TextField(null=True, blank=True)
     current_organisation = models.CharField(max_length=100, null=True, blank=True)
     current_job_location = models.CharField(max_length=100, null=True, blank=True)
     current_job_type = models.CharField(max_length=50, null=True, blank=True, choices=EMPLOYMENT_TYPE_CHOICES, default=PERMANENT)
@@ -317,42 +336,108 @@ class CandidateResume(models.Model):
     current_ctc = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     notice_period = models.IntegerField(default=0)
-    job_status = models.CharField(max_length=30, choices=JOB_STATUS, default=WORKING)
+    job_status = models.CharField(max_length=30, choices=JOB_STATUS)
 
     def __str__(self):
         return self.candidate_name
 
+class PrimarySkillSet(models.Model):
+    id = models.AutoField(primary_key=True)
+    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
+    skill = models.CharField(max_length=30)
+    years_of_experience = models.CharField(max_length=20)
 
+    def __str__(self):
+        return f"{self.candidate.candidate_name} skill {self.skill}"
+class SecondarySkillSet(models.Model):
+    id = models.AutoField(primary_key=True)
+    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
+    skill = models.CharField(max_length=30)
+    years_of_experience = models.CharField(max_length=20)
+
+    def __str__(self):
+        return f"{self.candidate.candidate_name} skill {self.skill}"
+
+
+# Interview Schedule Model
+class InterviewSchedule(models.Model):
+    SCHEDULED = 'scheduled'
+    PENDING = 'pending'
+    COMPLETED = 'completed'
+
+    STATUS_CHOICES = [
+        (SCHEDULED, 'scheduled'),
+        (PENDING, 'pending'),
+        (COMPLETED, 'completed')
+    ]
+    id = models.AutoField(primary_key=True)
+    candidate_resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
+    interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE)
+    schedule_date = models.DateTimeField(null= True, blank=True)
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    round_num = models.IntegerField(default=0)
+    status = models.CharField(max_length=20,choices=STATUS_CHOICES, default='scheduled')
+
+    def __str__(self):
+        return f"Interview scheduled for {self.candidate_resume.candidate_name}"
+    
+    
 # Job Application Model
 class JobApplication(models.Model):
+    SELECTED = 'selected'
+    REJECTED = 'rejected'
+    HOLD = 'hold'
+    PENDING = 'pending'
+    APPLIED = 'applied'
+
+    STATUS = [
+        (SELECTED, 'selected'),
+        (REJECTED, 'rejected'),
+        (HOLD, 'hold'),
+        (PENDING, 'pending'),
+        (APPLIED ,'applied'),
+    ]
+    id = models.AutoField(primary_key=True)
     resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
-    status = models.CharField(max_length=50, default='Applied')
+    status = models.CharField(max_length=50, choices= STATUS, default='applied')
+    sender = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
+    receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
+    message = models.TextField(null=True, blank=True)
+    round_num = models.IntegerField(default=0)
+    next_interview = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE, blank=True, default=None,null=True)
     application_date = models.DateTimeField(auto_now_add=True)
+    feedback = models.TextField(blank= True,default= None ,  null=True)
+
+    class Meta:
+        unique_together = ('job_id','resume')
 
     def __str__(self):
         return f"{self.resume.candidate_name} applied for {self.job_id.job_title}"
 
 
-# Interview Schedule Model
-class InterviewSchedule(models.Model):
-    candidate_resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
-    interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE)
-    schedule_date = models.DateTimeField()
-    mode_of_interview = models.CharField(max_length=20, choices=InterviewerDetails.MODE_OF_INTERVIEW)
-    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
-    status = models.CharField(max_length=20, default='Scheduled')
-
-    def __str__(self):
-        return f"Interview scheduled for {self.candidate_resume.candidate_name}"
-
 
 # Candidate Evaluation Model
 class CandidateEvaluation(models.Model):
+
+    SELECTED = 'selected'
+    REJECTED = 'rejected'
+    HOLD = 'hold'
+    PENDING = 'pending'
+
+    STATUS = [
+        (SELECTED, 'selected'),
+        (REJECTED, 'rejected'),
+        (HOLD, 'hold'),
+        (PENDING, 'pending')
+    ]
+
+    id = models.AutoField(primary_key=True)
     interview_schedule = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE)
     score = models.IntegerField(default=0)
     remarks = models.TextField(null=True, blank=True)
     comments = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=40, choices=STATUS, default='pending')
 
     def __str__(self):
         return f"Evaluation for {self.interview_schedule.candidate_resume.candidate_name}"
@@ -360,8 +445,11 @@ class CandidateEvaluation(models.Model):
 
 # Terms Acceptance Model
 class ClientTermsAcceptance(models.Model):
+
+
     client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="client_terms")
+    description = models.TextField(default ='')
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
     replacement_clause = models.IntegerField(default=90)
     invoice_after = models.IntegerField(default=30)
@@ -390,6 +478,7 @@ class NegotiationRequests(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="negotiation_client_terms")
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
     replacement_clause = models.IntegerField(default=90)
+    description = models.TextField(default = '')
     invoice_after = models.IntegerField(default=30)
     payment_within = models.IntegerField(default=7)
     interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)

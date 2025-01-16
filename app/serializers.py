@@ -65,7 +65,6 @@ class JobPostingsSerializer(serializers.ModelSerializer):
     organization = OrganizationSerializer()
     interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
     
-
     class Meta:
         model = JobPostings
         fields = '__all__'  
@@ -76,6 +75,11 @@ class CandidateResumeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateResume
         fields = '__all__'  
+
+class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CandidateResume
+        exclude = ('contact_number','alternate_contact_number','candidate_email')
 
 class JobApplicationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -105,6 +109,7 @@ class InterviewDetailsEditedSerializer(serializers.ModelSerializer):
 class JobPostEditedSerializer(serializers.ModelSerializer):
     interview_details  = InterviewDetailsEditedSerializer(many=True, read_only=True, source='interviewerdetailseditedversion_set')
     edited_by_username = serializers.SerializerMethodField()
+    
     class Meta:
         model = JobPostingsEditedVersion
         fields = '__all__'
@@ -168,4 +173,6 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
             "industry",
             "differently_abled",
             "languages",
+            "num_of_positions",
+            "job_close_duration",
         ]

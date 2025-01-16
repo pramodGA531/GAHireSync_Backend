@@ -14,6 +14,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from datetime import datetime
+from collections import Counter
 
 
 import jwt
@@ -325,6 +326,12 @@ class JobPostingView(APIView):
             with transaction.atomic():
                 interview_rounds = data.get('interview_rounds', [])
                 acceptedterms = data.get('accepted_terms', [])
+                job_close_duration_raw = data.get('job_close_duration')
+                try:
+                    job_close_duration = datetime.strptime(job_close_duration_raw, "%Y-%m-%dT%H:%M:%S.%fZ").date()
+                except (ValueError, TypeError):
+                    return Response({"detail": "Invalid date format for job_close_duration. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
                 job_posting = JobPostings.objects.create(
                     username=username,
                     organization=organization,
@@ -357,6 +364,8 @@ class JobPostingView(APIView):
                     notice_time = data.get('notice_time'),
                     qualification_department = data.get('qualification_department'),
                     languages = data.get('languages'),
+                    num_of_positions = data.get('num_of_positions'),
+                    job_close_duration  = job_close_duration,
                     status='opened',
                     is_approved=False,
                     is_assigned=None,
@@ -480,6 +489,8 @@ The Recruitment Team
         job_posting.notice_period = data.get('notice_period', job_posting.notice_period)
         job_posting.languages = data.get('languages', job_posting.languages)
         job_posting.notice_time = data.get('notice_time', job_posting.notice_time)
+        job_posting.num_of_positions = data.get('num_of_positions', job_posting.num_of_positions)
+        job_posting.job_close_duration = data.get('job_close_duration', job_posting.job_close_duration)
 
         job_posting.save()
 
@@ -936,6 +947,8 @@ class OrgJobEdits(APIView):
                     notice_time = data.get('notice_time',''),
                     qualification_department = data.get('qualification_department'),
                     languages = data.get('languages'),
+                    num_of_positions = data.get('num_of_positions'),
+                    job_close_duration  = data.get('job_close_duration'),
                     status = 'pending'
                 )
 
@@ -1221,7 +1234,7 @@ class CandidateResumeView(APIView):
 
             if 'resume' not in request.FILES:
                 return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
-
+            
             data = request.data
             date_string = data.get('date_of_birth', '')
 
@@ -1229,6 +1242,15 @@ class CandidateResumeView(APIView):
                 date_of_birth = datetime.strptime(date_string, "%Y-%m-%d").date()
             except ValueError:
                 return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            primary_skills_string = data.get('primary_skills')
+            secondary_skills_string = data.get('secondary_skills')
+
+            primary_skills = json.loads(primary_skills_string)
+            secondary_skills = json.loads(secondary_skills_string)
+
+            if not primary_skills: 
+                return Response({"error":"Primary skills are required"}, status = status.HTTP_400_BAD_REQUEST)
 
             resume_file = request.FILES['resume']  # Get the resume file
             candidate_name = data.get('candidate_name')
@@ -1249,14 +1271,11 @@ class CandidateResumeView(APIView):
             # Create a new CandidateResume instance
             candidate_resume = CandidateResume.objects.create(
                 resume=resume_file,
-                job_id=job,
                 candidate_name=candidate_name,
                 candidate_email=candidate_email,
                 contact_number=contact_number,
                 alternate_contact_number=alternate_contact_number,
                 other_details=other_details,
-                sender=user,
-                receiver=receiver,
                 current_organisation=current_organization,
                 current_job_location=current_job_location,
                 current_job_type=current_job_type,
@@ -1268,9 +1287,129 @@ class CandidateResumeView(APIView):
                 job_status=job_status,
             )
 
+
+            if primary_skills:
+                for skill,experience in primary_skills:
+                    PrimarySkillSet.objects.create(
+                        candidate = candidate_resume,
+                        skill = skill,
+                        years_of_experience = experience,
+                    )
+
+            if secondary_skills: 
+                for skill,experience in secondary_skills:
+                    SecondarySkillSet.objects.create(
+                        candidate = candidate_resume,
+                        skill = skill,
+                        years_of_experience = experience,
+                    )
+
+            job_application = JobApplication.objects.create(
+                resume = candidate_resume,
+                job_id = job,   
+                status = 'pending',
+                sender=user,
+                receiver=receiver,
+            )
             # Return a success response
             return Response({"message": "Candidate added successfully!"}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class GetResumeView(APIView):
+    def get(self,request):
+        try:
+            user = request.user
+            if (user.role != "client"):
+                return Response({"error":"User client is only allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
+            
+            if request.GET.get("id"):
+                id = request.GET.get("id")
+                applications_all = JobApplication.objects.filter(job_id = id)
+
+                candidates = []
+                for application in applications_all:
+                    if application.status == 'pending':
+                        candidates.append(application.resume)
+
+                candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
+
+                job = JobPostings.objects.get(id = id)
+                job_data = {
+                    "job_id": id,
+                    "job_title" : job.job_title,
+                    "job_description": job.job_description,
+                    "ctc": job.ctc, 
+                }
+                return Response({"data":candidates_serializer.data, "job_data": job_data}, status=status.HTTP_200_OK)
+            
+            else:
+                job_postings = JobPostings.objects.filter(username = user )
+                job_applications_json = []
+                for job_post in job_postings:
+                    job_id = job_post.id
+                    num_of_postings = job_post.num_of_positions
+                    last_date = job_post.job_close_duration
+                    total_applications = JobApplication.objects.filter(job_id=job_id).count()
+                    selected_count = JobApplication.objects.filter(job_id=job_id, status="selected").count()
+                    pending_count = JobApplication.objects.filter(job_id=job_id, status="pending").count()
+                    rejected_count = JobApplication.objects.filter(job_id=job_id, status="rejected").count()
+
+                    # Append data to the response list
+                    job_applications_json.append({
+                        "job_id": job_id,
+                        "num_of_postings": num_of_postings,
+                        "last_date": last_date,
+                        "applications_sent": total_applications,
+                        "selected": selected_count,
+                        "pending": pending_count,
+                        "rejected": rejected_count,
+                    })
+                return Response(job_applications_json, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+        
+class RejectApplicationView(APIView):
+    def post(self, request):
+        try:
+            user = request.user
+            if not user:
+                return Response({"error":"User Does not exists"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            if user.role != 'client':
+                return Response({"error":"User Role not matches"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            id = request.GET.get('id')          # <--- candidate application id
+            if not id:
+                return Response({"error":"Application Id is mandatory to reject the application"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            candidate_resume = CandidateResume.objects.get(id = id)
+            job_application = JobApplication.objects.get(resume = candidate_resume)
+            job_application.status = "rejected"
+            job_application.feedback = request.data.get("feedback")
+            job_application.next_interview = None
+            job_application.save()
+
+            return Response({"message":"Rejected Successfully"}, status = status.HTTP_200_OK)
+        
+        except CandidateResume.DoesNotExist:
+            return Response({"error":"Candidate Resume not exists with that id"}, status = status.HTTP_400_BAD_REQUEST)
+        
+        except JobApplication.DoesNotExist:
+            return Response({"error": "Job Application does not exists"}, status = status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+    
+class ScheduleInterview(APIView):
+    def post(self, request):
+        try:
+            pass
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
