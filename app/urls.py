@@ -37,6 +37,8 @@ urlpatterns = [
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
     path('client/reject-application/',RejectApplicationView.as_view(), name ='reject-application'),
+    path('client/accept-application/',AcceptApplicationView.as_view(), name ='accept-application'),
+    path('client/get-interviewer-details/',GetInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('negotiate-terms/', NegotiateTermsView.as_view(), name='negotiate-terms'),
     path('agency/recruiters/', RecruitersView.as_view(), name='agency-recruiters'),

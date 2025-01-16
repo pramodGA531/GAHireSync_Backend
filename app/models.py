@@ -266,7 +266,7 @@ class InterviewerDetails(models.Model):
     ]
 
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
-    round_num = models.IntegerField()
+    round_num = models.IntegerField(default=0)
     name = models.CharField(max_length=100)
     email = models.EmailField()
     mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW)
@@ -371,7 +371,6 @@ class InterviewSchedule(models.Model):
         (COMPLETED, 'completed')
     ]
     id = models.AutoField(primary_key=True)
-    candidate_resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
     interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE)
     schedule_date = models.DateTimeField(null= True, blank=True)
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
@@ -379,7 +378,7 @@ class InterviewSchedule(models.Model):
     status = models.CharField(max_length=20,choices=STATUS_CHOICES, default='scheduled')
 
     def __str__(self):
-        return f"Interview scheduled for {self.candidate_resume.candidate_name}"
+        return f"Interview scheduled for "
     
     
 # Job Application Model
@@ -388,6 +387,7 @@ class JobApplication(models.Model):
     REJECTED = 'rejected'
     HOLD = 'hold'
     PENDING = 'pending'
+    PROCESSING = 'processing'
     APPLIED = 'applied'
 
     STATUS = [
@@ -396,6 +396,7 @@ class JobApplication(models.Model):
         (HOLD, 'hold'),
         (PENDING, 'pending'),
         (APPLIED ,'applied'),
+        (PROCESSING, 'processing'),
     ]
     id = models.AutoField(primary_key=True)
     resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)

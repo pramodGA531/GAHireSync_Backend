@@ -1405,11 +1405,70 @@ class RejectApplicationView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class GetInterviewerDetails(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            job_id = request.GET.get('id')
+            if not job_id:
+                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                job = JobPostings.objects.get(id=job_id)
+            except JobPostings.DoesNotExist:
+                return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            if job.username != request.user:
+                return Response({"error": "You are not authorized to view this job posting"}, status=status.HTTP_403_FORBIDDEN)
+
+            resume_id = request.GET.get('resume_id')
+            if not resume_id:
+                return Response({"error": "Resume ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                job_application = JobApplication.objects.get(resume_id=resume_id, job_id=job)
+            except JobApplication.DoesNotExist:
+                return Response({"error": "Job application not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            next_round = job_application.round_num + 1 if job_application.round_num else 1
+
+            try:
+                next_interview_details = InterviewerDetails.objects.get(job_id=job_id, round_num=next_round)
+                serializer = InterviewerDetailsSerializer(next_interview_details)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except InterviewerDetails.DoesNotExist:
+                return Response({"message": "There are no further rounds"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "An error occurred while processing your request"},status=status.HTTP_400_BAD_REQUEST)
     
-class ScheduleInterview(APIView):
+class AcceptApplicationView(APIView):
     def post(self, request):
         try:
-            pass
+            resume_id = request.GET.get('id')
+            round_num = request.data.get('round_num')
+            scheduled_date_and_time = request.data.get('date_and_time')
+            print(scheduled_date_and_time)
+            application = JobApplication.objects.get(resume = resume_id)
+            interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
+            
+            scheduled_interview = InterviewSchedule.objects.create(
+                interviewer = interviewer_details,
+                schedule_date = scheduled_date_and_time,
+                round_num = round_num,
+                status = 'scheduled',
+                job_id = application.job_id
+            )
+            
+            application.round_num = round_num
+            application.next_interview = scheduled_interview
+            application.status = 'processing'
+            application.save()
+
+            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
