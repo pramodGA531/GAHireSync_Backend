@@ -612,18 +612,28 @@ class OrganizationTermsView(APIView):
         return Response(serializer.data)
 
     def put(self, request):
-        user = request.user
-        organization = Organization.objects.filter(manager = user).first()
-        organization_terms = get_object_or_404(OrganizationTerms, organization = organization)
-        data = request.data
-        organization_terms.service_fee = data.get('service_fee', organization_terms.service_fee)
-        organization_terms.replacement_clause = data.get('replacement_clause', organization_terms.replacement_clause)
-        organization_terms.invoice_after = data.get('invoice_after', organization_terms.invoice_after)
-        organization_terms.payment_within = data.get('payment_within', organization_terms.payment_within)
-        organization_terms.interest_percentage = data.get('interest_percentage', organization_terms.interest_percentage)
-        organization_terms.save()
+        try:
+            user = request.user
+            organization = Organization.objects.filter(manager = user).first()
+            organization_terms = get_object_or_404(OrganizationTerms, organization = organization)
+            data = request.data
+            if data.get('description'):
+                organization_terms.description = data.get('description' , organization_terms.description)
+                organization_terms.save()
+                return Response({"message":"Organization description updated successfully"}, status = status.HTTP_200_OK)
+            else:
+                organization_terms.service_fee = data.get('service_fee', organization_terms.service_fee)
+                organization_terms.replacement_clause = data.get('replacement_clause', organization_terms.replacement_clause)
+                organization_terms.invoice_after = data.get('invoice_after', organization_terms.invoice_after)
+                organization_terms.payment_within = data.get('payment_within', organization_terms.payment_within)
+                organization_terms.interest_percentage = data.get('interest_percentage', organization_terms.interest_percentage)
+                organization_terms.save()
 
-        return Response({"detail": "Organization terms updated successfully", "id": organization_terms.id}, status=status.HTTP_200_OK)
+                return Response({"detail": "Organization terms updated successfully", "id": organization_terms.id}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+
 
 class GetOrganizationTermsView(APIView):
     permission_classes = [IsAuthenticated]  
@@ -1169,11 +1179,14 @@ class RecJobDetails(APIView):
             org = Organization.objects.filter(recruiters__id=user.id).first()
             job = JobPostings.objects.get(id=job_id, organization=org)
             serializer = JobPostingsSerializer(job)
+
+            resume_count = JobApplication.objects.filter(job_id = job_id, sender = user).count()
+
             try:
                 summary = summarize_jd(job)
             except:
                 summary = ''
-            return Response({'jd':serializer.data,'summary':summary}, status=status.HTTP_200_OK)
+            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count}, status=status.HTTP_200_OK)
         except:
             return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1251,6 +1264,9 @@ class CandidateResumeView(APIView):
 
             if not primary_skills: 
                 return Response({"error":"Primary skills are required"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            if JobApplication.objects.filter(job_id = job, resume__candidate_email = data.get('candidate_email')).exists():
+                return Response({"error":"Candidate application is submitted previously"}, status = status.HTTP_400_BAD_REQUEST)
 
             resume_file = request.FILES['resume']  # Get the resume file
             candidate_name = data.get('candidate_name')
@@ -1406,7 +1422,7 @@ class RejectApplicationView(APIView):
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
         
-class GetInterviewerDetails(APIView):
+class NextInterviewerDetails(APIView):
     def get(self, request):
         try:
             if not request.user.is_authenticated:
@@ -1451,10 +1467,10 @@ class AcceptApplicationView(APIView):
             resume_id = request.GET.get('id')
             round_num = request.data.get('round_num')
             scheduled_date_and_time = request.data.get('date_and_time')
-            print(scheduled_date_and_time)
             application = JobApplication.objects.get(resume = resume_id)
             interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
             
+
             scheduled_interview = InterviewSchedule.objects.create(
                 interviewer = interviewer_details,
                 schedule_date = scheduled_date_and_time,
@@ -1469,6 +1485,208 @@ class AcceptApplicationView(APIView):
             application.save()
 
             return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class ScheduledInterviewsView(APIView):
+    def get(self, request):
+        try:
+            if request.GET.get('id'):
+                try:
+                    interview_id = request.GET.get('id')
+                    scheduled_interview = InterviewSchedule.objects.get(id = interview_id)
+                    interview_details_json = {
+                        "job_id" : scheduled_interview.job_id.id,
+                        "job_title": scheduled_interview.job_id.job_title,
+                        "interviewer_name" : scheduled_interview.interviewer.name,
+                        "candidate_name" : JobApplication.objects.get(next_interview = scheduled_interview).resume.candidate_name,
+                        "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
+                        "round_num" : scheduled_interview.round_num,
+                        "scheduled_date": scheduled_interview.schedule_date
+                    }
+                    return Response(interview_details_json, status = status.HTTP_200_OK)
+
+                except InterviewSchedule.DoesNotExist:
+                    return Response({"error":"There is no interview scheduled with that id"}, status = status.HTTP_400_BAD_REQUEST)
+                except Exception as e:
+                    print(str(e))
+                    return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+            else:
+                if not request.user.is_authenticated:
+                    return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+                if not request.user.role == 'client':
+                    return Response({"error":"You are not allowed to run this view"},status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    interviews = InterviewSchedule.objects.filter(job_id__in=JobPostings.objects.filter(username = request.user).values_list('id',flat=True))
+                except Exception as e:
+                    print(str(e))
+                    return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                
+                scheduled_json = []
+                for interview in interviews:
+                    id = interview.id
+                    schedule_date = interview.schedule_date
+                    round_of_interview = interview.round_num
+                    interviewer_name = interview.interviewer.name
+                    job_id = interview.job_id.id
+                    job_title = interview.job_id.job_title
+                    try:
+                        candidate_name = JobApplication.objects.get(next_interview = interview).resume.candidate_name
+                        statuss = "processing"
+                    except JobApplication.DoesNotExist:
+                        candidate_name = " "
+                        statuss = "completed"
+
+                    scheduled_json.append({
+                        "interview_id": id,
+                        "job_id":job_id,
+                        "job_title":job_title,
+                        "candidate_name":candidate_name,
+                        "interviewer_name":interviewer_name,
+                        "round_of_interview":round_of_interview,
+                        "schedule_date":schedule_date,
+                        "status":statuss
+                    })
+
+                return Response(scheduled_json, status =status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+
+    
+        
+class JobPostSkillsView(APIView):
+    def get(self, request):
+        try:
+            if not request.GET.get('id'):
+                return Response({"error":"Job ID is required to fetch the details"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            job_id = request.GET.get('id')
+            job = JobPostings.objects.get(id = job_id)
+            skills_json = {
+                "primary_skills" : job.primary_skills,
+                "secondary_skills" : job.secondary_skills
+            }
+            return Response(skills_json, status=status.HTTP_200_OK)
+
+        except JobPostings.DoesNotExist:
+            return Response({"error":"Job Not found"}, status= status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+        
+class PromoteCandidateView(APIView):
+    def post(self, request):
+        try:
+            resume_id = request.GET.get('id')
+            round_num = request.data.get('round_num')
+            scheduled_date_and_time = request.data.get('date_and_time')
+            application = JobApplication.objects.get(resume = resume_id)
+            interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
+
+            primary_skills = request.data.get('primary_skills')
+            secondary_skills = request.data.get('secondary_skills')
+            remarks = request.data.get('remarks', "")
+            score = request.data.get('score', 0)
+
+            print(scheduled_date_and_time, " is the scheduled date and time")
+
+            scheduled_interview = InterviewSchedule.objects.create(
+                interviewer = interviewer_details,
+                schedule_date = scheduled_date_and_time,
+                round_num = round_num,
+                status = 'scheduled',
+                job_id = application.job_id
+            )
+
+            remarks = CandidateEvaluation.objects.create(
+                primary_skills_rating = primary_skills,
+                secondary_skills_ratings = secondary_skills,
+                round_num = round_num-1,
+                remarks = remarks,
+                status = "SELECTED",
+                job_application = application,
+                score = score,
+                job_id = application.job_id,
+                interview_schedule = application.next_interview,
+            )
+            application.next_interview.status = 'completed'
+            application.next_interview.save()
+            application.round_num = round_num
+            application.next_interview = scheduled_interview
+            application.status = 'processing'
+            application.save()
+
+            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class ShortlistCandidate(APIView):
+    def post(self, request):
+        try:
+            resume_id = request.GET.get('id')
+            round_num = request.data.get('round_num')
+            application = JobApplication.objects.get(resume = resume_id)
+            print(request.data)
+            primary_skills = request.data.get('primary_skills')
+            secondary_skills = request.data.get('secondary_skills')
+            remarks = request.data.get('remarks', "")
+            score = request.data.get('score', 0)
+
+            remarks = CandidateEvaluation.objects.create(
+                primary_skills_rating = primary_skills,
+                secondary_skills_ratings = secondary_skills,
+                round_num = round_num,
+                remarks = remarks,
+                status = "SELECTED",
+                job_application = application,
+                score = score,
+                job_id = application.job_id,
+                interview_schedule = application.next_interview,
+            )
+            application.next_interview.status = 'completed'
+            application.next_interview.save()
+            application.status = 'selected'
+            application.save()
+
+            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class RejectCandidate(APIView):
+    def post(self, request):
+        try:
+            resume_id = request.GET.get('id')
+            round_num = request.data.get('round_num')
+            application = JobApplication.objects.get(resume = resume_id)
+            print(request.data)
+            primary_skills = request.data.get('primary_skills', '')
+            secondary_skills = request.data.get('secondary_skills', '')
+            remarks = request.data.get('remarks', "")
+            score = request.data.get('score', 0)
+
+            remarks = CandidateEvaluation.objects.create(
+                primary_skills_rating = primary_skills,
+                secondary_skills_ratings = secondary_skills,
+                round_num = round_num,
+                remarks = remarks,
+                status = "REJECTED",
+                job_application = application,
+                score = score,
+                job_id = application.job_id,
+                interview_schedule = application.next_interview,
+            )
+            application.next_interview.status = 'completed'
+            application.next_interview.save()
+            application.status = 'rejected'
+            application.save()
+
+            return Response({"message":"Rejected successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)

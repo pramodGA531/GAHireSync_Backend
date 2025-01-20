@@ -2,7 +2,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
-
+from django.core.exceptions import ValidationError
 # Custom User Manager
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, role=None, **extra_fields):
@@ -434,20 +434,26 @@ class CandidateEvaluation(models.Model):
     ]
 
     id = models.AutoField(primary_key=True)
+    job_application = models.ForeignKey(JobApplication, on_delete=models.CASCADE)
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     interview_schedule = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE)
     score = models.IntegerField(default=0)
     remarks = models.TextField(null=True, blank=True)
+    round_num = models.IntegerField()
+    primary_skills_rating = models.TextField(null=True)
+    secondary_skills_ratings = models.TextField(null = True, blank=True)
     comments = models.TextField(null=True, blank=True)
     status = models.CharField(max_length=40, choices=STATUS, default='pending')
+    class Meta:
+        unique_together = ('job_id','job_application','round_num')
 
     def __str__(self):
-        return f"Evaluation for {self.interview_schedule.candidate_resume.candidate_name}"
+        return f"Evaluation for {self.job_application.resume.candidate_name}"
 
 
 # Terms Acceptance Model
 class ClientTermsAcceptance(models.Model):
-
-
+    
     client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="client_terms")
     description = models.TextField(default ='')
