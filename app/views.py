@@ -1532,8 +1532,9 @@ class ScheduledInterviewsView(APIView):
                     job_id = interview.job_id.id
                     job_title = interview.job_id.job_title
                     try:
-                        candidate_name = JobApplication.objects.get(next_interview = interview).resume.candidate_name
-                        statuss = "processing"
+                        application = JobApplication.objects.get(next_interview = interview)
+                        candidate_name = application.resume.candidate_name
+                        statuss = application.status
                     except JobApplication.DoesNotExist:
                         candidate_name = " "
                         statuss = "completed"
@@ -1690,3 +1691,84 @@ class RejectCandidate(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+
+class InterviewersView(APIView):
+    def get(self, request,*args, **kwargs):
+        try:
+            user = request.user
+            client = ClientDetails.objects.get(user = user)
+            serializer = ClientDetailsInterviewersSerializer(client)
+            return Response(serializer.data["interviewers"], status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    def post(self, request):
+        try:
+            user = request.user
+            client = ClientDetails.objects.get(user = user)
+            # org = Organization.objects.get(manager=user)
+
+            username = request.data.get('username')
+            email = request.data.get('email')
+
+            password = generate_random_password()
+
+            user_serializer = CustomUserSerializer(data={
+                'email': email,
+                'username': username,
+                'role': CustomUser.INTERVIEWER,
+                'credit': 0,
+                'password': password,
+            })
+
+            if user_serializer.is_valid(raise_exception=True):
+                new_user = user_serializer.save()
+                new_user.set_password(password)
+                new_user.save()
+                
+                client.interviewers.add(new_user)
+
+                subject = "Account Created on HireSync"
+                message = f"""
+Dear {username},
+
+Welcome to HireSync! Your interviewer account has been successfully created.
+
+Here are your account details:
+Username: {username}
+Email: {email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+
+                send_mail(
+                    subject=subject,
+                    message=message,
+                    from_email='',
+                    recipient_list=[email],
+                    fail_silently=False,
+                )
+
+                return Response(
+                    {"message": "Interviewer account created successfully, and email sent."},
+                    status=status.HTTP_201_CREATED
+                )
+
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Client not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

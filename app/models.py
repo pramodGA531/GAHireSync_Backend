@@ -29,6 +29,7 @@ class CustomUser(AbstractUser):
     RECRUITER = "recruiter"
     CLIENT = "client"
     MANAGER = "manager"
+    INTERVIEWER = 'interviewer'
 
     ROLE_CHOICES = [
         (ADMIN, "admin"),
@@ -36,6 +37,7 @@ class CustomUser(AbstractUser):
         (RECRUITER, "recruiter"),
         (CLIENT, "client"),
         (MANAGER, "manager"),
+        (INTERVIEWER, "interviewer"),
     ]
 
     email = models.EmailField(unique=True)
@@ -114,7 +116,7 @@ class ClientDetails(models.Model):
     gst_number = models.CharField(max_length=100)
     company_pan = models.CharField(max_length=20)
     company_address = models.TextField()
-
+    interviewers = models.ManyToManyField(CustomUser, related_name="client_interviewers", blank=True)
     def __str__(self):
         return self.name_of_organization
 

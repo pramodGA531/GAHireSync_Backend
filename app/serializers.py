@@ -29,6 +29,14 @@ class OrganizationSerializer(serializers.ModelSerializer):
         fields = '__all__'  
 
 
+class ClientDetailsInterviewersSerializer(serializers.ModelSerializer):
+    interviewers = CustomUserSerializer(many=True,read_only = True)
+
+    class Meta:
+        model = ClientDetails
+        fields = '__all__'
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
