@@ -60,8 +60,8 @@ class JobPostingsAdmin(admin.ModelAdmin):
 
 @admin.register(InterviewerDetails)
 class InterviewerDetailsAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'job_id', 'type_of_interview')
-    search_fields = ('name', 'email', 'job_id__job_title')
+    list_display = ('name',  'job_id', 'type_of_interview')
+    search_fields = ('name',  'job_id__job_title')
     list_filter = ('type_of_interview',)
     ordering = ('name',)
 

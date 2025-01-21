@@ -39,15 +39,15 @@ urlpatterns = [
     path('client/reject-application/',RejectApplicationView.as_view(), name ='reject-application'),
     path('client/accept-application/',AcceptApplicationView.as_view(), name ='accept-application'),
     path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
-    path('client/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
-    path('client/get-interviewers/', InterviewersView.as_view(), name='get-interviewers'),
     path('client/add-interviewers/', InterviewersView.as_view(), name='add-interviewers'),
+    path('client/get-interviewers/', InterviewersView.as_view(), name='get-interviewers'),
+    # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
-
-    path('shortlist-candidate/', ShortlistCandidate.as_view(), name= 'shortlist-candidate'),
-    path('reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
-
-    path('client/scheduled-interviews/',ScheduledInterviewsView.as_view(), name='schedule-interviews'),
+    path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
+    path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
+    path('interviewer/scheduled-interviews/',ScheduledInterviewsView.as_view(), name='schedule-interviews'),
+    path('interviewer/shortlist-candidate/', ShortlistCandidate.as_view(), name= 'shortlist-candidate'),
+    path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
 
     path('fetch-skills/', JobPostSkillsView.as_view(),name='get-jobpost-skills'),
 

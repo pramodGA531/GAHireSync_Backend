@@ -267,8 +267,7 @@ class InterviewerDetails(models.Model):
 
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     round_num = models.IntegerField(default=0)
-    name = models.CharField(max_length=100)
-    email = models.EmailField()
+    name = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"interviewer"})
     mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW)
     type_of_interview = models.CharField(max_length=35, choices = TYPE_OF_INTERVIEW)
 
@@ -287,13 +286,12 @@ class InterviewerDetailsEditedVersion(models.Model):
     MODE_OF_INTERVIEW = [
         (FACE, 'face_to_face'),
         (ONLINE, 'online'),
-        (TELEPHONE, 'telephone'),
+        (TELEPHONE, 'telephone'), 
     ]
 
     job_id = models.ForeignKey(JobPostingsEditedVersion, on_delete=models.CASCADE)
     round_num = models.IntegerField()
-    name = models.CharField(max_length=100)
-    email = models.EmailField()
+    name = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"interviewer"})
     mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW)
     type_of_interview = models.CharField(max_length=35, choices = InterviewerDetails.TYPE_OF_INTERVIEW)
 
