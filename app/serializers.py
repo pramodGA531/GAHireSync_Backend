@@ -63,6 +63,7 @@ class NegotiationSerializer(serializers.ModelSerializer):
         fields = '__all__' 
 
 class InterviewerDetailsSerializer(serializers.ModelSerializer):
+    name = CustomUserSerializer()
     class Meta:
         model = InterviewerDetails
         fields = '__all__'  
@@ -84,8 +85,20 @@ class CandidateResumeSerializer(serializers.ModelSerializer):
         model = CandidateResume
         fields = '__all__'  
 
-class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
+class PrimarySkillSetSerializer(serializers.ModelSerializer):
     class Meta:
+        model = PrimarySkillSet
+        fields = ['skill','years_of_experience']
+
+class SecondarySkillSetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SecondarySkillSet
+        fields = ['skill','years_of_experience']
+
+class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
+    primary_skills = PrimarySkillSetSerializer(many=True, read_only  = True)
+    secondary_skills = SecondarySkillSetSerializer(many = True, read_only = True)
+    class Meta: 
         model = CandidateResume
         exclude = ('contact_number','alternate_contact_number','candidate_email')
 
@@ -184,3 +197,23 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
             "num_of_positions",
             "job_close_duration",
         ]
+
+
+class CandidateProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CandidateProfile
+        fields ='__all__'
+
+    def create(self, validated_data):
+        custom_user_data = validated_data.pop('name')
+
+        if isinstance(custom_user_data, CustomUser):
+            user = custom_user_data
+        else:
+            try:
+                user = CustomUser.objects.get(pk=custom_user_data)
+            except CustomUser.DoesNotExist:
+                raise serializers.ValidationError({"name": "Invalid user ID. User does not exist."})
+
+        candidate_profile = CandidateProfile.objects.create(name=user, **validated_data)
+        return candidate_profile

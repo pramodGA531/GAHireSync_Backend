@@ -313,7 +313,6 @@ class JobPostingView(APIView):
     def post(self, request):
         data = request.data
         username = request.user
-        print("entered here")
         organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
         if not username or username.role != 'client':
             return Response({"detail": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
@@ -373,11 +372,11 @@ class JobPostingView(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
+                        interviewer = CustomUser.objects.get(username = round_data.get('name'))
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
-                            name=round_data.get('name', ''),
-                            email=round_data.get('email', ''),
+                            name=interviewer,
                             type_of_interview=round_data.get('type_of_interview', ''),
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
@@ -1228,8 +1227,88 @@ class ScreenResume(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
 
+
+# intially check whether the account exists for the candidate, if exists continue to next step - else create
+# create an account for the candidate and then add the candidateResune
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
+from datetime import datetime
+import json
+
 class CandidateResumeView(APIView):
     parser_classes = (MultiPartParser, FormParser)
+
+    def create_user_and_profile(self, candidate_name, candidate_email, date_of_birth):
+
+        password = generate_random_password()
+
+        # Serialize and create the user
+        user_serializer = CustomUserSerializer(data={
+            'email': candidate_email,
+            'username': candidate_name,
+            'role': CustomUser.CANDIDATE,
+            'credit': 0,
+            'password': password,
+        })
+
+        if user_serializer.is_valid(raise_exception=True):
+            new_user = user_serializer.save()
+            new_user.set_password(password)
+            new_user.save()
+
+            # Serialize and create the candidate profile
+            candidate_profile_serializer = CandidateProfileSerializer(data={
+                'name': new_user.id,
+                'date_of_birth': date_of_birth,
+                'email': candidate_email,
+                'first_name': "",
+                'last_name': "",
+                'phone_num': "",
+                'address': " ",
+                'socialMediaLinks': "",
+            })
+
+            if candidate_profile_serializer.is_valid(raise_exception=True):
+                candidate_profile = candidate_profile_serializer.save()
+                # Send email notification
+                subject = "Account Created on HireSync"
+                message = f"""
+Dear {candidate_name},
+
+Welcome to HireSync! Your Candidate account has been successfully created.
+
+Here are your account details:
+Username: {candidate_name}
+Email: {candidate_email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+                send_mail(
+                        subject=subject,
+                        message=message,
+                        from_email='noreply@hiresync.com',
+                        recipient_list=[candidate_email],
+                        fail_silently=False,
+                )
+                return candidate_profile
+            else:
+                new_user.delete()
+                print(candidate_profile_serializer.errors)
+                raise serializers.ValidationError(candidate_profile_serializer.errors)
+        else:
+            raise serializers.ValidationError(user_serializer.errors)
 
     def post(self, request):
         try:
@@ -1239,14 +1318,14 @@ class CandidateResumeView(APIView):
 
             user = request.user
             if not user or user.role != 'recruiter':
-                return Response({"error": "You are not allowed to handle this request"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "You are not allowed to handle this request"}, status=status.HTTP_403_FORBIDDEN)
 
             job = JobPostings.objects.get(id=job_id)
             receiver = job.username
 
             if 'resume' not in request.FILES:
                 return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
-            
+
             data = request.data
             date_string = data.get('date_of_birth', '')
 
@@ -1255,83 +1334,97 @@ class CandidateResumeView(APIView):
             except ValueError:
                 return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
             
-            primary_skills_string = data.get('primary_skills')
-            secondary_skills_string = data.get('secondary_skills')
+            primary_skills = json.loads(data.get('primary_skills', '[]'))
+            secondary_skills = json.loads(data.get('secondary_skills', '[]'))
 
-            primary_skills = json.loads(primary_skills_string)
-            secondary_skills = json.loads(secondary_skills_string)
+            if not primary_skills:
+                return Response({"error": "Primary skills are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            if not primary_skills: 
-                return Response({"error":"Primary skills are required"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            if JobApplication.objects.filter(job_id = job, resume__candidate_email = data.get('candidate_email')).exists():
-                return Response({"error":"Candidate application is submitted previously"}, status = status.HTTP_400_BAD_REQUEST)
-
-            resume_file = request.FILES['resume']  # Get the resume file
-            candidate_name = data.get('candidate_name')
-            candidate_email = data.get('candidate_email')
-            contact_number = data.get('contact_number')
-            alternate_contact_number = data.get('alternate_contact_number', '')
-            other_details = data.get('other_details', '')
-            current_organization = data.get('current_organization', '')
-            current_job_location = data.get('current_job_location', '')
-            current_job_type = data.get('current_job_type', '')
-            date_of_birth = date_string
-            experience = data.get('experience', '')
-            current_ctc = data.get('current_ctc', '')
-            expected_ctc = data.get('expected_ctc', '')
-            notice_period = data.get('notice_period', '')
-            job_status = data.get('job_status', '')
-
-            # Create a new CandidateResume instance
-            candidate_resume = CandidateResume.objects.create(
-                resume=resume_file,
-                candidate_name=candidate_name,
-                candidate_email=candidate_email,
-                contact_number=contact_number,
-                alternate_contact_number=alternate_contact_number,
-                other_details=other_details,
-                current_organisation=current_organization,
-                current_job_location=current_job_location,
-                current_job_type=current_job_type,
-                date_of_birth=date_of_birth,
-                experience=experience,
-                current_ctc=current_ctc,
-                expected_ctc=expected_ctc,
-                notice_period=notice_period,
-                job_status=job_status,
-            )
+            if JobApplication.objects.filter(
+                job_id=job, resume__candidate_email=data.get('candidate_email')
+            ).exists():
+                return Response({"error": "Candidate application is submitted previously"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-            if primary_skills:
-                for skill,experience in primary_skills:
+            try:
+                candidate_user_instance = CustomUser.objects.get(
+                    username=data.get('candidate_name'),
+                    email=data.get('candidate_email')
+                )
+                
+                try:
+                    candidate_profile = CandidateProfile.objects.get(name = candidate_user_instance)
+
+                except CandidateProfile.DoesNotExist:
+                    return Response({"error":"candidate profile doesnot exist"}, status=status.HTTP_400_BAD_REQUEST)
+
+            except CustomUser.DoesNotExist:
+                candidate_profile = self.create_user_and_profile(
+                    candidate_name=data.get('candidate_name'),
+                    candidate_email=data.get('candidate_email'),
+                    date_of_birth=date_of_birth
+                )
+
+            #check job application of this user, with this id
+            try:
+                resumes =  CandidateResume.objects.filter(candidate_name = candidate_profile)
+                application = JobApplication.objects.get(job_id = job_id, resume__in = resumes)
+
+                if application:
+                    return Response({"error":"Job application already posted for this email id"}, status=status.HTTP_400_BAD_REQUEST)
+            except JobApplication.DoesNotExist:
+
+            # Create a CandidateResume instance
+                candidate_resume = CandidateResume.objects.create(
+                    resume=request.FILES['resume'],
+                    candidate_name=candidate_profile,
+                    candidate_email = data.get('email'),
+                    contact_number=data.get('contact_number'),
+                    alternate_contact_number=data.get('alternate_contact_number', ''),
+                    other_details=data.get('other_details', ''),
+                    current_organisation=data.get('current_organization', ''),
+                    current_job_location=data.get('current_job_location', ''),
+                    current_job_type=data.get('current_job_type', ''),
+                    date_of_birth=date_of_birth,
+                    experience=data.get('experience', ''),
+                    current_ctc=data.get('current_ctc', ''),
+                    expected_ctc=data.get('expected_ctc', ''),
+                    notice_period=data.get('notice_period', ''),
+                    job_status=data.get('job_status', ''),
+                )
+
+                # Add Primary Skills
+                for skill, experience in primary_skills:
                     PrimarySkillSet.objects.create(
-                        candidate = candidate_resume,
-                        skill = skill,
-                        years_of_experience = experience,
+                        candidate=candidate_resume,
+                        skill=skill,
+                        years_of_experience=experience,
                     )
 
-            if secondary_skills: 
-                for skill,experience in secondary_skills:
+                # Add Secondary Skills
+                for skill, experience in secondary_skills:
                     SecondarySkillSet.objects.create(
-                        candidate = candidate_resume,
-                        skill = skill,
-                        years_of_experience = experience,
+                        candidate=candidate_resume,
+                        skill=skill,
+                        years_of_experience=experience,
                     )
 
-            job_application = JobApplication.objects.create(
-                resume = candidate_resume,
-                job_id = job,   
-                status = 'pending',
-                sender=user,
-                receiver=receiver,
-            )
-            # Return a success response
-            return Response({"message": "Candidate added successfully!"}, status=status.HTTP_201_CREATED)
+                # Create Job Application
+                JobApplication.objects.create(
+                    resume=candidate_resume,
+                    job_id=job,
+                    status='pending',
+                    sender=user,
+                    receiver=receiver,
+                )
 
+                return Response({"message": "Resume added successfully"}, status=status.HTTP_201_CREATED)
+
+        except JobPostings.DoesNotExist:
+            return Response({"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         
 
 class GetResumeView(APIView):
@@ -1529,6 +1622,24 @@ class NextRoundInterviewDetails(APIView):
             return Response({"error": "An error occurred while processing your request"},status=status.HTTP_400_BAD_REQUEST)
     
 
+class AllInterviewsView(APIView):
+    def get(self, request):
+        try:
+            if request.user.is_authenticated:
+                if request.user.role != 'client':
+                    return Response({"error":"Sorry, You are not allowed"},status=status.HTTP_400_BAD_REQUEST)
+                
+                # upcoming interviews
+                applications = JobApplication.objects.filter(job_id__in = JobPostings.objects.filter(username = request.user).values_list("id",flat=True))
+
+                interviews_json = {}
+                for application in applications:
+                    interview = InterviewSchedule.objects.filter()
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
 class ScheduledInterviewsView(APIView):
     def get(self, request):
         try:
@@ -1536,16 +1647,19 @@ class ScheduledInterviewsView(APIView):
                 try:
                     interview_id = request.GET.get('id')
                     scheduled_interview = InterviewSchedule.objects.get(id = interview_id)
-                    interview_details_json = {
-                        "job_id" : scheduled_interview.job_id.id,
-                        "job_title": scheduled_interview.job_id.job_title,
-                        "interviewer_name" : scheduled_interview.interviewer.name,
-                        "candidate_name" : JobApplication.objects.get(next_interview = scheduled_interview).resume.candidate_name,
-                        "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
-                        "round_num" : scheduled_interview.round_num,
-                        "scheduled_date": scheduled_interview.schedule_date
-                    }
-                    return Response(interview_details_json, status = status.HTTP_200_OK)
+                    try:
+                        interview_details_json = {
+                            "job_id" : scheduled_interview.job_id.id,
+                            "job_title": scheduled_interview.job_id.job_title,
+                            "interviewer_name" : scheduled_interview.interviewer.name.username,
+                            "candidate_name" : JobApplication.objects.get(next_interview = scheduled_interview).resume.candidate_name,
+                            "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
+                            "round_num" : scheduled_interview.round_num,
+                            "scheduled_date": scheduled_interview.schedule_date
+                        }
+                        return Response(interview_details_json, status = status.HTTP_200_OK)
+                    except Exception as e:
+                        return Response({"error":str(e)}, status= status.HTTP_400_BAD_REQUEST)
 
                 except InterviewSchedule.DoesNotExist:
                     return Response({"error":"There is no interview scheduled with that id"}, status = status.HTTP_400_BAD_REQUEST)
@@ -1558,7 +1672,8 @@ class ScheduledInterviewsView(APIView):
                 if not request.user.role == 'interviewer':
                     return Response({"error":"You are not allowed to run this view"},status=status.HTTP_400_BAD_REQUEST)
                 try:
-                    interviews = InterviewSchedule.objects.filter(interviewer__in = InterviewerDetails.objects.filter(name = request.user).values_list('id',flat=True))
+                    user = CustomUser.objects.get(username = request.user)
+                    interviews = InterviewSchedule.objects.filter(interviewer__in = InterviewerDetails.objects.filter(name__username = user.username).values_list('job_id',flat=True))
                     print(interviews)
                 except Exception as e:
                     print(str(e))
@@ -1569,7 +1684,7 @@ class ScheduledInterviewsView(APIView):
                     id = interview.id
                     schedule_date = interview.schedule_date
                     round_of_interview = interview.round_num
-                    interviewer_name = interview.interviewer.name
+                    interviewer_name = interview.interviewer.name.username
                     job_id = interview.job_id.id
                     job_title = interview.job_id.job_title
                     try:
@@ -1801,7 +1916,7 @@ HireSync Team
                     status=status.HTTP_201_CREATED
                 )
 
-        except Organization.DoesNotExist:
+        except ClientDetails.DoesNotExist:
             return Response(
                 {"detail": "Client not found."},
                 status=status.HTTP_404_NOT_FOUND

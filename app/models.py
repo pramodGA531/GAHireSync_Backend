@@ -272,7 +272,7 @@ class InterviewerDetails(models.Model):
     type_of_interview = models.CharField(max_length=35, choices = TYPE_OF_INTERVIEW)
 
     def __str__(self):
-        return self.name
+        return self.name.username
     
 class InterviewerDetailsEditedVersion(models.Model):
     FACE = 'face_to_face'
@@ -299,6 +299,22 @@ class InterviewerDetailsEditedVersion(models.Model):
         return self.name
 
 
+# Candidate profile model to store all the candidate details
+class CandidateProfile(models.Model):
+    name = models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name='candidate_name')
+    email = models.EmailField()
+    first_name = models.CharField(max_length=100, null=True,blank = True)
+    last_name = models.CharField(max_length=100, null=True, blank = True)
+    address = models.TextField(null=True ,blank = True)
+    phone_num = models.TextField(null=True ,blank = True)
+    date_of_birth = models.DateField(default=None, null=True, blank = True)
+    socialMediaLinks = models.TextField(null = True, blank = True)
+    # add all personal details of the candidate
+
+    def __str__(self):
+        return self.name.username
+    
+
 # Candidate Resume Model
 class CandidateResume(models.Model):
     PERMANENT = 'permanent'
@@ -320,8 +336,7 @@ class CandidateResume(models.Model):
 
     id = models.AutoField(primary_key=True)
     resume = models.FileField(upload_to='Resumes/')
-    # job_id = models.ForeignKey(JobPostings, related_name="resumes", on_delete=models.CASCADE)
-    candidate_name = models.CharField(max_length=40, null=True, )
+    candidate_name = models.ForeignKey(CandidateProfile, on_delete= models.CASCADE, related_name='candidate_profile')
     candidate_email = models.EmailField(null=True, )
     contact_number = models.CharField(max_length=15, null=True, )
     alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
@@ -337,19 +352,23 @@ class CandidateResume(models.Model):
     job_status = models.CharField(max_length=30, choices=JOB_STATUS)
 
     def __str__(self):
-        return self.candidate_name
+        return self.candidate_name.name.username
 
+
+# Primary skills and secondary skills along with experience of the candidate w.r.t job post
 class PrimarySkillSet(models.Model):
     id = models.AutoField(primary_key=True)
-    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
+    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE, related_name='primary_skills')
     skill = models.CharField(max_length=30)
     years_of_experience = models.CharField(max_length=20)
 
     def __str__(self):
         return f"{self.candidate.candidate_name} skill {self.skill}"
+    
+
 class SecondarySkillSet(models.Model):
     id = models.AutoField(primary_key=True)
-    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE)
+    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE, related_name='secondary_skills')
     skill = models.CharField(max_length=30)
     years_of_experience = models.CharField(max_length=20)
 
@@ -493,3 +512,5 @@ class NegotiationRequests(models.Model):
 
     def __str__(self):
         return f"negotiation by {self.client.name_of_organization}"
+
+

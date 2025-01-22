@@ -16,6 +16,7 @@ from .models import (
     InterviewerDetailsEditedVersion,
     PrimarySkillSet,
     SecondarySkillSet,
+    CandidateProfile
 )
 
 @admin.register(CustomUser)
@@ -61,16 +62,20 @@ class JobPostingsAdmin(admin.ModelAdmin):
 @admin.register(InterviewerDetails)
 class InterviewerDetailsAdmin(admin.ModelAdmin):
     list_display = ('name',  'job_id', 'type_of_interview')
-    search_fields = ('name',  'job_id__job_title')
+    search_fields = ('name__username',  'job_id__job_title')
     list_filter = ('type_of_interview',)
-    ordering = ('name',)
+    ordering = ('name__username',)
 
 @admin.register(CandidateResume)
 class CandidateResumeAdmin(admin.ModelAdmin):
-    list_display = ('candidate_name', 'candidate_email', 'current_organisation',)
-    search_fields = ('candidate_name', 'candidate_email', 'job_id__job_title')
+    list_display = ( 'get_username','candidate_email', 'current_organisation',)
+    search_fields = ( 'candidate_email', 'job_id__job_title')
     # list_filter = ('job_id',)
-    ordering = ('candidate_name',)
+    # ordering = ('candidate_name__name__username',)
+
+    def get_username(self,obj):
+        return obj.candidate_name.name.username
+    get_username.short_description = "Username"
 
 @admin.register(JobApplication)
 class JobApplicationAdmin(admin.ModelAdmin):
@@ -110,3 +115,4 @@ class InterviewerDetailsEditedVersionAdmin(admin.ModelAdmin):
 
 admin.site.register(PrimarySkillSet)
 admin.site.register(SecondarySkillSet)
+admin.site.register(CandidateProfile)
