@@ -103,6 +103,7 @@ class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
         exclude = ('contact_number','alternate_contact_number','candidate_email')
 
 class JobApplicationSerializer(serializers.ModelSerializer):
+    job_id = JobPostingsSerializer()
     class Meta:
         model = JobApplication
         fields = '__all__'  
@@ -200,6 +201,7 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
 
 
 class CandidateProfileSerializer(serializers.ModelSerializer):
+    name = CustomUserSerializer()
     class Meta:
         model = CandidateProfile
         fields ='__all__'
@@ -217,3 +219,8 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 
         candidate_profile = CandidateProfile.objects.create(name=user, **validated_data)
         return candidate_profile
+    
+class InterviewScheduleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewSchedule
+        fields = ['interviewer', 'schedule_date']

@@ -54,4 +54,7 @@ urlpatterns = [
     path('negotiate-terms/', NegotiateTermsView.as_view(), name='negotiate-terms'),
     path('agency/recruiters/', RecruitersView.as_view(), name='agency-recruiters'),
     path('assign-recruiter/', UpdateRecruiterView.as_view(), name='update-recruiters'),
+
+    path('candidate/upcoming-interviews/', CandidateUpcomingInterviews.as_view(), name='candidate-upcoming-interviews'),
+    path('candidate/profile/', CandidateProfileView.as_view(), name='candidate-profile-details')
 ]

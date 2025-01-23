@@ -1926,3 +1926,106 @@ HireSync Team
                 {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class CandidateProfileView(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                candidate_profile_serializer = CandidateProfileSerializer(candidate_profile)
+                return Response(candidate_profile_serializer.data, status = status.HTTP_200_OK)
+            
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+    def put(self,request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                data = request.data
+
+                input_data_json = {
+                    "first_name" : data.get('first_name'),
+                    "last_name" : data.get('last_name'),
+                    "address" : data.get('address'),
+                    "phone_num" : data.get('phone_num'),
+                    "social_media_links" : data.get('social_media_links')
+                }
+                
+                candidate_profile_serializer = CandidateProfileSerializer(instance = candidate_profile, data = input_data_json, partial = True)
+
+                if(candidate_profile_serializer.is_valid()):
+                    candidate_profile_serializer.save()
+                    return Response({"message":"Candidate Profile updated successfully"}, status = status.HTTP_200_OK)
+
+                else:
+                    print(candidate_profile_serializer.errors)
+                    return Response({"error":candidate_profile_serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
+
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class CandidateUpcomingInterviews(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to run this"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            
+            candidate_profile = CandidateProfile.objects.get(name=user)
+
+            applications = JobApplication.objects.filter(resume__candidate_name=candidate_profile)
+
+            applications_json = []
+
+            for application in applications:
+                if application.next_interview is not None:
+                    next_interview = application.next_interview
+                    try:
+                        application_json = {
+                            "round_num": application.round_num,
+                            "job_id": {
+                                "id": application.job_id.id,
+                                "job_title": application.job_id.job_title,
+                                "company_name": application.job_id.username.username
+                            },
+                            "interviewer_name": next_interview.interviewer.name.username,
+                            "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
+                        }
+                        applications_json.append(application_json)  
+                    except Exception as e:
+                        print(str(e))
+                        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(applications_json, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
