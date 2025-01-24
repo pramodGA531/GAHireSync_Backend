@@ -1604,7 +1604,7 @@ class AllInterviewsView(APIView):
                     job_post = JobPostings.objects.get(id = interview.job_id)
                     job_title = job_post.job_title
                     interviewer_name = interview.interviewer.name.username
-                    candidate_name = interview.candidate.candidate_name.name.username
+                    candidate_name = interview.candidate.candidate_name
                     scheduled_interview = interview.schedule_date
                     interview_status = interview.status
                     if JobApplication.objects.get(next_interview = interview):
@@ -1634,7 +1634,7 @@ class ScheduledInterviewsView(APIView):
                             "job_id" : scheduled_interview.job_id.id,
                             "job_title": scheduled_interview.job_id.job_title,
                             "interviewer_name" : scheduled_interview.interviewer.name.username,
-                            "candidate_name" : scheduled_interview.candidate.candidate_name.name.username,
+                            "candidate_name" : scheduled_interview.candidate.candidate_name,
                             "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
                             "round_num" : scheduled_interview.round_num,
                             "scheduled_date": scheduled_interview.schedule_date
@@ -1950,14 +1950,6 @@ class CandidateProfileView(APIView):
                 skills = data.get('skills')
                 
                 date_str= data.get('date_of_birth', None)
-                # print(date_str)
-                # if  date_str is not None:
-                #     date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S GMT")
-                #     print(date_obj)
-
-                #     formatted_date = date_obj.strftime("%Y-%m-%d")
-                # else:
-                #     formatted_date = None
 
                 formatted_date = date_str
                 
@@ -2048,13 +2040,6 @@ class CandidateExperiencesView(APIView):
 class CandidateCertificatesView(APIView):
     def get(self, request):
         try:
-            pass
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-    
-    def post(self, request):
-        try:
             if not request.user.is_authenticated:
                 return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
             
@@ -2064,27 +2049,57 @@ class CandidateCertificatesView(APIView):
             user = request.user
             try:
                 candidate_profile = CandidateProfile.objects.get(name = user)
-                data = request.data
+                candidate_certificates = CandidateCertificates.objects.get(candidate = candidate_profile)
 
-                if data.get('certificates'):
-                    for certificate in data.get('certificates'):
-                        CandidateCertificates.objects.create(
-                            candidate = candidate_profile,
-                            certificate_name = certificate.get('certificate_name'),
-                            certificate_image = certificate.get('image')
-                        )
-
-                    return Response({"error":"Candidate Certificates added successfully"}, status = status.HTTP_200_OK)
-                
-                else:
-                    return Response({"error":"You haven't added any certificates"}, status = status.HTTP_400_BAD_REQUEST)
-                
+                candidate_certificate_serializer = CandidateCertificateSerializer(candidate_certificates,many=True)
+                return Response(candidate_certificate_serializer.data, status=status.HTTP_200_OK)
             except CandidateProfile.DoesNotExist:
-                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+            except CandidateCertificates.DoesNotExist:
+                return Response({"message":"Candidate Doesnot Added any certificates"}, status= status.HTTP_200_OK)
 
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+    
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name=user)
+            except CandidateProfile.DoesNotExist:
+                return Response({"error": "Candidate profile not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            data = request.data
+            if not data.get('certificate_name') or not data.get('certificate_image'):
+                return Response({"error": "Both 'certificate_name' and 'certificate_image' are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            certificate_name = data.get('certificate_name')
+            certificate_image = data.get('certificate_image')
+
+            if not hasattr(certificate_image, 'name') or not certificate_image.content_type.startswith('image/'):
+                return Response({"error": "Invalid certificate image"}, status=status.HTTP_400_BAD_REQUEST)
+
+            CandidateCertificates.objects.create(
+                candidate=candidate_profile,
+                certificate_name=certificate_name,
+                certificate_image=certificate_image
+            )
+
+            return Response({"message": "Candidate certificate added successfully"}, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            # Log the error for debugging
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 class CandidateEducationView(APIView):
     def get(self, request):

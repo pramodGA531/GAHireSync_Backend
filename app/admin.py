@@ -16,7 +16,10 @@ from .models import (
     InterviewerDetailsEditedVersion,
     PrimarySkillSet,
     SecondarySkillSet,
-    CandidateProfile
+    CandidateProfile,
+    CandidateCertificates,
+    CandidateExperiences,
+    CandidateEducation,
 )
 
 @admin.register(CustomUser)
@@ -116,3 +119,6 @@ class InterviewerDetailsEditedVersionAdmin(admin.ModelAdmin):
 admin.site.register(PrimarySkillSet)
 admin.site.register(SecondarySkillSet)
 admin.site.register(CandidateProfile)
+admin.site.register(CandidateCertificates)
+admin.site.register(CandidateEducation)
+admin.site.register(CandidateExperiences)
