@@ -299,22 +299,6 @@ class InterviewerDetailsEditedVersion(models.Model):
         return self.name
 
 
-# Candidate profile model to store all the candidate details
-class CandidateProfile(models.Model):
-    name = models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name='candidate_name')
-    email = models.EmailField()
-    first_name = models.CharField(max_length=100, null=True,blank = True)
-    last_name = models.CharField(max_length=100, null=True, blank = True)
-    address = models.TextField(null=True ,blank = True)
-    phone_num = models.TextField(null=True ,blank = True)
-    date_of_birth = models.DateField(default=None, null=True, blank = True)
-    socialMediaLinks = models.TextField(null = True, blank = True)
-    # add all personal details of the candidate
-
-    def __str__(self):
-        return self.name.username
-    
-
 # Candidate Resume Model
 class CandidateResume(models.Model):
     PERMANENT = 'permanent'
@@ -336,7 +320,7 @@ class CandidateResume(models.Model):
 
     id = models.AutoField(primary_key=True)
     resume = models.FileField(upload_to='Resumes/')
-    candidate_name = models.ForeignKey(CandidateProfile, on_delete= models.CASCADE, related_name='candidate_profile')
+    candidate_name = models.CharField(max_length=100)
     candidate_email = models.EmailField(null=True, )
     contact_number = models.CharField(max_length=15, null=True, )
     alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
@@ -352,9 +336,7 @@ class CandidateResume(models.Model):
     job_status = models.CharField(max_length=30, choices=JOB_STATUS)
 
     def __str__(self):
-        return self.candidate_name.name.username
-
-
+        return self.candidate_name
 # Primary skills and secondary skills along with experience of the candidate w.r.t job post
 class PrimarySkillSet(models.Model):
     id = models.AutoField(primary_key=True)
@@ -388,6 +370,7 @@ class InterviewSchedule(models.Model):
         (COMPLETED, 'completed')
     ]
     id = models.AutoField(primary_key=True)
+    candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)
     interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE)
     schedule_date = models.DateTimeField(null= True, blank=True)
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
@@ -514,3 +497,75 @@ class NegotiationRequests(models.Model):
         return f"negotiation by {self.client.name_of_organization}"
 
 
+# Candidate profile model to store all the candidate details
+class CandidateProfile(models.Model):
+    profile = models.ImageField(upload_to='Candidate/Profile/', null=True, blank=True)
+    name = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='candidate_name')
+    about = models.TextField(blank=True)  
+    email = models.EmailField(unique=True)  
+    first_name = models.CharField(max_length=100, blank=True)  
+    middle_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
+    communication_address = models.TextField(blank=True)
+    permanent_address = models.TextField(blank=True)
+    phone_num = models.CharField(max_length=15, blank=True)  
+    date_of_birth = models.DateField(null=True, blank=True)
+    designation = models.CharField(max_length=50, blank=True)
+    linked_in = models.URLField(null=True, blank=True)  
+    instagram = models.URLField(null=True, blank=True)
+    facebook = models.URLField(null=True, blank=True)
+    blood_group = models.CharField(max_length=10,blank=True)
+    experience_years = models.CharField(max_length=30, blank=True)
+    skills = models.TextField(blank=True)  
+
+    def __str__(self):
+        return self.name.username
+
+    def get_primary_skills_list(self):
+        return self.primary_skills.split(",") if self.primary_skills else []
+
+
+class CandidateCertificates(models.Model):
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name='candidate_certificates')
+    certificate_name = models.CharField(max_length=50)
+    certificate_image = models.FileField(upload_to='Candidate/Certificates/')
+
+    def __str__(self):
+        return f"{self.candidate.name.username}'s {self.certificate_name} certificate"
+
+class CandidateExperiences(models.Model):
+    WORKING = 'working'
+    NOTWORKING = 'not_working'
+
+    STATUS_CHOICES = [
+        (WORKING,'working'),
+        (NOTWORKING, 'not_working')
+    ]
+
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name='candidate_experience')
+    company_name = models.CharField(max_length=100)
+    from_date = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=WORKING)
+    to_date = models.DateField(null=True ,blank=True)
+    reason_for_resignation = models.DateField(null=True,blank=True)
+    # relieving_letter  = models.FileField(upload_to='Candidate/Experience/Leter', null=True, blank=True)
+    # pay_slip1 = models.FileField(upload_to='Candidate/Experience/PaySlip1/', blank=True, null=True)
+    # pay_slip2 = models.FileField(upload_to='Candidate/Experience/PaySlip2/', blank=True, null=True)
+    # pay_slip3 = models.FileField(upload_to='Candidate/Experience/PaySlip3/', blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.candidate.name.username} experience in {self.company_name}"
+
+
+class CandidateEducation(models.Model):
+    candidate = models.ForeignKey(CandidateProfile,on_delete=models.CASCADE, related_name='candidate_education')
+    institution_name = models.CharField(max_length=150)
+    education_proof = models.FileField(upload_to='Candidate/Education')
+    field_of_study = models.CharField(max_length=30, )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    degree = models.CharField(max_length=40)
+
+    def __str__(self):
+        return f"{self.candidate.name.username}-{self.field_of_study} education details"
+    

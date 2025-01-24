@@ -74,7 +74,7 @@ class CandidateResumeAdmin(admin.ModelAdmin):
     # ordering = ('candidate_name__name__username',)
 
     def get_username(self,obj):
-        return obj.candidate_name.name.username
+        return obj.candidate_name
     get_username.short_description = "Username"
 
 @admin.register(JobApplication)

@@ -1227,88 +1227,9 @@ class ScreenResume(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
 
-
-# intially check whether the account exists for the candidate, if exists continue to next step - else create
-# create an account for the candidate and then add the candidateResune
-
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser
-from datetime import datetime
-import json
-
 class CandidateResumeView(APIView):
     parser_classes = (MultiPartParser, FormParser)
 
-    def create_user_and_profile(self, candidate_name, candidate_email, date_of_birth):
-
-        password = generate_random_password()
-
-        # Serialize and create the user
-        user_serializer = CustomUserSerializer(data={
-            'email': candidate_email,
-            'username': candidate_name,
-            'role': CustomUser.CANDIDATE,
-            'credit': 0,
-            'password': password,
-        })
-
-        if user_serializer.is_valid(raise_exception=True):
-            new_user = user_serializer.save()
-            new_user.set_password(password)
-            new_user.save()
-
-            # Serialize and create the candidate profile
-            candidate_profile_serializer = CandidateProfileSerializer(data={
-                'name': new_user.id,
-                'date_of_birth': date_of_birth,
-                'email': candidate_email,
-                'first_name': "",
-                'last_name': "",
-                'phone_num': "",
-                'address': " ",
-                'socialMediaLinks': "",
-            })
-
-            if candidate_profile_serializer.is_valid(raise_exception=True):
-                candidate_profile = candidate_profile_serializer.save()
-                # Send email notification
-                subject = "Account Created on HireSync"
-                message = f"""
-Dear {candidate_name},
-
-Welcome to HireSync! Your Candidate account has been successfully created.
-
-Here are your account details:
-Username: {candidate_name}
-Email: {candidate_email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-                send_mail(
-                        subject=subject,
-                        message=message,
-                        from_email='noreply@hiresync.com',
-                        recipient_list=[candidate_email],
-                        fail_silently=False,
-                )
-                return candidate_profile
-            else:
-                new_user.delete()
-                print(candidate_profile_serializer.errors)
-                raise serializers.ValidationError(candidate_profile_serializer.errors)
-        else:
-            raise serializers.ValidationError(user_serializer.errors)
 
     def post(self, request):
         try:
@@ -1345,29 +1266,9 @@ HireSync Team
             ).exists():
                 return Response({"error": "Candidate application is submitted previously"}, status=status.HTTP_400_BAD_REQUEST)
 
-
-            try:
-                candidate_user_instance = CustomUser.objects.get(
-                    username=data.get('candidate_name'),
-                    email=data.get('candidate_email')
-                )
-                
-                try:
-                    candidate_profile = CandidateProfile.objects.get(name = candidate_user_instance)
-
-                except CandidateProfile.DoesNotExist:
-                    return Response({"error":"candidate profile doesnot exist"}, status=status.HTTP_400_BAD_REQUEST)
-
-            except CustomUser.DoesNotExist:
-                candidate_profile = self.create_user_and_profile(
-                    candidate_name=data.get('candidate_name'),
-                    candidate_email=data.get('candidate_email'),
-                    date_of_birth=date_of_birth
-                )
-
             #check job application of this user, with this id
             try:
-                resumes =  CandidateResume.objects.filter(candidate_name = candidate_profile)
+                resumes =  CandidateResume.objects.filter(candidate_name = data.get('candidate_name'))
                 application = JobApplication.objects.get(job_id = job_id, resume__in = resumes)
 
                 if application:
@@ -1377,8 +1278,8 @@ HireSync Team
             # Create a CandidateResume instance
                 candidate_resume = CandidateResume.objects.create(
                     resume=request.FILES['resume'],
-                    candidate_name=candidate_profile,
-                    candidate_email = data.get('email'),
+                    candidate_name=data.get('candidate_name'),
+                    candidate_email = data.get('candidate_email'),
                     contact_number=data.get('contact_number'),
                     alternate_contact_number=data.get('alternate_contact_number', ''),
                     other_details=data.get('other_details', ''),
@@ -1554,6 +1455,60 @@ class NextInterviewerDetails(APIView):
             return Response({"error": "An error occurred while processing your request"},status=status.HTTP_400_BAD_REQUEST)
     
 class AcceptApplicationView(APIView):
+    def create_user_and_profile(self, candidate_name, candidate_email):
+
+        password = generate_random_password()
+
+        # Serialize and create the user
+        user_serializer = CustomUserSerializer(data={
+            'email': candidate_email,
+            'username': candidate_name,
+            'role': CustomUser.CANDIDATE,
+            'credit': 0,
+            'password': password,
+        })
+
+        if user_serializer.is_valid(raise_exception=True):
+            new_user = user_serializer.save()
+            new_user.set_password(password)
+            new_user.save()
+
+            candidate_profile= CandidateProfile.objects.create(
+                name = new_user,
+                email =candidate_email,
+            )
+            subject = "Account Created on HireSync"
+            message = f"""
+Dear {candidate_name},
+
+Welcome to HireSync! Your Candidate account has been successfully created.
+
+Here are your account details:
+Username: {candidate_name}
+Email: {candidate_email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+            send_mail(
+                        subject=subject,
+                        message=message,
+                        from_email='noreply@hiresync.com',
+                        recipient_list=[candidate_email],
+                        fail_silently=False,
+                )
+            return candidate_profile
+        else:
+            raise serializers.ValidationError(user_serializer.errors)
+        
+
     def post(self, request):
         try:
             resume_id = request.GET.get('id')
@@ -1562,10 +1517,12 @@ class AcceptApplicationView(APIView):
             application = JobApplication.objects.get(resume = resume_id)
             interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
             
+            candidate_details = CandidateResume.objects.get(id=resume_id)
 
             scheduled_interview = InterviewSchedule.objects.create(
                 interviewer = interviewer_details,
                 schedule_date = scheduled_date_and_time,
+                candidate = candidate_details,
                 round_num = round_num,
                 status = 'scheduled',
                 job_id = application.job_id
@@ -1575,6 +1532,17 @@ class AcceptApplicationView(APIView):
             application.next_interview = scheduled_interview
             application.status = 'processing'
             application.save()
+
+            candidate_name = candidate_details.candidate_name
+            candidate_email = candidate_details.candidate_email
+            try:
+                user = CustomUser.objects.get(email = candidate_email)
+                candidate_profile = CandidateProfile.objects.get(name = user)
+            except CustomUser.DoesNotExist:
+                candidate_profile = self.create_user_and_profile(candidate_name,candidate_email)
+            except Exception as e:
+                print(str(e), " at creating candidate profile")
+                return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
             return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
@@ -1627,14 +1595,28 @@ class AllInterviewsView(APIView):
         try:
             if request.user.is_authenticated:
                 if request.user.role != 'client':
-                    return Response({"error":"Sorry, You are not allowed"},status=status.HTTP_400_BAD_REQUEST)
-                
-                # upcoming interviews
-                applications = JobApplication.objects.filter(job_id__in = JobPostings.objects.filter(username = request.user).values_list("id",flat=True))
+                    return Response({"error":"Sorry, You are not allowed"},status=status.HTTP_400_BAD_REQUEST)                
 
-                interviews_json = {}
-                for application in applications:
-                    interview = InterviewSchedule.objects.filter()
+                # requiredfields-->   job_title, interviewer_name, candidate_name, scheduled_interview, application_status, job_postings_deadline, job_post_status, round_num
+                response_json = []
+                all_interviews = InterviewSchedule.objects.filter(job_id__in = JobPostings.objects.filter(username = request.user).values_list('id', flat=True))
+                for interview in all_interviews:
+                    job_post = JobPostings.objects.get(id = interview.job_id)
+                    job_title = job_post.job_title
+                    interviewer_name = interview.interviewer.name.username
+                    candidate_name = interview.candidate.candidate_name.name.username
+                    scheduled_interview = interview.schedule_date
+                    interview_status = interview.status
+                    if JobApplication.objects.get(next_interview = interview):
+                        candidate_status = JobApplication.objects.get(next_interview = interview).status
+                    else:
+                        candidate_staus = "cleared"
+                    job_post_status = job_post.status
+                    job_submission_date = job_post.job_close_duration
+
+                    json_fromat = {
+                        "job"
+                    }
 
         except Exception as e:
             print(str(e))
@@ -1652,7 +1634,7 @@ class ScheduledInterviewsView(APIView):
                             "job_id" : scheduled_interview.job_id.id,
                             "job_title": scheduled_interview.job_id.job_title,
                             "interviewer_name" : scheduled_interview.interviewer.name.username,
-                            "candidate_name" : JobApplication.objects.get(next_interview = scheduled_interview).resume.candidate_name,
+                            "candidate_name" : scheduled_interview.candidate.candidate_name.name.username,
                             "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
                             "round_num" : scheduled_interview.round_num,
                             "scheduled_date": scheduled_interview.schedule_date
@@ -1751,6 +1733,7 @@ class PromoteCandidateView(APIView):
 
             scheduled_interview = InterviewSchedule.objects.create(
                 interviewer = interviewer_details,
+                candidate = resume_id,
                 schedule_date = scheduled_date_and_time,
                 round_num = round_num,
                 status = 'scheduled',
@@ -1929,6 +1912,7 @@ HireSync Team
 
 
 class CandidateProfileView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
     def get(self, request):
         try:
             if not request.user.is_authenticated:
@@ -1963,12 +1947,40 @@ class CandidateProfileView(APIView):
                 candidate_profile = CandidateProfile.objects.get(name = user)
                 data = request.data
 
+                skills = data.get('skills')
+                
+                date_str= data.get('date_of_birth', None)
+                # print(date_str)
+                # if  date_str is not None:
+                #     date_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S GMT")
+                #     print(date_obj)
+
+                #     formatted_date = date_obj.strftime("%Y-%m-%d")
+                # else:
+                #     formatted_date = None
+
+                formatted_date = date_str
+                
+                print(formatted_date)
+
+                profile = request.FILES.get('profile', None)
                 input_data_json = {
-                    "first_name" : data.get('first_name'),
-                    "last_name" : data.get('last_name'),
-                    "address" : data.get('address'),
-                    "phone_num" : data.get('phone_num'),
-                    "social_media_links" : data.get('social_media_links')
+                    "profile": profile,
+                    "about" : data.get('about',""),
+                    "first_name" : data.get('first_name',""),
+                    "middle_name" : data.get('middle_name',''),
+                    "last_name" : data.get('last_name',' '),
+                    "communication_address" : data.get('communication_address',''),
+                    "permanent_address": data.get('permanent_address',''),
+                    "phone_num" : data.get('phone_num',''),
+                    "date_of_birth": formatted_date,
+                    "designation": data.get('designation',''),
+                    "linked_in" : data.get('linked_in', None),
+                    "instagram": data.get('instagram', None),
+                    "facebook":data.get('facebook', None),
+                    "blood_group": data.get('blood_group'),
+                    "experience_years": data.get('experience_years',""),
+                    "skills": skills,
                 }
                 
                 candidate_profile_serializer = CandidateProfileSerializer(instance = candidate_profile, data = input_data_json, partial = True)
@@ -1981,6 +1993,137 @@ class CandidateProfileView(APIView):
                     print(candidate_profile_serializer.errors)
                     return Response({"error":candidate_profile_serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
 
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class CandidateExperiencesView(APIView):
+    def get(self, request):
+        try:
+            pass
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                data = request.data
+
+                if data.get('experiences'):
+                    experiences = data.get('experiences')
+                    for experience in experiences:
+                        CandidateExperiences.objects.create(
+                            candidate = candidate_profile,
+                            company_name= experience.get('company_name'),
+                            from_date = experience.get('from_date'),
+                            to_date = experience.get('to_date'),
+                            status = experience.get('status'),
+                            reason_for_resignation = experience.get('reason')
+                        )
+
+                    return Response({"error":"Candidate Experiences added successfully"}, status = status.HTTP_200_OK)
+                
+                else:
+                    return Response({"error":"You haven't added any experiences"}, status = status.HTTP_400_BAD_REQUEST)
+                
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+            
+class CandidateCertificatesView(APIView):
+    def get(self, request):
+        try:
+            pass
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                data = request.data
+
+                if data.get('certificates'):
+                    for certificate in data.get('certificates'):
+                        CandidateCertificates.objects.create(
+                            candidate = candidate_profile,
+                            certificate_name = certificate.get('certificate_name'),
+                            certificate_image = certificate.get('image')
+                        )
+
+                    return Response({"error":"Candidate Certificates added successfully"}, status = status.HTTP_200_OK)
+                
+                else:
+                    return Response({"error":"You haven't added any certificates"}, status = status.HTTP_400_BAD_REQUEST)
+                
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+class CandidateEducationView(APIView):
+    def get(self, request):
+        try:
+            pass
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                data = request.data
+
+                if data.get('educations'):
+                    for education in data.get('educations'):
+                        CandidateEducation.objects.create(
+                            candidate = candidate_profile,
+                            institution_name = education.get('institution_name'),
+                            education_proof = education.get('proof'),
+                            field_of_study = education.get('field_of_study'),
+                            start_date = education.get('start_date'),
+                            end_date = education.get('end_date'),
+                            degree = education.get('degree')
+                        )
+
+                    return Response({"error": "Your education details added successfully"}, status = status.HTTP_200_OK)
+                
+                else:
+                    return Response({"error":"You haven't added any education details"}, status = status.HTTP_400_BAD_REQUEST)
+                
             except CandidateProfile.DoesNotExist:
                 return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
 
