@@ -95,9 +95,20 @@ class SecondarySkillSetSerializer(serializers.ModelSerializer):
         model = SecondarySkillSet
         fields = ['skill','years_of_experience']
 
+
+class JobApplicationSerializer(serializers.ModelSerializer):
+    # job_id = JobPostingsSerializer()
+    # resume = CandidateResumeWithoutContactSerializer()
+    
+    class Meta:
+        model = JobApplication
+        fields = '__all__'  
+
+
 class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
     primary_skills = PrimarySkillSetSerializer(many=True, read_only  = True)
     secondary_skills = SecondarySkillSetSerializer(many = True, read_only = True)
+    job_application = JobApplicationSerializer( read_only = True)
     class Meta: 
         model = CandidateResume
         exclude = ('contact_number','alternate_contact_number','candidate_email')
@@ -238,4 +249,13 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
 class CandidateCertificateSerializer(serializers.ModelSerializer):
     class Meta:
         model= CandidateCertificates
+        fields = '__all__'
+
+class CandidateExperienceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CandidateExperiences
+        fields = '__all__'
+class CandidateEducationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CandidateEducation
         fields = '__all__'
