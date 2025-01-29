@@ -1325,8 +1325,22 @@ class CandidateResumeView(APIView):
             return Response({"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
         
+
+class GetResumeByApplicationId(APIView):
+
+    def get(self, request, application_id, *args, **kwargs):
+        try:
+            job_application = JobApplication.objects.get(id=application_id)
+
+            candidate_resume = job_application.resume
+
+            resume_data = CandidateResumeWithoutContactSerializer(candidate_resume).data
+
+            return Response(resume_data, status=status.HTTP_200_OK)
+
+        except JobApplication.DoesNotExist:
+            return Response({"detail": "Job application not found."}, status=status.HTTP_404_NOT_FOUND)
 
 class GetResumeView(APIView):
     def get(self,request):
@@ -1342,7 +1356,7 @@ class GetResumeView(APIView):
         
                 candidates = []
                 for application in applications_all:
-                    # if application.status == 'pending':
+                    if application.status == 'pending':
                         candidates.append(application.resume)
                         print("candidates",candidates)
 
@@ -1552,6 +1566,15 @@ HireSync Team
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
         
+class ScheduledInterviewsForJobId(APIView):
+    def get(self, request, job_id):
+        try:
+            interviews = InterviewSchedule.objects.select_related("interviewer", "candidate", "job_id").filter(job_id=job_id)
+            serializer = InterviewScheduleSerializer(interviews, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class NextRoundInterviewDetails(APIView):
     def get(self, request):
@@ -1632,6 +1655,7 @@ class ScheduledInterviewsView(APIView):
                 try:
                     interview_id = request.GET.get('id')
                     scheduled_interview = InterviewSchedule.objects.get(id = interview_id)
+                    candidate = scheduled_interview.candidate
                     try:
                         interview_details_json = {
                             "job_id" : scheduled_interview.job_id.id,
@@ -1666,6 +1690,7 @@ class ScheduledInterviewsView(APIView):
                 
                 scheduled_json = []
                 for interview in interviews:
+                    application_id = JobApplication.objects.get(resume = interview.candidate)
                     id = interview.id
                     schedule_date = interview.schedule_date
                     round_of_interview = interview.round_num
@@ -1688,7 +1713,9 @@ class ScheduledInterviewsView(APIView):
                         "interviewer_name":interviewer_name,
                         "round_of_interview":round_of_interview,
                         "schedule_date":schedule_date,
-                        "status":statuss
+                        "status":statuss,
+                        "application_id":application_id.id,
+                        
                     })
 
                 return Response(scheduled_json, status =status.HTTP_200_OK)
@@ -1731,12 +1758,13 @@ class PromoteCandidateView(APIView):
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
+            candidate_resume = CandidateResume.objects.get(id = resume_id)
 
             print(scheduled_date_and_time, " is the scheduled date and time")
 
             scheduled_interview = InterviewSchedule.objects.create(
                 interviewer = interviewer_details,
-                candidate = resume_id,
+                candidate = candidate_resume,
                 schedule_date = scheduled_date_and_time,
                 round_num = round_num,
                 status = 'scheduled',
