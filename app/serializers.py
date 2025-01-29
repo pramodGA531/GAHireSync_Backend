@@ -104,6 +104,8 @@ class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
 
 class JobApplicationSerializer(serializers.ModelSerializer):
     job_id = JobPostingsSerializer()
+    # cand_id=CandidateResumeWithoutContactSerializer()
+    
     class Meta:
         model = JobApplication
         fields = '__all__'  
