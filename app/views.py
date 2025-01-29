@@ -1335,16 +1335,19 @@ class GetResumeView(APIView):
             if (user.role != "client"):
                 return Response({"error":"User client is only allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
             
-            if request.GET.get("id"):
-                id = request.GET.get("id")
+            if request.GET.get("jobid"):
+                id = request.GET.get("jobid")
                 applications_all = JobApplication.objects.filter(job_id = id)
-
+                applications_serializer = JobApplicationSerializer(applications_all, many=True)
+        
                 candidates = []
                 for application in applications_all:
-                    if application.status == 'pending':
+                    # if application.status == 'pending':
                         candidates.append(application.resume)
+                        print("candidates",candidates)
 
                 candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
+                
 
                 job = JobPostings.objects.get(id = id)
                 job_data = {
@@ -1353,7 +1356,7 @@ class GetResumeView(APIView):
                     "job_description": job.job_description,
                     "ctc": job.ctc, 
                 }
-                return Response({"data":candidates_serializer.data, "job_data": job_data}, status=status.HTTP_200_OK)
+                return Response({"data":candidates_serializer.data, "job_data": job_data,"all applications":applications_serializer.data},   status=status.HTTP_200_OK)
             
             else:
                 job_postings = JobPostings.objects.filter(username = user )
@@ -1634,7 +1637,7 @@ class ScheduledInterviewsView(APIView):
                             "job_id" : scheduled_interview.job_id.id,
                             "job_title": scheduled_interview.job_id.job_title,
                             "interviewer_name" : scheduled_interview.interviewer.name.username,
-                            "candidate_name" : scheduled_interview.candidate.candidate_name.name.username,
+                            "candidate_name" : scheduled_interview.candidate.candidate_name,
                             "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
                             "round_num" : scheduled_interview.round_num,
                             "scheduled_date": scheduled_interview.schedule_date
