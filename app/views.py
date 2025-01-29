@@ -2049,7 +2049,7 @@ class CandidateCertificatesView(APIView):
             user = request.user
             try:
                 candidate_profile = CandidateProfile.objects.get(name = user)
-                candidate_certificates = CandidateCertificates.objects.get(candidate = candidate_profile)
+                candidate_certificates = CandidateCertificates.objects.filter(candidate = candidate_profile)
 
                 candidate_certificate_serializer = CandidateCertificateSerializer(candidate_certificates,many=True)
                 return Response(candidate_certificate_serializer.data, status=status.HTTP_200_OK)
