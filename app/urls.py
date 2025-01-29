@@ -56,5 +56,8 @@ urlpatterns = [
     path('assign-recruiter/', UpdateRecruiterView.as_view(), name='update-recruiters'),
 
     path('candidate/upcoming-interviews/', CandidateUpcomingInterviews.as_view(), name='candidate-upcoming-interviews'),
-    path('candidate/profile/', CandidateProfileView.as_view(), name='candidate-profile-details')
-]
+    path('candidate/profile/', CandidateProfileView.as_view(), name='candidate-profile-details'),
+    path('candidate/certificates/', CandidateCertificatesView.as_view(), name='candidate-certificates'),
+    path('candidate/experience/', CandidateExperiencesView.as_view(), name='candidate-experience'), 
+    path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
+]   

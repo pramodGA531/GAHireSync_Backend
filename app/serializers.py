@@ -226,3 +226,8 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewSchedule
         fields = ['interviewer', 'schedule_date']
+
+class CandidateCertificateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= CandidateCertificates
+        fields = '__all__'
