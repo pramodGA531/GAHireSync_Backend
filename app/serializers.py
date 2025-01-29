@@ -224,7 +224,7 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 class InterviewScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewSchedule
-        fields = ['interviewer', 'schedule_date']
+        fields = ['interviewer', 'schedule_date', 'round_num']
 
 class CandidateCertificateSerializer(serializers.ModelSerializer):
     class Meta:

@@ -44,6 +44,7 @@ urlpatterns = [
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
+    path('interviewer/prev-interview-remarks/', PrevInterviewRemarksView.as_view(), name="previous-interview-remarks" ),
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/scheduled-interviews/',ScheduledInterviewsView.as_view(), name='schedule-interviews'),
     path('interviewer/shortlist-candidate/', ShortlistCandidate.as_view(), name= 'shortlist-candidate'),

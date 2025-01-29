@@ -1656,13 +1656,11 @@ class ScheduledInterviewsView(APIView):
                 if not request.user.role == 'interviewer':
                     return Response({"error":"You are not allowed to run this view"},status=status.HTTP_400_BAD_REQUEST)
                 try:
-                    user = CustomUser.objects.get(username = request.user)
-                    interviews = InterviewSchedule.objects.filter(interviewer__in = InterviewerDetails.objects.filter(name__username = user.username).values_list('job_id',flat=True))
-                    print(interviews)
-                except Exception as e:
-                    print(str(e))
-                    return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-                
+                    interviews = InterviewSchedule.objects.filter(interviewer__name = request.user )
+
+                except CustomUser.DoesNotExist:
+                    return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
+
                 scheduled_json = []
                 for interview in interviews:
                     id = interview.id
@@ -1676,7 +1674,7 @@ class ScheduledInterviewsView(APIView):
                         candidate_name = application.resume.candidate_name
                         statuss = application.status
                     except JobApplication.DoesNotExist:
-                        candidate_name = " "
+                        candidate_name = interview.candidate.candidate_name
                         statuss = "completed"
 
                     scheduled_json.append({
@@ -1732,10 +1730,10 @@ class PromoteCandidateView(APIView):
             score = request.data.get('score', 0)
 
             print(scheduled_date_and_time, " is the scheduled date and time")
-
+            candidate_resume = CandidateResume.objects.get(id = resume_id)
             scheduled_interview = InterviewSchedule.objects.create(
                 interviewer = interviewer_details,
-                candidate = resume_id,
+                candidate = candidate_resume,
                 schedule_date = scheduled_date_and_time,
                 round_num = round_num,
                 status = 'scheduled',
@@ -2240,12 +2238,14 @@ class PrevInterviewRemarksView(APIView):
             if not request.user.role == 'interviewer':
                 return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
 
-            application_id = request.GET.get('id')
+            resume_id = request.GET.get('id')
+            resume = CandidateResume.objects.get(id = resume_id)
+            application_id = JobApplication.objects.get(resume = resume).id
             if not application_id:
                 return Response({"error":"Application ID is requrired"}, status=status.HTTP_400_BAD_REQUEST)
             
             application_evaluations = CandidateEvaluation.objects.filter(job_application = application_id)
-            evaluation_serializer = CandidateEvaluationSerializer(application_evaluations)
+            evaluation_serializer = CandidateEvaluationSerializer(application_evaluations, many=True)
             
             return Response({"data":evaluation_serializer.data},status= status.HTTP_200_OK)
         
