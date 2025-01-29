@@ -399,7 +399,7 @@ class JobApplication(models.Model):
         (PROCESSING, 'processing'),
     ]
     id = models.AutoField(primary_key=True)
-    resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE)
+    resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, choices= STATUS, default='applied')
     sender = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
@@ -548,10 +548,10 @@ class CandidateExperiences(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=WORKING)
     to_date = models.DateField(null=True ,blank=True)
     reason_for_resignation = models.DateField(null=True,blank=True)
-    # relieving_letter  = models.FileField(upload_to='Candidate/Experience/Leter', null=True, blank=True)
-    # pay_slip1 = models.FileField(upload_to='Candidate/Experience/PaySlip1/', blank=True, null=True)
-    # pay_slip2 = models.FileField(upload_to='Candidate/Experience/PaySlip2/', blank=True, null=True)
-    # pay_slip3 = models.FileField(upload_to='Candidate/Experience/PaySlip3/', blank=True, null=True)
+    relieving_letter  = models.FileField(upload_to='Candidate/Experience/Leter', null=True, blank=True)
+    pay_slip1 = models.FileField(upload_to='Candidate/Experience/PaySlip1/', blank=True, null=True)
+    pay_slip2 = models.FileField(upload_to='Candidate/Experience/PaySlip2/', blank=True, null=True)
+    pay_slip3 = models.FileField(upload_to='Candidate/Experience/PaySlip3/', blank=True, null=True)
 
     def __str__(self):
         return f"{self.candidate.name.username} experience in {self.company_name}"
