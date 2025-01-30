@@ -145,7 +145,7 @@ class JobPostings(models.Model):
     decision_maker_email = models.CharField(max_length=100, )
     bond = models.TextField(max_length=255, )
     rotational_shift = models.BooleanField()
-    status = models.CharField(max_length=10, default='opened')
+    status = models.CharField(max_length=10, default='opened')      # (opened) or (closed)
     is_approved = models.BooleanField(default=True)
     is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs', on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"}, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -569,3 +569,10 @@ class CandidateEducation(models.Model):
     def __str__(self):
         return f"{self.candidate.name.username}-{self.field_of_study} education details"
     
+class RecruiterProfile(models.Model):
+    name = models.ForeignKey(CustomUser, on_delete= models.CASCADE, related_name="recruiter_profiles")
+    alloted_to = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='alloted_to')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='workng_in')
+
+    def __str__(self):
+        return self.name.username

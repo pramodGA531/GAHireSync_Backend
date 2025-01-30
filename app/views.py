@@ -1076,6 +1076,9 @@ class RecruitersView(APIView):
             user = request.user
             org = Organization.objects.get(manager=user)
 
+            alloted_to_id = request.data.get('alloted_to')
+            alloted_to = CustomUser.objects.get(id = alloted_to_id)
+            
             username = request.data.get('username')
             email = request.data.get('email')
 
@@ -1094,6 +1097,12 @@ class RecruitersView(APIView):
                 new_user.set_password(password)
                 new_user.save()
                 
+                RecruiterProfile.objects.create(
+                    name = new_user,
+                    alloted_to = alloted_to,
+                    organization = org,
+                )
+
                 org.recruiters.add(new_user)
 
                 subject = "Account Created on HireSync"
@@ -1365,6 +1374,7 @@ class GetResumeView(APIView):
                     num_of_postings = job_post.num_of_positions
                     last_date = job_post.job_close_duration
                     total_applications = JobApplication.objects.filter(job_id=job_id).count()
+                    processing_count = JobApplication.objects.filter(job_id =job_id,status = 'processing').count()
                     selected_count = JobApplication.objects.filter(job_id=job_id, status="selected").count()
                     pending_count = JobApplication.objects.filter(job_id=job_id, status="pending").count()
                     rejected_count = JobApplication.objects.filter(job_id=job_id, status="rejected").count()
@@ -1375,6 +1385,7 @@ class GetResumeView(APIView):
                         "num_of_postings": num_of_postings,
                         "last_date": last_date,
                         "applications_sent": total_applications,
+                        "processing": processing_count,
                         "selected": selected_count,
                         "pending": pending_count,
                         "rejected": rejected_count,
@@ -1764,6 +1775,25 @@ class PromoteCandidateView(APIView):
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
         
 class ShortlistCandidate(APIView):
+
+    def closeJob(self, id):
+        try:
+            job = JobPostings.objects.get(id = id)
+            job.status = 'closed'
+            job.save()
+            remaining_applications = JobApplication.objects.exclude(status = 'selected').exclude(status = 'rejected')
+            for application in remaining_applications:
+                application.status = 'rejected'
+                application.save()
+
+                # TODO send_mail()
+
+            return Response({"message":"All positions are filled for this job posting successfully, Job posting is closed"}, status = status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     def post(self, request):
         try:
             resume_id = request.GET.get('id')
@@ -1790,6 +1820,12 @@ class ShortlistCandidate(APIView):
             application.next_interview.save()
             application.status = 'selected'
             application.save()
+
+            applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
+            job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
+
+            if applications_selected >= job_postings_req:
+                return self.closeJob(application.job_id.id)
 
             return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
@@ -2059,7 +2095,7 @@ class CandidateExperiencesView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-            
+             
 class CandidateCertificatesView(APIView):
     def get(self, request):
         try:
@@ -2253,3 +2289,52 @@ class PrevInterviewRemarksView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class CandidateApplicationsView(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not request.user.role == 'candidate':
+                return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = CustomUser.objects.get(username = request.user)
+            candidate_resume = CandidateResume.objects.get(candidate_name = user.username, candidate_email = user.email)
+            applications= JobApplication.objects.filter(resume = candidate_resume)
+            applications_serialized = JobApplicationSerializer(applications, many=True)
+            return Response({"data":applications_serialized.data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class RecruitersList(APIView):
+
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if request.user.role != 'manager':  
+                return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
+
+            org = Organization.objects.filter(manager=request.user).first()  
+            if not org:
+                print("org not found")
+                return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            all_recruiters = RecruiterProfile.objects.filter(organization=org)
+
+            id_list = [
+                {"id": recruiter.name.id, "name": recruiter.name.username, "role": "recruiter"}
+                for recruiter in all_recruiters
+            ]
+
+            id_list.append({"id": request.user.id, "name": request.user.username, "role": "manager"})  
+
+            return Response({"data": id_list}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  # Changed status to 500
