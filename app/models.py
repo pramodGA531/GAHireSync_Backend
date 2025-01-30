@@ -547,7 +547,7 @@ class CandidateExperiences(models.Model):
     from_date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=WORKING)
     to_date = models.DateField(null=True ,blank=True)
-    reason_for_resignation = models.DateField(null=True,blank=True)
+    reason_for_resignation = models.TextField(null=True,blank=True)
     relieving_letter  = models.FileField(upload_to='Candidate/Experience/Leter', null=True, blank=True)
     pay_slip1 = models.FileField(upload_to='Candidate/Experience/PaySlip1/', blank=True, null=True)
     pay_slip2 = models.FileField(upload_to='Candidate/Experience/PaySlip2/', blank=True, null=True)

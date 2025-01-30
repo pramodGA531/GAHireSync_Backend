@@ -2095,8 +2095,6 @@ class CandidateExperiencesView(APIView):
             try:
                 candidate_profile = CandidateProfile.objects.get(name = user)
 
-                # print(experience)
-
                 experience = request.data
                 if experience: 
                     CandidateExperiences.objects.create(
@@ -2105,7 +2103,7 @@ class CandidateExperiencesView(APIView):
                         from_date = experience.get('from_date'),
                         to_date = experience.get('to_date'),
                         status = experience.get('status'),
-                        reason_for_resignation = experience.get('reason'),
+                        reason_for_resignation = experience.get('reason_for_resignation'),
                         relieving_letter = experience.get('relieving_letter',''),
                         pay_slip1 = experience.get('pay_slip1',''),
                         pay_slip2 = experience.get('pay_slip2',''),
@@ -2123,6 +2121,33 @@ class CandidateExperiencesView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request):
+        try: 
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            id = request.GET.get('id')
+
+            try:
+                id = int(id)  
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+            experience = get_object_or_404(CandidateExperiences, id=id)
+
+            if experience.candidate.name.id == request.user.id:
+                experience.delete()
+                return Response({"message": "Candidate Experience deleted successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
              
 class CandidateCertificatesView(APIView):
     def get(self, request):
@@ -2185,6 +2210,33 @@ class CandidateCertificatesView(APIView):
         
         except Exception as e:
             # Log the error for debugging
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def delete(self, request):
+        try: 
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            id = request.GET.get('id')
+
+            try:
+                id = int(id)  
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+            certificate = get_object_or_404(CandidateCertificates, id=id)
+
+            if certificate.candidate.name.id == request.user.id:
+                certificate.delete()
+                return Response({"message": "Candidate Certificate deleted successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
@@ -2250,6 +2302,32 @@ class CandidateEducationView(APIView):
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
         
+    def delete(self, request):
+        try: 
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            id = request.GET.get('id')
+
+            try:
+                id = int(id)  
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+            education = get_object_or_404(CandidateEducation, id=id)
+
+            if education.candidate.name.id == request.user.id:
+                education.delete()
+                return Response({"message": "Candidate Education deleted successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 class CandidateUpcomingInterviews(APIView):
     def get(self, request):
         try:
