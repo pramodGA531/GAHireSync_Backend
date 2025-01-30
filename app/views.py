@@ -1365,7 +1365,7 @@ class GetResumeView(APIView):
         
                 candidates = []
                 for application in applications_all:
-                    if application.status == 'pending':
+                    # if application.status == 'pending':
                         candidates.append(application.resume)
 
                 candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
