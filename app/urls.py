@@ -62,5 +62,10 @@ urlpatterns = [
     path('candidate/certificates/', CandidateCertificatesView.as_view(), name='candidate-certificates'),
     path('candidate/experience/', CandidateExperiencesView.as_view(), name='candidate-experience'), 
     path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
+    
+    
+     path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
+     
+     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('candidate/applications/', CandidateApplicationsView.as_view(), name="candidate-application-view"),
 ]   

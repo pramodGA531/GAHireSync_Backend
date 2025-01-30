@@ -113,6 +113,24 @@ class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
         model = CandidateResume
         exclude = ('contact_number','alternate_contact_number','candidate_email')
 
+class JobApplicationSerializer(serializers.ModelSerializer):
+    job_id = JobPostingsSerializer()
+    # cand_id=CandidateResumeWithoutContactSerializer()
+    
+    class Meta:
+        model = JobApplication
+        fields = '__all__'  
+        
+class InterviewScheduleSerializer(serializers.ModelSerializer):
+    interviewer = InterviewerDetailsSerializer()
+    candidate = serializers.StringRelatedField()
+    job_id = serializers.PrimaryKeyRelatedField(queryset=JobPostings.objects.all())
+    
+    class Meta:
+        model = InterviewSchedule
+        fields = ['id', 'candidate', 'interviewer', 'job_id', 'round_num', 'status_display']
+    
+    
 
 class CandidateEvaluationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -222,9 +240,11 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
         return candidate_profile
     
 class InterviewScheduleSerializer(serializers.ModelSerializer):
+    interviewer = InterviewerDetailsSerializer()
+    candidate=CandidateResumeSerializer()
     class Meta:
         model = InterviewSchedule
-        fields = ['interviewer', 'schedule_date', 'round_num']
+        fields = ['interviewer', 'schedule_date',"candidate"]
 
 class CandidateCertificateSerializer(serializers.ModelSerializer):
     class Meta:

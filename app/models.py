@@ -371,7 +371,7 @@ class InterviewSchedule(models.Model):
     ]
     id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)
-    interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE)
+    interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE,)
     schedule_date = models.DateTimeField(null= True, blank=True)
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     round_num = models.IntegerField(default=0)
