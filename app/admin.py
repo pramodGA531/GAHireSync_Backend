@@ -20,6 +20,7 @@ from .models import (
     CandidateCertificates,
     CandidateExperiences,
     CandidateEducation,
+    RecruiterProfile,
 )
 
 @admin.register(CustomUser)
@@ -122,3 +123,4 @@ admin.site.register(CandidateProfile)
 admin.site.register(CandidateCertificates)
 admin.site.register(CandidateEducation)
 admin.site.register(CandidateExperiences)
+admin.site.register(RecruiterProfile)

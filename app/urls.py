@@ -20,6 +20,7 @@ urlpatterns = [
     path('job-postings/', JobPostingView.as_view(), name='create-job-posting'),
     path('org-job-postings/', OrgJobPostings.as_view(), name='org-job-posting'),
     path('org-particular-job/',OrgParticularJobPost.as_view(), name='org-particular-job'),
+    path('org/get-recruiters/', RecruitersList.as_view(), name='get-recruiters-to-allot'),
     path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
@@ -66,4 +67,5 @@ urlpatterns = [
      path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
      
      path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
+    path('candidate/applications/', CandidateApplicationsView.as_view(), name="candidate-application-view"),
 ]   
