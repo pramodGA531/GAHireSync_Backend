@@ -143,6 +143,7 @@ class ClientTermsAcceptanceSerializer(serializers.ModelSerializer):
         fields = '__all__'  
 
 class InterviewDetailsEditedSerializer(serializers.ModelSerializer):
+    name = CustomUserSerializer(read_only = True)
     class Meta:
         model = InterviewerDetailsEditedVersion
         fields = '__all__'

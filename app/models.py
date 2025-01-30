@@ -296,7 +296,7 @@ class InterviewerDetailsEditedVersion(models.Model):
     type_of_interview = models.CharField(max_length=35, choices = InterviewerDetails.TYPE_OF_INTERVIEW)
 
     def __str__(self):
-        return self.name
+        return self.name.username
 
 
 # Candidate Resume Model

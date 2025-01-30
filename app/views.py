@@ -50,7 +50,8 @@ class ClientSignupView(APIView):
                     user = user_serializer.save()
                     user.set_password(combined_values.get('password'))
                     user.save()
-
+                    
+                    
                     client_data = {
                         'username': user.username,
                         'user': user.id,
@@ -66,6 +67,26 @@ class ClientSignupView(APIView):
                     
                     if client_serializer.is_valid(raise_exception=True):
                         client_serializer.save()
+                        subject = 'Welcome to Our Service!'
+                        message = 'Thank you for signing up with us.'
+
+                        try:
+                            send_mail(
+                                subject=subject,
+                                message=message,
+                                from_email='noreply@hiresync.com',  # Add a valid sender email address
+                                recipient_list=[combined_values.get('email')],
+                                fail_silently=False,
+                            )
+                        except Exception as e:
+                            # Print error to the console for debugging
+                            print(f"Error sending email: {e}")
+
+                            # Return an error message to the frontend
+                            return Response(
+                                {"error": "There was an issue sending the welcome email. Please try again later."},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                            )
 
                     return Response({"message": "Client created successfully"}, status=status.HTTP_201_CREATED)
         
@@ -97,6 +118,8 @@ class AgencySignupView(APIView):
                     user = user_serializer.save()
                     user.set_password(combined_values.get('password'))
                     user.save()
+                    
+                    
                     org_data = {
                         'name': combined_values.get('name'),
                         'org_code': combined_values.get('org_code'),
@@ -502,7 +525,7 @@ class JobEditRequestsView(APIView):
                 return Response({"error":"You are not allowed to view this"}, status=status.HTTP_400_BAD_REQUEST)
             if(request.GET.get('id')):
                 id = request.GET.get('id')
-                try:
+                try:  
                     job = JobPostings.objects.get(id = id)
                     edited_job = JobPostingsEditedVersion.objects.get(id = id)
                     if(edited_job.status != 'pending'):
@@ -537,6 +560,9 @@ class AcceptJobEditRequestView(APIView):
             
             edited_job = JobPostingsEditedVersion.objects.get(id=id)
             job_post = JobPostings.objects.get(id=id)
+            organization = job_post.organization
+            manager_mail = organization.manager.email
+            print("job_post",job_post)
 
             # Serialize the edited_job data
             edited_data_serializer = JobPostUpdateSerializer(edited_job)
@@ -546,7 +572,7 @@ class AcceptJobEditRequestView(APIView):
             if 'time_period' not in edited_data:
                 edited_data['time_period'] = ''
             # Update the job_post fields using the serialized data
-            print(edited_data, "is the edited data")
+            # print(edited_data, "is the edited data")
             job_post_serializer = JobPostUpdateSerializer(instance=job_post, data=edited_data, partial=True)
             if job_post_serializer.is_valid():
                 job_post_serializer.save()
@@ -568,6 +594,29 @@ class AcceptJobEditRequestView(APIView):
             job_edit_status = JobPostingsEditedVersion.objects.get(id = id)
             job_edit_status.status = 'accepted'
             job_edit_status.save()
+            
+             
+            
+             
+            client_email_message = f"""
+            # Dear Manager,
+
+            We are pleased to inform you that your requested changes to the job posting have been accepted and processed successfully.
+
+            Thank you for your continued support. The job posting has been updated accordingly.
+
+            Best regards,  
+            The Recruitment Team
+            """
+
+            # Send the email to the manager
+            send_mail(
+                subject="Accepted Edit Request",
+                message=client_email_message,
+                from_email='your-client@example.com',  # Replace with your actual sender email
+                recipient_list=[manager_mail]
+            )
+
             return Response({"message": "Job edit request accepted successfully"}, status = status.HTTP_200_OK)
 
         except JobPostingsEditedVersion.DoesNotExist:
@@ -587,9 +636,29 @@ class RejectJobEditRequestView(APIView):
                 return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
             id = request.GET.get('id')
             job = JobPostings.objects.get(id=id)
+            organization = organization.organization
+            manager_mail = organization.manager.email
             edited_job =JobPostingsEditedVersion.objects.get(id = job)
             edited_job.status = 'rejected'
             edited_job.save()
+            client_email_message = f"""
+            # Dear Manager,
+
+            We are sorry to inform you that your requested changes to the job posting have been Rejected 
+
+            Thank you for your continued support. The job posting has been Rejected.
+
+            Best regards,  
+            The Recruitment Team
+            """
+
+            # Send the email to the manager
+            send_mail(
+                subject="Accepted Edit Request",
+                message=client_email_message,
+                from_email='your-client@example.com',  # Replace with your actual sender email
+                recipient_list=[manager_mail]
+            )
             return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
         except JobPostings.DoesNotExist:
             return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
@@ -921,6 +990,9 @@ class OrgJobEdits(APIView):
             with transaction.atomic():
                 interview_rounds = data.get('interview_details', [])
                 client = JobPostings.objects.get(id=id).username
+                client_email=client.email
+                
+                print("client",client)
                 job_posting = JobPostingsEditedVersion.objects.create(
                     id = job,
                     username = client,
@@ -962,72 +1034,33 @@ class OrgJobEdits(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
+                        print(round_data)
+                        name = CustomUser.objects.get(username = round_data.get('name').get('username'))
                         InterviewerDetailsEditedVersion.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
-                            name=round_data.get('name', ''),
-                            email=round_data.get('email', ''),
+                            name=name,
                             type_of_interview=round_data.get('type_of_interview', ''),
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
-                # client = ClientDetails.objects.get(user=username)
-#                 client_message = f"""
-#     Dear {username.first_name},
-#     Your job posting for "{job_posting.job_title}" has been successfully created with the following details:
+                        
+                client_message = f"""
+                We would like to inform you that there has been a request to edit the job posting for "{job_posting.job_title}" with the following details:
 
-#     **Organization:** {organization.name}
-#     **Job Title:** {job_posting.job_title}
-#     **Department:** {job_posting.job_department}
-#     **Job Location:** {job_posting.job_locations}
-#     **CTC:** {job_posting.ctc}
-#     **Years of Experience Required:** {job_posting.years_of_experience}
-#     **Primary Skills:** {(job_posting.primary_skills or [])}
-#     **Secondary Skills:** {(job_posting.secondary_skills or [])}
+                Please review the requested changes and update the job posting accordingly.
 
-  
+                Thank you for using our platform.
 
-#     Thank you for using our platform.
+                Best regards,  
+                The Recruitment Team
+                """
 
-#     Best regards,
-#     The Recruitment Team
-# """
-
-#                 manager_message = f"""
-# Dear {organization.manager.first_name},
-
-# A new job posting has been created for your organization "{organization.name}" by {username.first_name} {username.last_name}.
-
-# **Job Title:** {job_posting.job_title}
-# **Department:** {job_posting.job_department}
-# **Location:** {job_posting.job_locations}
-# **CTC:** {job_posting.ctc}
-# **Years of Experience:** {job_posting.years_of_experience}
-
-
-
-# Please review and approve the posting at your earliest convenience.
-
-# Best regards,
-# The Recruitment Team
-# """
-
-#                 send_mail(
-#                     subject="Job Posting Created Successfully",
-#                     message=client_message,
-#                     from_email='',
-#                     recipient_list=[username.email]
-#                 )
-
-#                 send_mail(
-#                     subject="New Job Posting Created",
-#                     message=manager_message,
-#                     from_email='',
-#                     recipient_list=[organization.manager.email]
-#                 )
-
-#                 clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
-#                 if clientTerms.count() < 0:
-#                     ClientTermsAcceptance.objects.create(client=client,organization=organization,service_fee = acceptedterms.service_fee,replacement_clause = acceptedterms.replacement_clause,invoice_after = acceptedterms.invoice_after,payment_within = acceptedterms.payment_within,interest_percentage = acceptedterms.interest_percentage)
+                send_mail(
+                    subject="Upadte In Job Posting",
+                    message=client_message,
+                    from_email='',
+                    recipient_list=[client_email]
+                )
             return Response(
                 {"detail": "Job post and interview rounds edit request sent successfully"},
                 status=status.HTTP_201_CREATED
@@ -1356,7 +1389,7 @@ class GetResumeView(APIView):
         
                 candidates = []
                 for application in applications_all:
-                    if application.status == 'pending':
+                    # if application.status == 'pending':
                         candidates.append(application.resume)
 
                 candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
@@ -1744,9 +1777,11 @@ class JobPostSkillsView(APIView):
         
 class PromoteCandidateView(APIView):
     def post(self, request):
+        # print(request.data.get("meet_link"))
         try:
             resume_id = request.GET.get('id')
             round_num = request.data.get('round_num')
+            meet_link = request.data.get('meet_link')
             scheduled_date_and_time = request.data.get('date_and_time')
             application = JobApplication.objects.get(resume = resume_id)
             interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
@@ -1779,13 +1814,33 @@ class PromoteCandidateView(APIView):
                 job_id = application.job_id,
                 interview_schedule = application.next_interview,
             )
+           
+          
             application.next_interview.status = 'completed'
             application.next_interview.save()
             application.round_num = round_num
             application.next_interview = scheduled_interview
             application.status = 'processing'
             application.save()
-
+            generated_meet_link=f'here is the meet link for the round 2 :{meet_link}'
+            subject=f'congrates you have selected for the round 2 online meet '
+            send_mail(
+                        subject=subject,
+                        message=generated_meet_link,
+                        from_email='',
+                        recipient_list=[candidate_resume.candidate_email],
+                        fail_silently=False,
+                    )
+            
+            subject2=f'you need to screen round 2 candidate with :{meet_link}'
+            send_mail(
+                        subject=subject2,
+                        message=generated_meet_link,
+                        from_email='',
+                        recipient_list=[interviewer_details.name.email],
+                        fail_silently=False,
+                    )
+            
             return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
