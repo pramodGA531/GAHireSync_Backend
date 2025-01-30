@@ -583,11 +583,11 @@ class AcceptJobEditRequestView(APIView):
 
             for interviewer in edited_inter_data:
                 interviewer_instance = InterviewerDetails.objects.get(job_id = job_post, round_num = interviewer['round_num'] )
-                interviewer_edit_serializer = InterviewerDetailsSerializer(instance = interviewer_instance, data = interviewer, partial = True)
-                if(interviewer_edit_serializer.is_valid()):
-                    interviewer_edit_serializer.save()
-                else:
-                    return Response(interviewer_edit_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+                interviewer_instance.type_of_interview = interviewer.get('type_of_interview')
+                interviewer_instance.mode_of_interview = interviewer.get('mode_of_interview')
+                interviewer_instance.save()
+
             job_edit_status = JobPostingsEditedVersion.objects.get(id = id)
             job_edit_status.status = 'accepted'
             job_edit_status.save()
