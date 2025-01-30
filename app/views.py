@@ -562,17 +562,14 @@ class AcceptJobEditRequestView(APIView):
             job_post = JobPostings.objects.get(id=id)
             organization = job_post.organization
             manager_mail = organization.manager.email
-            print("job_post",job_post)
 
-            # Serialize the edited_job data
             edited_data_serializer = JobPostUpdateSerializer(edited_job)
             edited_data = edited_data_serializer.data
             if 'notice_time' not in edited_data:
                 edited_data['notice_time'] = ''
             if 'time_period' not in edited_data:
                 edited_data['time_period'] = ''
-            # Update the job_post fields using the serialized data
-            # print(edited_data, "is the edited data")
+                
             job_post_serializer = JobPostUpdateSerializer(instance=job_post, data=edited_data, partial=True)
             if job_post_serializer.is_valid():
                 job_post_serializer.save()
