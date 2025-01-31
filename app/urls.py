@@ -22,6 +22,7 @@ urlpatterns = [
     path('org-particular-job/',OrgParticularJobPost.as_view(), name='org-particular-job'),
     path('org/get-recruiters/', RecruitersList.as_view(), name='get-recruiters-to-allot'),
     path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
+    path('org/accept-job/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
     path('job-details/recruiter/<int:job_id>/', RecJobDetails.as_view(), name='rec-job-details'),
@@ -68,4 +69,6 @@ urlpatterns = [
      
      path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('candidate/applications/', CandidateApplicationsView.as_view(), name="candidate-application-view"),
+
+    path('check-template/', returnTemplate),
 ]   

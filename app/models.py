@@ -161,6 +161,7 @@ class JobPostings(models.Model):
     languages = models.CharField(max_length=100 ,)
     num_of_positions = models.IntegerField(default=1)
     job_close_duration = models.DateField(null=True)
+    approval_status = models.CharField(max_length=10,default="pending",)
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []

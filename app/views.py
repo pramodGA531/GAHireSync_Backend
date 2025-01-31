@@ -15,6 +15,9 @@ from django.utils.encoding import force_bytes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from datetime import datetime
 from collections import Counter
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.shortcuts import render
 
 
 import jwt
@@ -517,6 +520,44 @@ The Recruitment Team
 
         return Response({"detail": "Job posting updated successfully", "id": job_posting.id}, status=status.HTTP_200_OK)
     
+class AcceptJobPostView(APIView):
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if request.user.role != 'manager':  
+                return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
+            
+            job_id = int(request.GET.get('id'))
+            print(job_id, "is the id")
+            if not job_id:
+                return Response({"error": "Job post id is required"}, status=status.HTTP_400_BAD_REQUEST) 
+            
+            accept = request.query_params.get('accept')
+
+
+            try:
+                job_post = JobPostings.objects.get(id = job_id)
+                if accept:
+                    job_post.approval_status  = "accepted"
+                else:
+                    job_post.approval_status  = "rejected"
+
+                job_post.save()
+                return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
+            except JobPostings.DoesNotExist:
+                return Response({"error":"Job post does not exists"}, status = status.HTTP_400_BAD_REQUEST)
+
+
+        except Exception as e:
+            print("error is ",str(e))
+            return Response(
+                {"detail": f"An error occurred: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    
 class JobEditRequestsView(APIView):
     def get(self, request):
         try:
@@ -666,14 +707,40 @@ class RejectJobEditRequestView(APIView):
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
 class OrganizationTermsView(APIView):
-    permission_classes = [IsAuthenticated]  
+    permission_classes = [IsAuthenticated]   
 
     def get(self, request):
         user = request.user
-        organization = Organization.objects.filter(manager = user).first()
-        organization_terms,_ = OrganizationTerms.objects.get_or_create(organization = organization)
+        organization = Organization.objects.filter(manager=user).first()
+
+        if not organization:
+            return render(request, "error.html", {"message": "Organization not found"})
+        
+        values = request.GET.get('values')
+        if values:
+            try:
+                organization_terms = OrganizationTerms.objects.get(organization = organization)
+                serializer = OrganizationTermsSerializer(organization_terms)
+            except OrganizationTerms.DoesNotExist:
+                return Response({"error":"Organization Terms does not exist"}, status = status.HTTP_400_BAD_REQUEST)
+            return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+
+        organization_terms, _ = OrganizationTerms.objects.get_or_create(organization=organization)
         serializer = OrganizationTermsSerializer(organization_terms)
-        return Response(serializer.data)
+        data = serializer.data
+
+        context = {
+            "service_fee": data.get("service_fee"),
+            "invoice_after": data.get("invoice_after"),
+            "payment_within": data.get("payment_within"),
+            "replacement_clause": data.get("replacement_clause"),
+            "interest_percentage": data.get("interest_percentage"),
+            "data":data
+        }
+
+        return render(request, "organizationTerms.html", context)
+
+
 
     def put(self, request):
         try:
@@ -709,14 +776,30 @@ class GetOrganizationTermsView(APIView):
             organization = Organization.objects.get(org_code = org_code)
         except:
             return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+        
         client = ClientDetails.objects.get(user=user)
         clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
+
         if clientTerms.count() > 0:
             organization_terms=clientTerms.first()
         else:
             organization_terms = OrganizationTerms.objects.get(organization = organization)
+
         serializer = OrganizationTermsSerializer(organization_terms)
-        return Response(serializer.data)
+        data = serializer.data
+        context = {
+            "service_fee": data.get("service_fee"),
+            "invoice_after": data.get("invoice_after"),
+            "payment_within": data.get("payment_within"),
+            "replacement_clause": data.get("replacement_clause"),
+            "interest_percentage": data.get("interest_percentage"),
+            "data":data
+        }
+
+        context['data_json'] = json.dumps(context['data'])
+
+        html = render_to_string("organizationTerms.html", context)
+        return HttpResponse(html)
 
 class NegotiateTermsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -751,7 +834,6 @@ class NegotiateTermsView(APIView):
         try:
             data = request.data
 
-            
             negotiation_request = NegotiationRequests.objects.create(
                 client=client,
                 organization=organization,
@@ -784,7 +866,7 @@ The Negotiation Team
             manager_email_message = f"""
 Dear {organization.manager.first_name},
 
-A new negotiation request has been submitted by {client.user.first_name} {client.user.last_name} from {client.organization.name}. Here are the details:
+A new negotiation request has been submitted by {client.user.first_name} {client.user.last_name} from {organization.name}. Here are the details:
 
 **Service Fee:** {data.get('service_fee')}
 **Replacement Clause:** {data.get('replacement_clause')}
@@ -2496,3 +2578,8 @@ class RecruitersList(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  # Changed status to 500
+
+
+def returnTemplate(request):
+    context = {"name":"Kalki"}
+    return render(request, 'organizationTerms.html', context)

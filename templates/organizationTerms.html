@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms and conditions</title>
+</head>
+<body>
+
+    {% comment %} <h2>Terms and Conditions</h2> {% endcomment %}
+    <div>
+        <ol>
+            <li>Candidate Facilitation Service Fee: {{service_fee}} of CTC plus GST (One Time)</li>
+            <li>
+                Invoice Processing:
+                <ul>
+                    <li>Invoice will be raised post {{invoice_after}} days of facilitated candidate/resource joining your organization.</li>
+                    <li>The invoice needs to be paid within a {{payment_within}} days time (working days).</li>
+                </ul>
+            </li>
+            <li>
+                Replacement of the Candidate:
+                <ul>
+                    <li>If the recruited candidate leaves within {{replacement_clause}} days.</li>
+                    <li>Termination based on performance will not be replaced.</li>
+                </ul>
+            </li>
+            <li>
+                Recruitment Framework:
+                <ul>
+                    <li>Job Role, Job Description, and Key Performance Indicators.</li>
+                    <li>Primary Skills (non-negotiable) and Secondary Skills required for the respective roles.</li>
+                    <li>Recruitment process (number of discussion rounds and who conducts each round).</li>
+                    <li>One point of contact to facilitate discussions/interviews at your organization.</li>
+                    <li>Feedback of rejections to be shared in the tracker (Resume shortlisting phase or discussion phases).</li>
+                </ul>
+            </li>
+            <li>
+                Liability from the Recruited Candidate/Resources:
+                <ul>
+                    <li>Our role ends with identifying and facilitating discussions with candidates/resources matching your Job Role & Job Description.</li>
+                    <li>Decisions/confirmation in selection and onboarding of candidates/resources are at your sole discretion.</li>
+                    <li>Training of the resource, if required for the role, is your responsibility.</li>
+                    <li>We are not responsible for any liability arising from the candidates/resources facilitated by us and onboarded by you.</li>
+                </ul>
+            </li>
+            <li>
+                Agreement of Association:
+                <ul>
+                    <li>For long-term association, we wish to enter into a written agreement after hiring a candidate/resource.</li>
+                    <li>The service fee for facilitation must be paid even if the written agreement is delayed.</li>
+                    <li>This applies from the hiring of the first profile we facilitated.</li>
+                </ul>
+            </li>
+        </ol>
+        <h7>Kindly let me know if you need any clarifications. Happy to get back to you.</h7>
+    </div>
+    <script>
+        window.__DATA__ = {{ data_json|safe }};
+    </script>
+</body>
+</html>
