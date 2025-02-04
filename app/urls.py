@@ -43,6 +43,8 @@ urlpatterns = [
     path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
     path('client/add-interviewers/', InterviewersView.as_view(), name='add-interviewers'),
     path('client/get-interviewers/', InterviewersView.as_view(), name='get-interviewers'),
+    path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
+    path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
@@ -62,13 +64,12 @@ urlpatterns = [
     path('candidate/profile/', CandidateProfileView.as_view(), name='candidate-profile-details'),
     path('candidate/certificates/', CandidateCertificatesView.as_view(), name='candidate-certificates'),
     path('candidate/experience/', CandidateExperiencesView.as_view(), name='candidate-experience'), 
-    path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
-    
-    
-     path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
-     
-     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('candidate/applications/', CandidateApplicationsView.as_view(), name="candidate-application-view"),
+    path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
 
-    path('check-template/', returnTemplate),
-]   
+    path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
+    
+    path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
+    path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
+    path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
+]

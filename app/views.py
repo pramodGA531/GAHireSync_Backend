@@ -18,8 +18,10 @@ from collections import Counter
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.shortcuts import render
+from .permissions import *
 
 
+import base64
 import jwt
 import string 
 import random
@@ -2579,7 +2581,166 @@ class RecruitersList(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  # Changed status to 500
 
+class RecruiterProfileView(APIView):
 
-def returnTemplate(request):
-    context = {"name":"Kalki"}
-    return render(request, 'organizationTerms.html', context)
+    permission_classes = [IsRecruiter]
+
+    def get(self, request):
+        try:
+            user = request.user
+            user = CustomUser.objects.get(username = user).id
+            print(user)
+            try:
+                recruiter_profile = RecruiterProfile.objects.get(name = user)
+            
+            except RecruiterProfile.DoesNotExist:
+                return Response({"error":"Recruiter Profile does not exists"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            recruiter_serializer = RecruiterProfileSerializer(recruiter_profile)
+            return Response({"data":recruiter_serializer.data}, status= status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class CloseJobView(APIView):
+    permission_classes = [IsManager]
+    def post(self, request):
+        try:
+            job_id = request.GET.get('id')
+
+            if not job_id:
+                return Response({"error":"job_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                job = JobPostings.objects.get(id = job_id)
+            except JobPostings.DoesNotExist:
+                return Response({"error":"Job Post does not exists"},status=status.HTTP_400_BAD_REQUEST)
+
+            job.status = 'closed'
+            job_applications = JobApplication.objects.filter(job_id = job).exclude(status='selected').exclude(status='rejected')
+
+            for job_application in job_applications:
+                job_application.status = 'rejected'
+                job_application.save()
+
+            job.save()
+
+            # generate invoice here for single job post
+            return Response({"message":"Job  Post Closed Successfully"},status=status.HTTP_200_OK )
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class InvoicesAPIView(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            organization = Organization.objects.get(manager = request.user)
+            jobs= JobPostings.objects.filter(organization = organization).filter(status = 'closed')
+            print(request.user)
+
+            if not jobs.exists():
+                return Response({"noJobs": True}, status=status.HTTP_200_OK)
+            
+            invoices = []
+
+            for job in jobs:
+                total = 100
+                context = {
+                    "agency_name": job.organization.name,
+                    "client_name": job.username.username,
+                    "client_email": job.username.email,
+                    "job_title": job.job_title,
+                    "ctc": job.ctc,
+                    "service_fee":23.13,
+                    "payment_within": 32,
+                    "invoice_id": 10212,
+                    "invoice_after": 12,
+                    "replacement_clause" : 23,
+                    "date":45,
+                    "total":total,
+                    "email":job.username.email
+                }
+
+                invoice = generate_invoice(context)
+                # buffer = generate_invoice(context)
+                # buffer.seek(0)
+
+                # pdf_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+
+                invoices.append({"invoice":invoice, "job_title":job.job_title, "job_id":job.id})
+
+            return Response({"invoices":invoices}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+class AgencyDashboardAPI(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            user = request.user
+            agency_name = Organization.objects.get(manager = user).name
+
+            approval_pending = JobPostings.objects.filter(organization__name = agency_name, approval_status='pending').count()
+            interviews_scheduled = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).count()
+            recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, is_assigned=None).count()
+            jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(organization__name=agency_name).count()  
+            opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
+
+            upcoming_interviews = []
+            applications = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).order_by('-next_interview__schedule_date')[:20]
+
+            for application in applications:
+                application_details = {
+                    "interviewer_name" : application.next_interview.interviewer.name.username,
+                    "round_num" : application.round_num,
+                    "candidate_name": application.resume.candidate_name,
+                    "scheduled_time": application.next_interview.schedule_date,
+                    "job_title": application.job_id.job_title,
+                }
+
+                upcoming_interviews.append(application_details)
+
+            latest_jobs = JobPostings.objects.filter(organization__name = agency_name).order_by('-created_at')[:10]
+            
+            jobs_details = []
+            for job in latest_jobs:
+
+                selected = JobApplication.objects.filter(job_id = job, status = 'selected').count()
+                rejected = JobApplication.objects.filter(job_id = job.id, status = "rejected").count()
+                applications = JobApplication.objects.filter(job_id = job.id).count()
+                number_of_rounds =  InterviewerDetails.objects.filter(job_id = job.id).count()
+                rejected_at_last_round = JobApplication.objects.filter(job_id = job.id, round_num = number_of_rounds, status = 'rejected').count()
+                interviewed = selected + rejected_at_last_round
+
+
+                job_details = {
+                    "role":job.job_title,
+                    "positions_left": job.num_of_positions - selected,
+                    "applications": applications,
+                    "interviewed":interviewed,
+                    "rejected": rejected,
+                    "feedback_pending": 0,
+                    "offered": selected,
+                }
+
+                jobs_details.append(job_details)
+
+            data = {
+                "approval_pending": approval_pending,
+                "interviews_scheduled": interviews_scheduled,
+                "recruiter_allocation_pending": recruiter_allocation_pending,
+                "jobpost_edit_requests": jobpost_edit_requests,
+                "opened_jobs": opened_jobs
+            }
+
+            return Response({"data":data, "latest_jobs":jobs_details, "upcoming_interviews":upcoming_interviews }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

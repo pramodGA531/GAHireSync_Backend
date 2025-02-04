@@ -260,3 +260,9 @@ class CandidateEducationSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateEducation
         fields = '__all__'
+
+class RecruiterProfileSerializer(serializers.ModelSerializer):
+    name = CustomUserSerializer(read_only = True)
+    class Meta:
+        model = RecruiterProfile
+        fields = '__all__'

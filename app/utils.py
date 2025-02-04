@@ -4,7 +4,13 @@ import json
 import google.generativeai as genai
 from django.conf import settings
 import fitz
+from django.template.loader import render_to_string
 from docx import Document
+import io
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Table, TableStyle
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
@@ -230,3 +236,93 @@ def analyse_resume(jd, resume):
 
     
     return response.text
+
+
+def generate_invoice(context):
+    html_content = render_to_string("invoice.html",context=context)
+    return html_content
+
+# def generate_invoice_document(context):
+#     buffer = io.BytesIO()
+
+#     client_name = context.get('client_name')
+#     agency_name = context['agency_name']
+#     job_title = context['job_title']
+#     ctc = context['ctc']
+#     invoice_id = context['invoice_id']
+#     date = context['date']
+#     email = context['email']
+    
+
+#     agreed_terms = [
+#         ["Service Fee", f"{context["service_fee"]}"],
+#         ["Invoice After", f"{context['invoice_after']} days"],
+#         ["Payment Within", f"{context['payment_within']} days"],
+#         ["Replacement Clause", f"{context['replacement_clause']} "],
+#         ["Interest Percentage", f"{context.get("interest_percentage", 0)}% per month "]
+#     ]
+
+#     total_amount = (ctc * 10) / 100  # Assuming 10% service fee
+
+#     p = canvas.Canvas(buffer, letter)
+#     width, height = letter
+
+#     # Header Section
+#     p.setFont("Helvetica-Bold", 20)
+#     p.drawString(250, height - 50, f"Invoice")
+#     p.setFont("Helvetica", 15)
+#     p.drawString(200, height - 80, f"Invoice {invoice_id} | Date {date}")
+
+#     # Client Details
+#     p.setFont("Helvetica-Bold", 10)
+#     p.drawString(50, height - 120, "Agency Name ")
+#     p.drawString(50, height - 140, "Client Name ")
+#     p.drawString(50, height - 160, "Email ")
+#     p.drawString(50, height - 180, "Job Title ")
+#     p.drawString(50, height - 200, "Job CTC ")
+
+#     p.setFont("Helvetica", 10)
+#     p.drawString(120, height - 120, f":  {agency_name}")
+#     p.drawString(120, height - 140, f":  {client_name}")
+#     p.drawString(120, height - 160, f":  {email}")
+#     p.drawString(120, height - 180, f":  {job_title}")
+#     p.drawString(120, height - 200, f":  {ctc} LPA")
+
+#     # Agreed Terms Table
+#     p.setFillColorRGB(0.243, 0.341, 0.271)
+#     p.setFont("Helvetica", 15)
+#     p.drawString(50, height - 230, "Agreed Terms")
+
+#     p.setFillColorRGB(0, 0, 0)
+#     p.setFont("Helvetica", 10)
+
+#     table_data = [["Term", "Details"]] + agreed_terms
+#     table = Table(table_data, colWidths=[200, 200])
+#     table.setStyle(TableStyle([
+#         ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+#         ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+#         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+#         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+#         ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+#         ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+#         ("GRID", (0, 0), (-1, -1), 1, colors.black),
+#     ]))
+
+#     # Draw the table at a specific position
+#     table.wrapOn(p, width, height)
+#     table.drawOn(p, 50, height - 350)
+
+#     # Total Amount
+#     p.setFont("Helvetica-Bold", 12)
+#     p.drawString(50, height - 400, f"Total Amount: ₹ {total_amount:.2f} LPA")
+
+#     # Footer Section
+#     p.setFont("Helvetica", 10)
+#     p.setFillColorRGB(0.3, 0.3, 0.3)
+#     p.drawString(50, 50, "Thank you for your business!")
+#     p.drawString(50, 35, "For any queries, contact us at support@gaconsultancy.com")
+
+#     p.showPage()
+#     p.save()
+
+#     return buffer

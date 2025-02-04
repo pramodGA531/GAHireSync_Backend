@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agency Invoice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .invoice-container {
+            width: 700px;
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            {% comment %} box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); {% endcomment %}
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 90vh;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h2 {
+            margin: 0;
+            color: #007bff;
+        }
+        .invoice-details, .terms {
+            margin-bottom: 20px;
+        }
+        .invoice-details div, .terms div {
+            margin-bottom: 10px;
+        }
+        .invoice-items {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .invoice-items th, .invoice-items td {
+            padding: 12px;
+            border: 1px solid #ddd;
+        }
+        .invoice-items th {
+            background-color: #007bff;
+            color: #fff;
+            text-align: left;
+        }
+        .terms {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .highlight {
+            font-size: 20px;
+            font-weight: bold;
+            color: #d9534f;
+            text-align: right;
+        }
+        .footer {
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+            margin-top: auto;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="header">
+            <h2>{{agency_name}} Invoice</h2>
+            <p>Invoice {{invoice_id}} | Date: {{date}}</p>
+        </div>
+        <div class="invoice-details">
+            <div><strong>Agency Name:</strong> {{agency_name}}</div>
+            <div><strong>Client Name:</strong> {{client_name}}</div>
+            <div><strong>Email:</strong> {{client_email}}</div>
+            <div><strong>Job Title:</strong> {{job_title}}</div>
+            <div><strong>Job CTC:</strong> {{ctc}}</div>
+        </div>
+        <div class="terms">
+            <strong>Agreed Terms</strong>
+            <div><strong>Service Fee:</strong> {{service_fee}}%</div>
+            <div><strong>Invoice After:</strong> {{invoice_after}} days</div>
+            <div><strong>Payment within:</strong> {{payment_within}} days</div>
+            <div><strong>Replacement Clause:</strong> {{replacement_clause}}</div>
+            <div><strong>Interest Percentage:</strong> {{interest_percentage}}</div>
+        </div>
+        <div class="highlight"> <strong>Total Fee:</strong> {{total}}</div>
+        <div class="footer">
+            <p>Thank you for your business!</p>
+        </div>
+    </div>
+</body>
+</html>
