@@ -44,7 +44,8 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default="user")
     credit = models.IntegerField(default=0)
     organization = models.ForeignKey("Organization", on_delete=models.CASCADE, null=True, blank=True)
-
+    is_verified = models.BooleanField(default = False)
+    
     objects = CustomUserManager()
 
     def __str__(self):

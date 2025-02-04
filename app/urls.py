@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import *
+from .authentication_views import *
 
 urlpatterns = [
     path('signup/client/',ClientSignupView.as_view(),name="client_signup"),
@@ -10,6 +11,9 @@ urlpatterns = [
     path('get-user-details/', GetUserDetails.as_view(), name='user_details'),
     path('forgotpassword/', ForgotPasswordAPIView.as_view(),name='forgotpassword'),
     path('resetpassword/<uidb64>/<token>/',ResetPasswordAPIView.as_view(), name='resetpassword'),
+    path('verify-email/<uidb64>/<token>/', VerifyEmailView.as_view(), name="verify-email"),
+    path('send-verification-email/', VerifyEmailView.as_view(), name="send-verification-email"),
+
     path('changepassword/', changePassword.as_view(), name='changepassword'),
 
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
