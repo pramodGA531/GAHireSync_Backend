@@ -2,31 +2,20 @@ from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from rest_framework_simplejwt.tokens import RefreshToken
 from .models import *
 from .serializers import *
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings 
 from django.core.mail import send_mail
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
-from collections import Counter
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.shortcuts import render
 from .permissions import *
 from .authentication_views import *
 
-import base64
-import jwt
-import string 
-import random
-from django.contrib.auth.tokens import default_token_generator
-from django.template import Template, Context
 from django.shortcuts import get_object_or_404
 from .utils import *
 
@@ -583,7 +572,6 @@ Your negotiation request has been successfully submitted to {organization.name}.
 **Invoice After:** {data.get('invoice_after')} days
 **Payment Within:** {data.get('payment_within')} days
 **Interest Percentage:** {data.get('interest_percentage')}%
-
 We will notify you as soon as the organization manager reviews your request.
 
 Best regards,  
