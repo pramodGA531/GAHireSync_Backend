@@ -115,7 +115,20 @@ class JobPostSkillsView(APIView):
                 "primary_skills" : job.primary_skills,
                 "secondary_skills" : job.secondary_skills
             }
-            return Response(skills_json, status=status.HTTP_200_OK)
+
+            resume_id = request.GET.get('resume_id')
+            print(resume_id)
+            application = JobApplication.objects.get(resume__id = resume_id)
+
+            application_round = application.round_num
+            job_post_rounds = application.job_id.rounds_of_interview
+
+            if(application_round < job_post_rounds):
+                has_next_round = True
+            else:
+                has_next_round = False
+
+            return Response({"data":skills_json, "has_next_round":has_next_round}, status=status.HTTP_200_OK)
 
         except JobPostings.DoesNotExist:
             return Response({"error":"Job Not found"}, status= status.HTTP_400_BAD_REQUEST)
@@ -137,12 +150,14 @@ class PrevInterviewRemarksView(APIView):
 
             resume_id = request.GET.get('id')
             resume = CandidateResume.objects.get(id = resume_id)
-            application_id = JobApplication.objects.get(resume = resume).id
+            application = JobApplication.objects.get(resume = resume)
+            application_id  = application.id
             if not application_id:
                 return Response({"error":"Application ID is requrired"}, status=status.HTTP_400_BAD_REQUEST)
             
             application_evaluations = CandidateEvaluation.objects.filter(job_application = application_id)
             evaluation_serializer = CandidateEvaluationSerializer(application_evaluations, many=True)
+            
             
             return Response({"data":evaluation_serializer.data},status= status.HTTP_200_OK)
         
@@ -159,9 +174,9 @@ class PromoteCandidateView(APIView):
     def post(self, request):
         # print(request.data.get("meet_link"))
         try:
-            resume_id = request.GET.get('id')
-            round_num = request.GET.get('round_num')
-           
+            resume_id = int(request.GET.get('id'))
+            round_num = int(request.GET.get('round_num'))
+
             application = JobApplication.objects.get(resume = resume_id)
 
             primary_skills = request.data.get('primary_skills')
@@ -229,7 +244,7 @@ class RejectCandidate(APIView):
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
 
 # Directly shortlist the candidate and send the notification to the client, recruiter
-class ShortlistCandidate(APIView):
+class SelectCandidate(APIView):
     def closeJob(self, id):
         try:
             job = JobPostings.objects.get(id = id)
@@ -251,7 +266,7 @@ class ShortlistCandidate(APIView):
     def post(self, request):
         try:
             resume_id = request.GET.get('id')
-            round_num = request.data.get('round_num')
+            round_num = request.GET.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
             print(request.data)
             primary_skills = request.data.get('primary_skills')
@@ -273,6 +288,7 @@ class ShortlistCandidate(APIView):
             application.next_interview.status = 'completed'
             application.next_interview.save()
             application.status = 'selected'
+            application.next_interview = None
             application.save()
 
             applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
@@ -281,7 +297,7 @@ class ShortlistCandidate(APIView):
             if applications_selected >= job_postings_req:
                 return self.closeJob(application.job_id.id)
 
-            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
+            return Response({"message":"Candidate selected"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)

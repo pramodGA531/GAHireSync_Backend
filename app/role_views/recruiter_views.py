@@ -183,10 +183,10 @@ class ScheduleInterview(APIView):
                     return Response({"error":"Client is'nt shortlisted this application"}, status = status.HTTP_400_BAD_REQUEST)
 
                 try:
-                    next_interview_details = InterviewerDetails.objects.get(id = application.job_id.id, round_num = application.round_num)
+                    next_interview_details = InterviewerDetails.objects.get(job_id = application.job_id.id, round_num = application.round_num)
 
                 except InterviewerDetails.DoesNotExist:
-                    return Response({"error":"Interviewer Details for this round Does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({"error":f"{application.round_num} Interviewer Details for this round Does not exist"}, status=status.HTTP_400_BAD_REQUEST)
                 
                 application_details = {
                     "interviewer_name": next_interview_details.name.username,
@@ -213,9 +213,9 @@ class ScheduleInterview(APIView):
             application_id = request.GET.get('application_id')
             application = JobApplication.objects.get(id = application_id)
             interviewer = InterviewerDetails.objects.get(job_id = application.job_id, round_num = application.round_num)
-            print(request.data)
             scheduled_date_and_time = request.data.get('schedule_date_and_time')
-            print(scheduled_date_and_time)
+            meet_link = request.data.get('meet_link','')
+            print(meet_link)
 
             if(scheduled_date_and_time is None):
                 return Response({"error":"Please select date and time"}, status = status.HTTP_400_BAD_REQUEST)
@@ -227,7 +227,7 @@ class ScheduleInterview(APIView):
                     interviewer = interviewer,
                     schedule_date = scheduled_date_and_time,
                     job_id = application.job_id,
-                    meet_link = request.data.get('meet_link', ''),
+                    meet_link = meet_link,
                     round_num = application.round_num,
                     status = 'pending'
                 )

@@ -402,11 +402,6 @@ class JobApplication(models.Model):
         (PROCESSING, 'processing'),
     ]
 
-    ROUND_STATUS  =[
-        (PENDING , 'pending'),
-        (ACCEPTED, 'accepted'),
-        (REJECTED, 'rejected')
-    ]
     id = models.AutoField(primary_key=True)
     resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
@@ -415,7 +410,6 @@ class JobApplication(models.Model):
     receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
     message = models.TextField(null=True, blank=True)
     round_num = models.IntegerField(default=0)
-    round_status = models.CharField(max_length=30, choices=ROUND_STATUS, default='pending')
     next_interview = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE, blank=True, default=None,null=True)
     application_date = models.DateTimeField(auto_now_add=True)
     feedback = models.TextField(blank= True,default= None ,  null=True)

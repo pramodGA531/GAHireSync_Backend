@@ -545,6 +545,7 @@ class GetResumeView(APIView):
                     "job_title" : job.job_title,
                     "job_description": job.job_description,
                     "ctc": job.ctc, 
+                    "num_of_rounds": job.rounds_of_interview
                 }
                 return Response({"data":candidates_serializer.data, "job_data": job_data},   status=status.HTTP_200_OK)
             
@@ -682,7 +683,6 @@ HireSync Team
             
             with transaction.atomic():
                 job_application.status = 'processing'
-                job_application.round_status = 'pending'
                 job_application.round_num = 1
                 candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
                 job_application.save()
@@ -693,7 +693,86 @@ HireSync Team
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
   
-   
+
+class SelectApplicationView(APIView):
+    permission_classes = [IsClient]
+
+    def create_user_and_profile(self, candidate_name, candidate_email):
+
+        password = generate_random_password()
+
+        # Serialize and create the user
+        user_serializer = CustomUserSerializer(data={
+            'email': candidate_email,
+            'username': candidate_name,
+            'role': CustomUser.CANDIDATE,
+            'credit': 0,
+            'password': password,
+        })
+
+        if user_serializer.is_valid(raise_exception=True):
+            new_user = user_serializer.save()
+            new_user.set_password(password)
+            new_user.save()
+
+            candidate_profile= CandidateProfile.objects.create(
+                name = new_user,
+                email =candidate_email,
+            )
+            subject = "Account Created on HireSync"
+            message = f"""
+Dear {candidate_name},
+
+Welcome to HireSync! Your Candidate account has been successfully created.
+
+Here are your account details:
+Username: {candidate_name}
+Email: {candidate_email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+            send_mail(
+                        subject=subject,
+                        message=message,
+                        from_email='noreply@hiresync.com',
+                        recipient_list=[candidate_email],
+                        fail_silently=False,
+                )
+            return candidate_profile
+        else:
+            raise serializers.ValidationError(user_serializer.errors)
+        
+
+    def post(self, request):
+        try:
+            resume_id = request.GET.get('id')
+            
+            try:
+                resume = CandidateResume.objects.get(id = resume_id)
+                job_application = JobApplication.objects.get(resume = resume)
+            except JobApplication.DoesNotExist:
+                return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            with transaction.atomic():
+                job_application.status = 'selected'
+                job_application.round_num = 0
+                candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                job_application.save()
+
+            return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
 class NextInterviewerDetails(APIView):
     def get(self, request):
         try:
