@@ -34,209 +34,6 @@ class GetUserDetails(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
-class getClientJobposts(APIView):
-    def get(self,request):
-        try:
-            if request.GET.get('id'):
-                id = request.GET.get('id')
-                jobpost = JobPostings.objects.get(id=id)
-                serializer = JobPostingsSerializer(jobpost)
-            else:
-                jobpost = JobPostings.objects.filter(username = request.user)
-                serializer = JobPostingsSerializer(jobpost,many=True)
-            return Response(serializer.data)
-        except Exception as e:
-            print(str(e))
-            return Response(status=status.HTTP_400_BAD_REQUEST, errorData = (str(e)))
-        
-class JobPostingView(APIView):
-    permission_classes = [IsAuthenticated]  
-
-    def post(self, request):
-        data = request.data
-        username = request.user
-        organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
-        if not username or username.role != 'client':
-            return Response({"detail": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not organization:
-            return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            with transaction.atomic():
-                interview_rounds = data.get('interview_rounds', [])
-                acceptedterms = data.get('accepted_terms', [])
-                job_close_duration_raw = data.get('job_close_duration')
-                try:
-                    job_close_duration = datetime.strptime(job_close_duration_raw, "%Y-%m-%dT%H:%M:%S.%fZ").date()
-                except (ValueError, TypeError):
-                    return Response({"detail": "Invalid date format for job_close_duration. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
-
-                job_posting = JobPostings.objects.create(
-                    username=username,
-                    organization=organization,
-                    job_title=data.get('job_title', ''),
-                    job_department=data.get('job_department'),
-                    job_description=data.get('job_description'),
-                    primary_skills=data.get('primary_skills'),
-                    secondary_skills=data.get('secondary_skills'),
-                    years_of_experience=data.get('years_of_experience','Not Specified'),
-                    ctc=data.get('ctc',"Not Specified"),
-                    rounds_of_interview = len(interview_rounds),
-                    job_locations=data.get('job_locations'),
-                    job_type=data.get('job_type'),
-                    job_level=data.get('job_level'),
-                    qualifications=data.get('qualifications'),
-                    timings=data.get('timings'),
-                    other_benefits=data.get('other_benefits'),
-                    working_days_per_week=data.get('working_days_per_week'),
-                    decision_maker=data.get('decision_maker'),
-                    decision_maker_email=data.get('decision_maker_email'),
-                    bond=data.get('bond'),
-                    rotational_shift = data.get('rotational_shift') == "yes",
-                    age = data.get('age_limit'),
-                    gender = data.get('gender'), 
-                    industry = data.get('industry'),
-                    differently_abled = data.get('differently_abled'),
-                    visa_status = data.get('visa_status'),
-                    time_period = data.get('time_period'),
-                    notice_period = data.get('notice_period'),
-                    notice_time = data.get('notice_time'),
-                    qualification_department = data.get('qualification_department'),
-                    languages = data.get('languages'),
-                    num_of_positions = data.get('num_of_positions'),
-                    job_close_duration  = job_close_duration,
-                    status='opened',
-                    is_approved=False,
-                    is_assigned=None,
-                    created_at=None
-                )
-
-                if interview_rounds:
-                    for round_data in interview_rounds:
-                        interviewer = CustomUser.objects.get(username = round_data.get('name'))
-                        InterviewerDetails.objects.create(
-                            job_id=job_posting,
-                            round_num=round_data.get('round_num'),
-                            name=interviewer,
-                            type_of_interview=round_data.get('type_of_interview', ''),
-                            mode_of_interview=round_data.get('mode_of_interview'),
-                        )
-                        print("mode of interview is ",round_data.get('mode_of_interview'), " and total interviewer data is ",round_data)
-                client = ClientDetails.objects.get(user=username)
-                client_message = f"""
-    Dear {username.first_name},
-    Your job posting for "{job_posting.job_title}" has been successfully created with the following details:
-
-    **Organization:** {organization.name}
-    **Job Title:** {job_posting.job_title}
-    **Department:** {job_posting.job_department}
-    **Job Location:** {job_posting.job_locations}
-    **CTC:** {job_posting.ctc}
-    **Years of Experience Required:** {job_posting.years_of_experience}
-    **Primary Skills:** {(job_posting.primary_skills or [])}
-    **Secondary Skills:** {(job_posting.secondary_skills or [])}
-
-  
-
-    Thank you for using our platform.
-
-    Best regards,
-    The Recruitment Team
-"""
-
-                manager_message = f"""
-Dear {organization.manager.first_name},
-
-A new job posting has been created for your organization "{organization.name}" by {username.first_name} {username.last_name}.
-
-**Job Title:** {job_posting.job_title}
-**Department:** {job_posting.job_department}
-**Location:** {job_posting.job_locations}
-**CTC:** {job_posting.ctc}
-**Years of Experience:** {job_posting.years_of_experience}
-
-
-
-Please review and approve the posting at your earliest convenience.
-
-Best regards,
-The Recruitment Team
-"""
-
-                send_mail(
-                    subject="Job Posting Created Successfully",
-                    message=client_message,
-                    from_email='',
-                    recipient_list=[username.email]
-                )
-
-                send_mail(
-                    subject="New Job Posting Created",
-                    message=manager_message,
-                    from_email='',
-                    recipient_list=[organization.manager.email]
-                )
-
-                clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
-                if clientTerms.count() < 0:
-                    ClientTermsAcceptance.objects.create(client=client,organization=organization,service_fee = acceptedterms.service_fee,replacement_clause = acceptedterms.replacement_clause,invoice_after = acceptedterms.invoice_after,payment_within = acceptedterms.payment_within,interest_percentage = acceptedterms.interest_percentage)
-            return Response(
-                {"detail": "Job and interview rounds created successfully", "job_id": job_posting.id},
-                status=status.HTTP_201_CREATED
-            )
-
-        except Exception as e:
-            print("error is ",str(e))
-            return Response(
-                {"detail": f"An error occurred: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    def put(self, request, job_id):
-        job_posting = get_object_or_404(JobPostings, id=job_id)
-
-        data = request.data
-
-        if job_posting.username != request.user:
-            return Response({"detail": "You do not have permission to edit this job posting."}, status=status.HTTP_403_FORBIDDEN)
-
-        job_posting.job_title = data.get('job_title', job_posting.job_title)
-        job_posting.job_department = data.get('job_department', job_posting.job_department)
-        job_posting.job_description = data.get('job_description', job_posting.job_description)
-        job_posting.primary_skills = data.get('primary_skills', job_posting.primary_skills)
-        job_posting.secondary_skills = data.get('secondary_skills', job_posting.secondary_skills)
-        job_posting.years_of_experience = data.get('years_of_experience', job_posting.years_of_experience)
-        job_posting.ctc = data.get('ctc', job_posting.ctc)
-        job_posting.rounds_of_interview = data.get('rounds_of_interview', job_posting.rounds_of_interview)
-        job_posting.job_locations = data.get('job_locations', job_posting.job_locations)
-        job_posting.job_type = data.get('job_type', job_posting.job_type)
-        job_posting.job_level = data.get('job_level', job_posting.job_level)
-        job_posting.qualifications = data.get('qualifications', job_posting.qualifications)
-        job_posting.timings = data.get('timings', job_posting.timings)
-        job_posting.other_benefits = data.get('other_benefits', job_posting.other_benefits)
-        job_posting.working_days_per_week = data.get('working_days_per_week', job_posting.working_days_per_week)
-        job_posting.decision_maker = data.get('decision_maker', job_posting.decision_maker)
-        job_posting.decision_maker_email = data.get('decision_maker_email', job_posting.decision_maker_email)
-        job_posting.bond = data.get('bond', job_posting.bond)
-        job_posting.rotational_shift = data.get('rotational_shift', job_posting.rotational_shift)
-        job_posting.age = data.get('age_limit', job_posting.age)
-        job_posting.gender = data.get('gender', job_posting.gender)
-        job_posting.industry = data.get('industry', job_posting.industry)
-        job_posting.differently_abled = data.get('differently_abled', job_posting.differently_abled)
-        job_posting.visa_status = data.get('visa_status', job_posting.visa_status)
-        job_posting.time_period = data.get('time_period', job_posting.time_period)
-        job_posting.notice_period = data.get('notice_period', job_posting.notice_period)
-        job_posting.languages = data.get('languages', job_posting.languages)
-        job_posting.notice_time = data.get('notice_time', job_posting.notice_time)
-        job_posting.num_of_positions = data.get('num_of_positions', job_posting.num_of_positions)
-        job_posting.job_close_duration = data.get('job_close_duration', job_posting.job_close_duration)
-
-        job_posting.save()
-
-        return Response({"detail": "Job posting updated successfully", "id": job_posting.id}, status=status.HTTP_200_OK)
-    
 class AcceptJobPostView(APIView):
     def post(self, request):
         try:
@@ -273,155 +70,7 @@ class AcceptJobPostView(APIView):
                 {"detail": f"An error occurred: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-    
-class JobEditRequestsView(APIView):
-    def get(self, request):
-        try:
-            user = request.user
-            if(user.role != 'client'):
-                return Response({"error":"You are not allowed to view this"}, status=status.HTTP_400_BAD_REQUEST)
-            if(request.GET.get('id')):
-                id = request.GET.get('id')
-                try:  
-                    job = JobPostings.objects.get(id = id)
-                    edited_job = JobPostingsEditedVersion.objects.get(id = id)
-                    if(edited_job.status != 'pending'):
-                        return Response({"error":"You have already reacted to this job post edit"}, status = status.HTTP_400_BAD_REQUEST)
-                    serialized_edited_job = JobPostEditedSerializer(edited_job)
-                    serialized_job = JobPostingsSerializer(job)
-                    return Response({"data":serialized_edited_job.data,"job":serialized_job.data}, status = status.HTTP_200_OK)
-                except JobPostings.DoesNotExist:
-                    return Response({"error":"job posting not found"},status = status.HTTP_400_BAD_REQUEST)
-                except JobPostingsEditedVersion.DoesNotExist:
-                    return Response({"error":"Job posting edited not found"},status = status.HTTP_400_BAD_REQUEST)
-            else:
-                edited_jobs = JobPostingsEditedVersion.objects.filter(username = user)
-                if not edited_jobs:
-                    return Response({"details":"There are no Edit Job Requests"}, status = status.HTTP_200_OK)
-                serialized_edited_jobs = JobPostEditedSerializerMinFields(edited_jobs,many=True)
-                return Response(serialized_edited_jobs.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"details":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-class AcceptJobEditRequestView(APIView):
-    def get(self, request):
-        try:
-            id = request.GET.get('id')
-            user = request.user
-            if user.role != 'client':
-                return Response({"error":"You are not allowed to do this request"}, status=status.HTTP_400_BAD_REQUEST)
-            edited_job = JobPostingsEditedVersion.objects.get(id=id)
-            if not edited_job:
-                return Response({"error":"Unable to process your request"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            edited_job = JobPostingsEditedVersion.objects.get(id=id)
-            job_post = JobPostings.objects.get(id=id)
-            organization = job_post.organization
-            manager_mail = organization.manager.email
-
-            edited_data_serializer = JobPostUpdateSerializer(edited_job)
-            edited_data = edited_data_serializer.data
-            if 'notice_time' not in edited_data:
-                edited_data['notice_time'] = ''
-            if 'time_period' not in edited_data:
-                edited_data['time_period'] = ''
-                
-            job_post_serializer = JobPostUpdateSerializer(instance=job_post, data=edited_data, partial=True)
-            if job_post_serializer.is_valid():
-                job_post_serializer.save()
-            else:
-                print(job_post_serializer.errors)
-                return Response(job_post_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            edited_interviewers = InterviewerDetailsEditedVersion.objects.filter(job_id= id)
-            edited_inter_serializer = InterviewDetailsEditedSerializer(edited_interviewers,many = True)
-            edited_inter_data = edited_inter_serializer.data
-
-            for interviewer in edited_inter_data:
-                interviewer_instance = InterviewerDetails.objects.get(job_id = job_post, round_num = interviewer['round_num'] )
-
-                interviewer_instance.type_of_interview = interviewer.get('type_of_interview')
-                interviewer_instance.mode_of_interview = interviewer.get('mode_of_interview')
-                interviewer_instance.save()
-
-            job_edit_status = JobPostingsEditedVersion.objects.get(id = id)
-            job_edit_status.status = 'accepted'
-            job_edit_status.save()
-            
-             
-            
-             
-            client_email_message = f"""
-            # Dear Manager,
-
-            We are pleased to inform you that your requested changes to the job posting have been accepted and processed successfully.
-
-            Thank you for your continued support. The job posting has been updated accordingly.
-
-            Best regards,  
-            The Recruitment Team
-            """
-
-            # Send the email to the manager
-            send_mail(
-                subject="Accepted Edit Request",
-                message=client_email_message,
-                from_email='your-client@example.com',  # Replace with your actual sender email
-                recipient_list=[manager_mail]
-            )
-
-            return Response({"message": "Job edit request accepted successfully"}, status = status.HTTP_200_OK)
-
-        except JobPostingsEditedVersion.DoesNotExist:
-            return Response({"error": "Edited job post not found"}, status=status.HTTP_404_NOT_FOUND)
-        except JobPostings.DoesNotExist:
-            return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-class RejectJobEditRequestView(APIView):
-    def get(self, request):
-        try:
-            if(not request.user):
-                return Response({"error":"You are not an user"},status=status.HTTP_400_BAD_REQUEST)
-            if not request.user.role =='client':
-                return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
-            id = request.GET.get('id')
-            job = JobPostings.objects.get(id=id)
-            organization = organization.organization
-            manager_mail = organization.manager.email
-            edited_job =JobPostingsEditedVersion.objects.get(id = job)
-            edited_job.status = 'rejected'
-            edited_job.save()
-            client_email_message = f"""
-            # Dear Manager,
-
-            We are sorry to inform you that your requested changes to the job posting have been Rejected 
-
-            Thank you for your continued support. The job posting has been Rejected.
-
-            Best regards,  
-            The Recruitment Team
-            """
-
-            # Send the email to the manager
-            send_mail(
-                subject="Accepted Edit Request",
-                message=client_email_message,
-                from_email='your-client@example.com',  # Replace with your actual sender email
-                recipient_list=[manager_mail]
-            )
-            return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
-        except JobPostings.DoesNotExist:
-            return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
-        except JobPostingsEditedVersion.DoesNotExist:
-            return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            print(e)
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+     
 
 class OrganizationTermsView(APIView):
     permission_classes = [IsAuthenticated]   
@@ -483,40 +132,7 @@ class OrganizationTermsView(APIView):
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
 
-class GetOrganizationTermsView(APIView):
-    permission_classes = [IsAuthenticated]  
 
-    def get(self, request):
-        user = request.user
-        org_code = request.GET.get('org_code')
-        try:
-            organization = Organization.objects.get(org_code = org_code)
-        except:
-            return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        client = ClientDetails.objects.get(user=user)
-        clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
-
-        if clientTerms.count() > 0:
-            organization_terms=clientTerms.first()
-        else:
-            organization_terms = OrganizationTerms.objects.get(organization = organization)
-
-        serializer = OrganizationTermsSerializer(organization_terms)
-        data = serializer.data
-        context = {
-            "service_fee": data.get("service_fee"),
-            "invoice_after": data.get("invoice_after"),
-            "payment_within": data.get("payment_within"),
-            "replacement_clause": data.get("replacement_clause"),
-            "interest_percentage": data.get("interest_percentage"),
-            "data":data
-        }
-
-        context['data_json'] = json.dumps(context['data'])
-
-        html = render_to_string("organizationTerms.html", context)
-        return HttpResponse(html)
 
 class NegotiateTermsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -699,175 +315,6 @@ Best regards,
         except Exception as e:
             return Response({"detail": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-class OrgJobPostings(APIView):
-    def get(self, request,*args, **kwargs):
-        try:
-            user = request.user
-            org = Organization.objects.get(manager=user)
-            job_postings = JobPostings.objects.filter(organization=org)
-            serializer = JobPostingsSerializer(job_postings, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-        
-class OrgParticularJobPost(APIView):
-    def get(self, request):
-        try:
-            user= request.user
-            if(user.role == 'manager'):
-                id = request.GET.get('id')
-                if(id==None):
-                    return Response({"error":"ID is not mentioned"}, status= status.HTTP_400_BAD_REQUEST)
-                try:
-                    jobEditedPost = JobPostingsEditedVersion.objects.get(id=id).status
-                    if jobEditedPost=='pending': 
-                        print("your job edit request is in pending")    
-                        return Response({"error":"Your have already sent an edit request to this job post"}, status = status.HTTP_400_BAD_REQUEST)
-                except JobPostingsEditedVersion.DoesNotExist:
-                    pass
-                
-                jobPost = JobPostings.objects.get(id = id)
-                jobPost_serializer = JobPostingsSerializer(jobPost)
-                return Response(jobPost_serializer.data, status=status.HTTP_200_OK) 
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status= status.HTTP_400_BAD_REQUEST)
-        
-class OrgJobEdits(APIView):
-    def get(self, request):
-        try:
-            user = request.user
-            print('user is ', user)
-            if( request.GET.get('id')):
-                id = request.GET.get('id')
-                edited_job = JobPostingsEditedVersion.objects.get(id = id)
-                if(edited_job.edited_by != user):
-                    return Response({'error':'You are not allowed to edit other people job posts'}, status=status.HTTP_400_BAD_REQUEST)
-                serialized_edited_job = JobPostEditedSerializer(edited_job)
-                return Response(serialized_edited_job.data,status=status.HTTP_202_ACCEPTED)
-            else:
-                edited_jobs = JobPostingsEditedVersion.objects.filter(edited_by = user)
-                if(edited_jobs == None):
-                    return Response({"message":"There are no edited job posts"}, status=status.HTTP_200_OK)
-                edited_jobs_serialized_data = JobPostEditedSerializerMinFields(edited_jobs,many = True)
-                return Response(edited_jobs_serialized_data.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-        
-    def post(self, request):
-        data = request.data
-        username = request.user
-        id = request.GET.get('id')
-        # print(" is the job id")
-        # if(id != data.get('job_post_id')):
-        #     return Response({"details":"job post details are not matching"}, status = status.HTTP_400_BAD_REQUEST)
-        organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
-        job = JobPostings.objects.get(id = id)
-        if not username or username.role != 'manager':
-            return Response({"detail": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not organization:
-            return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not job:
-            return Response({"detail":"Invalid Job ID"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            job_edited_post = JobPostingsEditedVersion.objects.get(id=id)
-            if(job_edited_post) and job_edited_post.status != 'pending':
-                job_edited_post.delete()
-                InterviewerDetailsEditedVersion.objects.filter(job_id=id).delete()
-        except JobPostingsEditedVersion.DoesNotExist:
-            pass
-
-        try:
-            with transaction.atomic():
-                interview_rounds = data.get('interview_details', [])
-                client = JobPostings.objects.get(id=id).username
-                client_email=client.email
-                
-                print("client",client)
-                job_posting = JobPostingsEditedVersion.objects.create(
-                    id = job,
-                    username = client,
-                    edited_by=username,
-                    organization=organization,
-                    job_title=data.get('job_title', ''),
-                    job_department=data.get('job_department'),
-                    job_description=data.get('job_description'),
-                    primary_skills=data.get('primary_skills'),
-                    secondary_skills=data.get('secondary_skills'),
-                    years_of_experience=data.get('years_of_experience','Not Specified'),
-                    ctc=data.get('ctc',"Not Specified"),
-                    rounds_of_interview = len(interview_rounds),
-                    job_locations=data.get('job_locations'),
-                    job_type=data.get('job_type'),
-                    job_level=data.get('job_level'),
-                    qualifications=data.get('qualifications'),
-                    timings=data.get('timings'),
-                    other_benefits=data.get('other_benefits'),
-                    working_days_per_week=data.get('working_days_per_week'),
-                    decision_maker=data.get('decision_maker'),
-                    decision_maker_email=data.get('decision_maker_email'),
-                    bond=data.get('bond'),
-                    rotational_shift = data.get('rotational_shift') == "yes",
-                    age = data.get('age'),
-                    gender = data.get('gender'), 
-                    industry = data.get('industry'),
-                    differently_abled = data.get('differently_abled'),
-                    visa_status = data.get('visa_status'),
-                    time_period = data.get('time_period'),
-                    notice_period = data.get('notice_period'),
-                    notice_time = data.get('notice_time',''),
-                    qualification_department = data.get('qualification_department'),
-                    languages = data.get('languages'),
-                    num_of_positions = data.get('num_of_positions'),
-                    job_close_duration  = data.get('job_close_duration'),
-                    status = 'pending'
-                )
-
-                if interview_rounds:
-                    for round_data in interview_rounds:
-                        print(round_data)
-                        name = CustomUser.objects.get(username = round_data.get('name').get('username'))
-                        InterviewerDetailsEditedVersion.objects.create(
-                            job_id=job_posting,
-                            round_num=round_data.get('round_num'),
-                            name=name,
-                            type_of_interview=round_data.get('type_of_interview', ''),
-                            mode_of_interview=round_data.get('mode_of_interview'),
-                        )
-                        
-                client_message = f"""
-                We would like to inform you that there has been a request to edit the job posting for "{job_posting.job_title}" with the following details:
-
-                Please review the requested changes and update the job posting accordingly.
-
-                Thank you for using our platform.
-
-                Best regards,  
-                The Recruitment Team
-                """
-
-                send_mail(
-                    subject="Upadte In Job Posting",
-                    message=client_message,
-                    from_email='',
-                    recipient_list=[client_email]
-                )
-            return Response(
-                {"detail": "Job post and interview rounds edit request sent successfully"},
-                status=status.HTTP_201_CREATED
-            )
-
-        except Exception as e:
-            print("error is ",str(e))
-            return Response(
-                {"detail": f"An error occurred: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
 
 class JobDetailsAPIView(APIView):
     def get(self, request, *args, **kwargs):
@@ -890,109 +337,8 @@ class JobEditStatusAPIView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
-class RecruitersView(APIView):
-    def get(self, request,*args, **kwargs):
-        try:
-            user = request.user
-            org = Organization.objects.get(manager=user)
-            serializer = OrganizationSerializer(org)
-            return Response(serializer.data["recruiters"], status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-    def post(self, request):
-        try:
-            user = request.user
-            org = Organization.objects.get(manager=user)
+        
 
-            alloted_to_id = request.data.get('alloted_to')
-            alloted_to = CustomUser.objects.get(id = alloted_to_id)
-            
-            username = request.data.get('username')
-            email = request.data.get('email')
-
-            password = generate_random_password()
-
-            user_serializer = CustomUserSerializer(data={
-                'email': email,
-                'username': username,
-                'role': CustomUser.RECRUITER,
-                'credit': 0,
-                'password': password,
-            })
-
-            if user_serializer.is_valid(raise_exception=True):
-                new_user = user_serializer.save()
-                new_user.set_password(password)
-                new_user.save()
-                
-                RecruiterProfile.objects.create(
-                    name = new_user,
-                    alloted_to = alloted_to,
-                    organization = org,
-                )
-
-                org.recruiters.add(new_user)
-
-                subject = "Account Created on HireSync"
-                message = f"""
-Dear {username},
-
-Welcome to HireSync! Your recruiter account has been successfully created.
-
-Here are your account details:
-Username: {username}
-Email: {email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-
-                send_mail(
-                    subject=subject,
-                    message=message,
-                    from_email='',
-                    recipient_list=[email],
-                    fail_silently=False,
-                )
-
-                return Response(
-                    {"message": "Recruiter account created successfully, and email sent."},
-                    status=status.HTTP_201_CREATED
-                )
-
-        except Organization.DoesNotExist:
-            return Response(
-                {"detail": "Organization not found for the current user."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-class UpdateRecruiterView(APIView):
-    def post(self,request):
-        try:
-            user = request.user
-            org = Organization.objects.get(manager=user)
-            if org:
-                job_id = request.data.get('job_id')
-                job = JobPostings.objects.get(id=job_id,organization = org)
-                recruiter_id = request.data.get('recruiter_id')
-                recruiter = CustomUser.objects.get(id=recruiter_id)
-                job.is_assigned = recruiter
-                job.save()
-                return Response({"detail":"Recruiter Assigned Successfully"}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
 
 class RecJobPostings(APIView):
@@ -1024,145 +370,9 @@ class RecJobDetails(APIView):
             return Response({'jd':serializer.data,'summary':summary, 'count':resume_count}, status=status.HTTP_200_OK)
         except:
             return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+     
 
-
-class GenerateQuestions(APIView):
-    def get(self, request, job_id):
-        try:
-            user = request.user
-            org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
-            questions = generate_questions_with_gemini(job)
-            return Response(questions, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-class AnalyseResume(APIView):
-    def post(self, request, job_id):
-        try:
-            user = request.user
-            org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
-            resume = request.FILES.get('resume')
-            resume = extract_text_from_file(resume)
-            analysis = analyse_resume(job, resume)
-            return Response(analysis, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-class ScreenResume(APIView):
-    def post(self, request, job_id):
-        try:
-            user = request.user
-            org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
-            resume = request.FILES.get('resume')
-            resume = extract_text_from_file(resume)
-            analysis = screen_profile_ai(job,resume)
-            return Response(analysis, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-        
-
-class CandidateResumeView(APIView):
-    parser_classes = (MultiPartParser, FormParser)
-
-
-    def post(self, request):
-        try:
-            job_id = request.GET.get('id')
-            if not job_id:
-                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            if not user or user.role != 'recruiter':
-                return Response({"error": "You are not allowed to handle this request"}, status=status.HTTP_403_FORBIDDEN)
-
-            job = JobPostings.objects.get(id=job_id)
-            receiver = job.username
-
-            if 'resume' not in request.FILES:
-                return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-            data = request.data
-            date_string = data.get('date_of_birth', '')
-
-            try:
-                date_of_birth = datetime.strptime(date_string, "%Y-%m-%d").date()
-            except ValueError:
-                return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            primary_skills = json.loads(data.get('primary_skills', '[]'))
-            secondary_skills = json.loads(data.get('secondary_skills', '[]'))
-
-            if not primary_skills:
-                return Response({"error": "Primary skills are required"}, status=status.HTTP_400_BAD_REQUEST)
-
-            if JobApplication.objects.filter(
-                job_id=job, resume__candidate_email=data.get('candidate_email')
-            ).exists():
-                return Response({"error": "Candidate application is submitted previously"}, status=status.HTTP_400_BAD_REQUEST)
-
-            #check job application of this user, with this id
-            try:
-                resumes =  CandidateResume.objects.filter(candidate_name = data.get('candidate_name'))
-                application = JobApplication.objects.get(job_id = job_id, resume__in = resumes)
-
-                if application:
-                    return Response({"error":"Job application already posted for this email id"}, status=status.HTTP_400_BAD_REQUEST)
-            except JobApplication.DoesNotExist:
-
-            # Create a CandidateResume instance
-                candidate_resume = CandidateResume.objects.create(
-                    resume=request.FILES['resume'],
-                    candidate_name=data.get('candidate_name'),
-                    candidate_email = data.get('candidate_email'),
-                    contact_number=data.get('contact_number'),
-                    alternate_contact_number=data.get('alternate_contact_number', ''),
-                    other_details=data.get('other_details', ''),
-                    current_organisation=data.get('current_organization', ''),
-                    current_job_location=data.get('current_job_location', ''),
-                    current_job_type=data.get('current_job_type', ''),
-                    date_of_birth=date_of_birth,
-                    experience=data.get('experience', ''),
-                    current_ctc=data.get('current_ctc', ''),
-                    expected_ctc=data.get('expected_ctc', ''),
-                    notice_period=data.get('notice_period', ''),
-                    job_status=data.get('job_status', ''),
-                )
-
-                # Add Primary Skills
-                for skill, experience in primary_skills:
-                    PrimarySkillSet.objects.create(
-                        candidate=candidate_resume,
-                        skill=skill,
-                        years_of_experience=experience,
-                    )
-
-                # Add Secondary Skills
-                for skill, experience in secondary_skills:
-                    SecondarySkillSet.objects.create(
-                        candidate=candidate_resume,
-                        skill=skill,
-                        years_of_experience=experience,
-                    )
-
-                # Create Job Application
-                JobApplication.objects.create(
-                    resume=candidate_resume,
-                    job_id=job,
-                    status='pending',
-                    sender=user,
-                    receiver=receiver,
-                )
-
-                return Response({"message": "Resume added successfully"}, status=status.HTTP_201_CREATED)
-
-        except JobPostings.DoesNotExist:
-            return Response({"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+       
 
 class GetResumeByApplicationId(APIView):
 
@@ -1179,1282 +389,194 @@ class GetResumeByApplicationId(APIView):
         except JobApplication.DoesNotExist:
             return Response({"detail": "Job application not found."}, status=status.HTTP_404_NOT_FOUND)
 
-class GetResumeView(APIView):
-    def get(self,request):
-        try:
-            user = request.user
-            if (user.role != "client"):
-                return Response({"error":"User client is only allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
-            
-            if request.GET.get("jobid"):
-                id = request.GET.get("jobid")
-                applications_all = JobApplication.objects.filter(job_id = id)
-                applications_serializer = JobApplicationSerializer(applications_all, many=True)
-        
-                candidates = []
-                for application in applications_all:
-                    # if application.status == 'pending':
-                        candidates.append(application.resume)
 
-                candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
-                
-
-                job = JobPostings.objects.get(id = id)
-                job_data = {
-                    "job_id": id,
-                    "job_title" : job.job_title,
-                    "job_description": job.job_description,
-                    "ctc": job.ctc, 
-                }
-                return Response({"data":candidates_serializer.data, "job_data": job_data},   status=status.HTTP_200_OK)
-            
-            else:
-                job_postings = JobPostings.objects.filter(username = user )
-                job_applications_json = []
-                for job_post in job_postings:
-                    job_id = job_post.id
-                    num_of_postings = job_post.num_of_positions
-                    last_date = job_post.job_close_duration
-                    total_applications = JobApplication.objects.filter(job_id=job_id).count()
-                    processing_count = JobApplication.objects.filter(job_id =job_id,status = 'processing').count()
-                    selected_count = JobApplication.objects.filter(job_id=job_id, status="selected").count()
-                    pending_count = JobApplication.objects.filter(job_id=job_id, status="pending").count()
-                    rejected_count = JobApplication.objects.filter(job_id=job_id, status="rejected").count()
-
-                    # Append data to the response list
-                    job_applications_json.append({
-                        "job_id": job_id,
-                        "num_of_postings": num_of_postings,
-                        "last_date": last_date,
-                        "applications_sent": total_applications,
-                        "processing": processing_count,
-                        "selected": selected_count,
-                        "pending": pending_count,
-                        "rejected": rejected_count,
-                    })
-                return Response(job_applications_json, status=status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-        
-class RejectApplicationView(APIView):
-    def post(self, request):
-        try:
-            user = request.user
-            if not user:
-                return Response({"error":"User Does not exists"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            if user.role != 'client':
-                return Response({"error":"User Role not matches"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            id = request.GET.get('id')          # <--- candidate application id
-            if not id:
-                return Response({"error":"Application Id is mandatory to reject the application"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            candidate_resume = CandidateResume.objects.get(id = id)
-            job_application = JobApplication.objects.get(resume = candidate_resume)
-            job_application.status = "rejected"
-            job_application.feedback = request.data.get("feedback")
-            job_application.next_interview = None
-            job_application.save()
-
-            return Response({"message":"Rejected Successfully"}, status = status.HTTP_200_OK)
-        
-        except CandidateResume.DoesNotExist:
-            return Response({"error":"Candidate Resume not exists with that id"}, status = status.HTTP_400_BAD_REQUEST)
-        
-        except JobApplication.DoesNotExist:
-            return Response({"error": "Job Application does not exists"}, status = status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-class NextInterviewerDetails(APIView):
+# Agency and Recruiter can see this candidate Profile
+class ViewCandidateProfileAPI(APIView):
     def get(self, request):
         try:
             if not request.user.is_authenticated:
-                return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-            job_id = request.GET.get('id')
-            if not job_id:
-                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                job = JobPostings.objects.get(id=job_id)
-            except JobPostings.DoesNotExist:
-                return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
 
-            if job.username != request.user:
-                return Response({"error": "You are not authorized to view this job posting"}, status=status.HTTP_403_FORBIDDEN)
-
-            resume_id = request.GET.get('resume_id')
-            if not resume_id:
-                return Response({"error": "Resume ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            candidate_id = request.GET.get('id')
+            if not candidate_id:
+                return Response({"error": "Candidate ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
-                job_application = JobApplication.objects.get(resume_id=resume_id, job_id=job)
-            except JobApplication.DoesNotExist:
-                return Response({"error": "Job application not found"}, status=status.HTTP_404_NOT_FOUND)
-
-            next_round = job_application.round_num + 1 if job_application.round_num else 1
-
-            try:
-                next_interview_details = InterviewerDetails.objects.get(job_id=job_id, round_num=next_round)
-                serializer = InterviewerDetailsSerializer(next_interview_details)
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            except InterviewerDetails.DoesNotExist:
-                return Response({"message": "There are no further rounds"}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": "An error occurred while processing your request"},status=status.HTTP_400_BAD_REQUEST)
-    
-class AcceptApplicationView(APIView):
-    def create_user_and_profile(self, candidate_name, candidate_email):
-
-        password = generate_random_password()
-
-        # Serialize and create the user
-        user_serializer = CustomUserSerializer(data={
-            'email': candidate_email,
-            'username': candidate_name,
-            'role': CustomUser.CANDIDATE,
-            'credit': 0,
-            'password': password,
-        })
-
-        if user_serializer.is_valid(raise_exception=True):
-            new_user = user_serializer.save()
-            new_user.set_password(password)
-            new_user.save()
-
-            candidate_profile= CandidateProfile.objects.create(
-                name = new_user,
-                email =candidate_email,
-            )
-            subject = "Account Created on HireSync"
-            message = f"""
-Dear {candidate_name},
-
-Welcome to HireSync! Your Candidate account has been successfully created.
-
-Here are your account details:
-Username: {candidate_name}
-Email: {candidate_email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-            send_mail(
-                        subject=subject,
-                        message=message,
-                        from_email='noreply@hiresync.com',
-                        recipient_list=[candidate_email],
-                        fail_silently=False,
-                )
-            return candidate_profile
-        else:
-            raise serializers.ValidationError(user_serializer.errors)
-        
-
-    def post(self, request):
-        try:
-            resume_id = request.GET.get('id')
-            round_num = request.data.get('round_num')
-            scheduled_date_and_time = request.data.get('date_and_time')
-            application = JobApplication.objects.get(resume = resume_id)
-            interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
-            
-            candidate_details = CandidateResume.objects.get(id=resume_id)
-
-            scheduled_interview = InterviewSchedule.objects.create(
-                interviewer = interviewer_details,
-                schedule_date = scheduled_date_and_time,
-                candidate = candidate_details,
-                round_num = round_num,
-                status = 'scheduled',
-                job_id = application.job_id
-            )
-            
-            application.round_num = round_num
-            application.next_interview = scheduled_interview
-            application.status = 'processing'
-            application.save()
-
-            candidate_name = candidate_details.candidate_name
-            candidate_email = candidate_details.candidate_email
-            try:
-                user = CustomUser.objects.get(email = candidate_email)
-                candidate_profile = CandidateProfile.objects.get(name = user)
-            except CustomUser.DoesNotExist:
-                candidate_profile = self.create_user_and_profile(candidate_name,candidate_email)
-            except Exception as e:
-                print(str(e), " at creating candidate profile")
-                return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-class ScheduledInterviewsForJobId(APIView):
-    def get(self, request, job_id):
-        try:
-            interviews = InterviewSchedule.objects.select_related("interviewer", "candidate", "job_id").filter(job_id=job_id)
-            serializer = InterviewScheduleSerializer(interviews, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class NextRoundInterviewDetails(APIView):
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-            job_id = request.GET.get('id')
-            if not job_id:
-                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                job = JobPostings.objects.get(id=job_id)
-
-            except JobPostings.DoesNotExist:
-                return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
-           
-            resume_id = request.GET.get('resume_id')
-
-            if not resume_id:
-                return Response({"error": "Resume ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                job_application = JobApplication.objects.get(resume_id=resume_id, job_id=job)
-            except JobApplication.DoesNotExist:
-                return Response({"error": "Job application not found"}, status=status.HTTP_404_NOT_FOUND)
-
-            next_round = job_application.round_num + 1 if job_application.round_num else 1
-
-            try:
-                next_interview_details = InterviewerDetails.objects.get(job_id=job_id, round_num=next_round)
-                serializer = InterviewerDetailsSerializer(next_interview_details)
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            except InterviewerDetails.DoesNotExist:
-                return Response({"message": "There are no further rounds"}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": "An error occurred while processing your request"},status=status.HTTP_400_BAD_REQUEST)
-    
-
-class AllInterviewsView(APIView):
-    def get(self, request):
-        try:
-            if request.user.is_authenticated:
-                if request.user.role != 'client':
-                    return Response({"error":"Sorry, You are not allowed"},status=status.HTTP_400_BAD_REQUEST)                
-
-                # requiredfields-->   job_title, interviewer_name, candidate_name, scheduled_interview, application_status, job_postings_deadline, job_post_status, round_num
-                response_json = []
-                all_interviews = InterviewSchedule.objects.filter(job_id__in = JobPostings.objects.filter(username = request.user).values_list('id', flat=True))
-                for interview in all_interviews:
-                    job_post = JobPostings.objects.get(id = interview.job_id)
-                    job_title = job_post.job_title
-                    interviewer_name = interview.interviewer.name.username
-                    candidate_name = interview.candidate.candidate_name
-                    scheduled_interview = interview.schedule_date
-                    interview_status = interview.status
-                    if JobApplication.objects.get(next_interview = interview):
-                        candidate_status = JobApplication.objects.get(next_interview = interview).status
-                    else:
-                        candidate_staus = "cleared"
-                    job_post_status = job_post.status
-                    job_submission_date = job_post.job_close_duration
-
-                    json_fromat = {
-                        "job"
-                    }
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-
-class ScheduledInterviewsView(APIView):
-    def get(self, request):
-        try:
-            if request.GET.get('id'):
-                try:
-                    interview_id = request.GET.get('id')
-                    scheduled_interview = InterviewSchedule.objects.get(id = interview_id)
-                    candidate = scheduled_interview.candidate
-                    try:
-                        interview_details_json = {
-                            "job_id" : scheduled_interview.job_id.id,
-                            "job_title": scheduled_interview.job_id.job_title,
-                            "interviewer_name" : scheduled_interview.interviewer.name.username,
-                            "candidate_name" : scheduled_interview.candidate.candidate_name,
-                            "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
-                            "round_num" : scheduled_interview.round_num,
-                            "scheduled_date": scheduled_interview.schedule_date
-                        }
-                        return Response(interview_details_json, status = status.HTTP_200_OK)
-                    except Exception as e:
-                        return Response({"error":str(e)}, status= status.HTTP_400_BAD_REQUEST)
-
-                except InterviewSchedule.DoesNotExist:
-                    return Response({"error":"There is no interview scheduled with that id"}, status = status.HTTP_400_BAD_REQUEST)
-                except Exception as e:
-                    print(str(e))
-                    return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-            else:
-                if not request.user.is_authenticated:
-                    return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-                if not request.user.role == 'interviewer':
-                    return Response({"error":"You are not allowed to run this view"},status=status.HTTP_400_BAD_REQUEST)
-                try:
-                    interviews = InterviewSchedule.objects.filter(interviewer__name = request.user )
-
-                except CustomUser.DoesNotExist:
-                    return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
-
-                scheduled_json = []
-                for interview in interviews:
-                    application_id = JobApplication.objects.get(resume = interview.candidate)
-                    id = interview.id
-                    schedule_date = interview.schedule_date
-                    round_of_interview = interview.round_num
-                    interviewer_name = interview.interviewer.name.username
-                    job_id = interview.job_id.id
-                    job_title = interview.job_id.job_title
-                    try:
-                        application = JobApplication.objects.get(next_interview = interview)
-                        candidate_name = application.resume.candidate_name
-                        statuss = application.status
-                    except JobApplication.DoesNotExist:
-                        candidate_name = interview.candidate.candidate_name
-                        statuss = "completed"
-
-                    scheduled_json.append({
-                        "interview_id": id,
-                        "job_id":job_id,
-                        "job_title":job_title,
-                        "candidate_name":candidate_name,
-                        "interviewer_name":interviewer_name,
-                        "round_of_interview":round_of_interview,
-                        "schedule_date":schedule_date,
-                        "status":statuss,
-                        "application_id":application_id.id,
-                        
-                    })
-
-                return Response(scheduled_json, status =status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
-        
-class JobPostSkillsView(APIView):
-    def get(self, request):
-        try:
-            if not request.GET.get('id'):
-                return Response({"error":"Job ID is required to fetch the details"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            job_id = request.GET.get('id')
-            job = JobPostings.objects.get(id = job_id)
-            skills_json = {
-                "primary_skills" : job.primary_skills,
-                "secondary_skills" : job.secondary_skills
-            }
-            return Response(skills_json, status=status.HTTP_200_OK)
-
-        except JobPostings.DoesNotExist:
-            return Response({"error":"Job Not found"}, status= status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-        
-class PromoteCandidateView(APIView):
-    def post(self, request):
-        # print(request.data.get("meet_link"))
-        try:
-            resume_id = request.GET.get('id')
-            round_num = request.data.get('round_num')
-            meet_link = request.data.get('meet_link')
-            scheduled_date_and_time = request.data.get('date_and_time')
-            application = JobApplication.objects.get(resume = resume_id)
-            interviewer_details = InterviewerDetails.objects.filter(job_id = application.job_id).get(round_num = round_num)
-
-            primary_skills = request.data.get('primary_skills')
-            secondary_skills = request.data.get('secondary_skills')
-            remarks = request.data.get('remarks', "")
-            score = request.data.get('score', 0)
-            candidate_resume = CandidateResume.objects.get(id = resume_id)
-
-            print(scheduled_date_and_time, " is the scheduled date and time")
-            candidate_resume = CandidateResume.objects.get(id = resume_id)
-            scheduled_interview = InterviewSchedule.objects.create(
-                interviewer = interviewer_details,
-                candidate = candidate_resume,
-                schedule_date = scheduled_date_and_time,
-                round_num = round_num,
-                status = 'scheduled',
-                job_id = application.job_id
-            )
-
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating = primary_skills,
-                secondary_skills_ratings = secondary_skills,
-                round_num = round_num-1,
-                remarks = remarks,
-                status = "SELECTED",
-                job_application = application,
-                score = score,
-                job_id = application.job_id,
-                interview_schedule = application.next_interview,
-            )
-           
-          
-            application.next_interview.status = 'completed'
-            application.next_interview.save()
-            application.round_num = round_num
-            application.next_interview = scheduled_interview
-            application.status = 'processing'
-            application.save()
-            generated_meet_link=f'here is the meet link for the round 2 :{meet_link}'
-            subject=f'congrates you have selected for the round 2 online meet '
-            send_mail(
-                        subject=subject,
-                        message=generated_meet_link,
-                        from_email='',
-                        recipient_list=[candidate_resume.candidate_email],
-                        fail_silently=False,
-                    )
-            
-            subject2=f'you need to screen round 2 candidate with :{meet_link}'
-            send_mail(
-                        subject=subject2,
-                        message=generated_meet_link,
-                        from_email='',
-                        recipient_list=[interviewer_details.name.email],
-                        fail_silently=False,
-                    )
-            
-            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-class ShortlistCandidate(APIView):
-
-    def closeJob(self, id):
-        try:
-            job = JobPostings.objects.get(id = id)
-            job.status = 'closed'
-            job.save()
-            remaining_applications = JobApplication.objects.exclude(status = 'selected').exclude(status = 'rejected')
-            for application in remaining_applications:
-                application.status = 'rejected'
-                application.save()
-
-                # TODO send_mail()
-
-            return Response({"message":"All positions are filled for this job posting successfully, Job posting is closed"}, status = status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    def post(self, request):
-        try:
-            resume_id = request.GET.get('id')
-            round_num = request.data.get('round_num')
-            application = JobApplication.objects.get(resume = resume_id)
-            print(request.data)
-            primary_skills = request.data.get('primary_skills')
-            secondary_skills = request.data.get('secondary_skills')
-            remarks = request.data.get('remarks', "")
-            score = request.data.get('score', 0)
-
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating = primary_skills,
-                secondary_skills_ratings = secondary_skills,
-                round_num = round_num,
-                remarks = remarks,
-                status = "SELECTED",
-                job_application = application,
-                score = score,
-                job_id = application.job_id,
-                interview_schedule = application.next_interview,
-            )
-            application.next_interview.status = 'completed'
-            application.next_interview.save()
-            application.status = 'selected'
-            application.save()
-
-            applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
-            job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
-
-            if applications_selected >= job_postings_req:
-                return self.closeJob(application.job_id.id)
-
-            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-class RejectCandidate(APIView):
-    def post(self, request):
-        try:
-            resume_id = request.GET.get('id')
-            round_num = request.data.get('round_num')
-            application = JobApplication.objects.get(resume = resume_id)
-            print(request.data)
-            primary_skills = request.data.get('primary_skills', '')
-            secondary_skills = request.data.get('secondary_skills', '')
-            remarks = request.data.get('remarks', "")
-            score = request.data.get('score', 0)
-
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating = primary_skills,
-                secondary_skills_ratings = secondary_skills,
-                round_num = round_num,
-                remarks = remarks,
-                status = "REJECTED",
-                job_application = application,
-                score = score,
-                job_id = application.job_id,
-                interview_schedule = application.next_interview,
-            )
-            application.next_interview.status = 'completed'
-            application.next_interview.save()
-            application.status = 'rejected'
-            application.save()
-
-            return Response({"message":"Rejected successfully"},status = status.HTTP_201_CREATED)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-
-
-class InterviewersView(APIView):
-    def get(self, request,*args, **kwargs):
-        try:
-            user = request.user
-            client = ClientDetails.objects.get(user = user)
-            serializer = ClientDetailsInterviewersSerializer(client)
-            return Response(serializer.data["interviewers"], status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-    def post(self, request):
-        try:
-            user = request.user
-            client = ClientDetails.objects.get(user = user)
-            # org = Organization.objects.get(manager=user)
-
-            username = request.data.get('username')
-            email = request.data.get('email')
-
-            password = generate_random_password()
-
-            user_serializer = CustomUserSerializer(data={
-                'email': email,
-                'username': username,
-                'role': CustomUser.INTERVIEWER,
-                'credit': 0,
-                'password': password,
-            })
-
-            if user_serializer.is_valid(raise_exception=True):
-                new_user = user_serializer.save()
-                new_user.set_password(password)
-                new_user.save()
-                
-                client.interviewers.add(new_user)
-
-                subject = "Account Created on HireSync"
-                message = f"""
-Dear {username},
-
-Welcome to HireSync! Your interviewer account has been successfully created.
-
-Here are your account details:
-Username: {username}
-Email: {email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-
-                send_mail(
-                    subject=subject,
-                    message=message,
-                    from_email='',
-                    recipient_list=[email],
-                    fail_silently=False,
-                )
-
-                return Response(
-                    {"message": "Interviewer account created successfully, and email sent."},
-                    status=status.HTTP_201_CREATED
-                )
-
-        except ClientDetails.DoesNotExist:
-            return Response(
-                {"detail": "Client not found."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
-class CandidateProfileView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-                candidate_profile_serializer = CandidateProfileSerializer(candidate_profile)
-                return Response(candidate_profile_serializer.data, status = status.HTTP_200_OK)
-            
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)
-        
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-    def put(self,request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-                data = request.data
-
-                skills = data.get('skills')
-                
-                date_str= data.get('date_of_birth', None)
-
-                formatted_date = date_str
-                
-                print(formatted_date)
-
-                profile = request.FILES.get('profile', None)
-                input_data_json = {
-                    "profile": profile,
-                    "about" : data.get('about',""),
-                    "first_name" : data.get('first_name',""),
-                    "middle_name" : data.get('middle_name',''),
-                    "last_name" : data.get('last_name',' '),
-                    "communication_address" : data.get('communication_address',''),
-                    "permanent_address": data.get('permanent_address',''),
-                    "phone_num" : data.get('phone_num',''),
-                    "date_of_birth": formatted_date,
-                    "designation": data.get('designation',''),
-                    "linked_in" : data.get('linked_in', None),
-                    "instagram": data.get('instagram', None),
-                    "facebook":data.get('facebook', None),
-                    "blood_group": data.get('blood_group'),
-                    "experience_years": data.get('experience_years',""),
-                    "skills": skills,
-                }
-                
-                candidate_profile_serializer = CandidateProfileSerializer(instance = candidate_profile, data = input_data_json, partial = True)
-
-                if(candidate_profile_serializer.is_valid()):
-                    candidate_profile_serializer.save()
-                    return Response({"message":"Candidate Profile updated successfully"}, status = status.HTTP_200_OK)
-
-                else:
-                    print(candidate_profile_serializer.errors)
-                    return Response({"error":candidate_profile_serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
-
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-class CandidateExperiencesView(APIView):
-       
-    parser_classes = (MultiPartParser, FormParser)
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-                candidate_certificates = CandidateExperiences.objects.filter(candidate = candidate_profile)
-
-                candidate_certificate_serializer = CandidateExperienceSerializer(candidate_certificates,many=True)
-                return Response(candidate_certificate_serializer.data, status=status.HTTP_200_OK)
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
-            except CandidateCertificates.DoesNotExist:
-                return Response({"message":"Candidate Doesnot Added any certificates"}, status= status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-    def post(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-
-                experience = request.data
-                if experience: 
-                    CandidateExperiences.objects.create(
-                        candidate = candidate_profile,
-                        company_name= experience.get('company_name'),
-                        from_date = experience.get('from_date'),
-                        to_date = experience.get('to_date'),
-                        status = experience.get('status'),
-                        reason_for_resignation = experience.get('reason_for_resignation'),
-                        relieving_letter = experience.get('relieving_letter',''),
-                        pay_slip1 = experience.get('pay_slip1',''),
-                        pay_slip2 = experience.get('pay_slip2',''),
-                        pay_slip3 = experience.get('pay_slip3',''),
-                    )
-
-                    return Response({"error":"Candidate Experiences added successfully"}, status = status.HTTP_200_OK)
-                
-                else:
-                    return Response({"error":"You haven't added any experiences"}, status = status.HTTP_400_BAD_REQUEST)
-                
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request):
-        try: 
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-
-            if request.user.role != 'candidate':
-                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
-
-            id = request.GET.get('id')
-
-            try:
-                id = int(id)  
-            except (TypeError, ValueError):
-                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
-
-            experience = get_object_or_404(CandidateExperiences, id=id)
-
-            if experience.candidate.name.id == request.user.id:
-                experience.delete()
-                return Response({"message": "Candidate Experience deleted successfully"}, status=status.HTTP_200_OK)
-            else:
-                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-             
-class CandidateCertificatesView(APIView):
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-                candidate_certificates = CandidateCertificates.objects.filter(candidate = candidate_profile)
-
-                candidate_certificate_serializer = CandidateCertificateSerializer(candidate_certificates,many=True)
-                return Response(candidate_certificate_serializer.data, status=status.HTTP_200_OK)
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
-            except CandidateCertificates.DoesNotExist:
-                return Response({"message":"Candidate Doesnot Added any certificates"}, status= status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-    
-    parser_classes = (MultiPartParser, FormParser)
-
-    def post(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-            
-            if request.user.role != 'candidate':
-                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name=user)
+                candidate_profile = CandidateProfile.objects.get(id=candidate_id)
             except CandidateProfile.DoesNotExist:
                 return Response({"error": "Candidate profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            education = CandidateEducation.objects.filter(candidate=candidate_profile)
+            experience = CandidateExperiences.objects.filter(candidate=candidate_profile)
+
+            experience_data = CandidateExperienceSerializer(experience, many=True)
+            education_data = CandidateEducationSerializer(education, many=True)
+
+            candidate_documents = CandidateDocuments.objects.filter(candidate=candidate_profile)
             
-            data = request.data
-            if not data.get('certificate_name') or not data.get('certificate_image'):
-                return Response({"error": "Both 'certificate_name' and 'certificate_image' are required"}, status=status.HTTP_400_BAD_REQUEST)
+            salary_string = f"{candidate_profile.expected_salary} Expected / {candidate_profile.current_salary} Current"
+            profile_percentage = calculate_profile_percentage(candidate_profile)
 
-            certificate_name = data.get('certificate_name')
-            certificate_image = data.get('certificate_image')
+            if not  candidate_profile.skills == "": 
 
-            if not hasattr(certificate_image, 'name') or not certificate_image.content_type.startswith('image/'):
-                return Response({"error": "Invalid certificate image"}, status=status.HTTP_400_BAD_REQUEST)
+                candidate_data = {
+                    "candidate_name": candidate_profile.name.username,
+                    "skills": candidate_profile.skills if candidate_profile.skills else "",
+                    "education": education_data.data,
+                    "experience": experience_data.data,
+                    "salary": salary_string,
+                    "extra_info": candidate_profile.joining_details,
+                    "candidate_phone": candidate_profile.phone_num,
+                    "candidate_email": candidate_profile.email,
+                    "candidate_location": candidate_profile.permanent_address,
+                    "candidate_documents": list(candidate_documents.values()),
+                    "profile_percentage": profile_percentage,
+                }
 
-            CandidateCertificates.objects.create(
-                candidate=candidate_profile,
-                certificate_name=certificate_name,
-                certificate_image=certificate_image
-            )
+            else : 
+                candidate_data = None
 
-            return Response({"message": "Candidate certificate added successfully"}, status=status.HTTP_201_CREATED)
-        
-        except Exception as e:
-            # Log the error for debugging
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def delete(self, request):
-        try: 
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            user = candidate_profile.name
+            applied_jobs_list = []
 
-            if request.user.role != 'candidate':
-                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+            all_job_applications = JobApplication.objects.filter(resume__candidate_name=user)
+            for job in all_job_applications:
+                try:
+                    job_id = job.job_id.id
+                    title = JobPostings.objects.get(id=job_id).job_title
+                    applied_jobs_list.append({"job_id": job_id, "title": title})
+                except JobPostings.DoesNotExist:
+                    continue  
 
-            id = request.GET.get('id')
-
-            try:
-                id = int(id)  
-            except (TypeError, ValueError):
-                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
-
-            certificate = get_object_or_404(CandidateCertificates, id=id)
-
-            if certificate.candidate.name.id == request.user.id:
-                certificate.delete()
-                return Response({"message": "Candidate Certificate deleted successfully"}, status=status.HTTP_200_OK)
-            else:
-                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-class CandidateEducationView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-                candidate_certificates = CandidateEducation.objects.filter(candidate = candidate_profile)
-
-                candidate_education_serializer = CandidateEducationSerializer(candidate_certificates,many=True)
-                return Response(candidate_education_serializer.data, status=status.HTTP_200_OK)
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
-        except CandidateCertificates.DoesNotExist:
-            return Response({"message":"Candidate Doesnot Added any education details"}, status= status.HTTP_200_OK)
-        
-    def post(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
-
-
-
-            user = request.user
-            try:
-                candidate_profile = CandidateProfile.objects.get(name = user)
-                # print(request.body)
-                education = request.data
-                print(education)
-                if education:
-                    
-                        CandidateEducation.objects.create(
-                            candidate = candidate_profile,
-                            institution_name = education.get('institution_name'),
-                            education_proof = education.get('education_proof'),
-                            field_of_study = education.get('field_of_study'),
-                            start_date = education.get('start_date'),
-                            end_date = education.get('end_date'),
-                            degree = education.get('degree')
-                        )
-
-                        return Response({"error": "Your education details added successfully"}, status = status.HTTP_200_OK)
-                
-                else:
-                    return Response({"error":"You haven't send any education details"}, status = status.HTTP_400_BAD_REQUEST)
-                
-            except CandidateProfile.DoesNotExist:
-                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
-    def delete(self, request):
-        try: 
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-
-            if request.user.role != 'candidate':
-                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
-
-            id = request.GET.get('id')
-
-            try:
-                id = int(id)  
-            except (TypeError, ValueError):
-                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
-
-            education = get_object_or_404(CandidateEducation, id=id)
-
-            if education.candidate.name.id == request.user.id:
-                education.delete()
-                return Response({"message": "Candidate Education deleted successfully"}, status=status.HTTP_200_OK)
-            else:
-                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-class CandidateUpcomingInterviews(APIView):
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error": "You are not allowed to run this"}, status=status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            
-            candidate_profile = CandidateProfile.objects.get(name=user)
-
-            applications = JobApplication.objects.filter(resume__candidate_name=candidate_profile)
-
-            applications_json = []
-
-            for application in applications:
-                if application.next_interview is not None:
-                    next_interview = application.next_interview
+            all_feedbacks = []
+            candidate_evaluations = CandidateEvaluation.objects.filter(job_application__in=all_job_applications)
+            for feedback in candidate_evaluations:
+                if feedback.remarks:
                     try:
-                        application_json = {
-                            "round_num": application.round_num,
-                            "job_id": {
-                                "id": application.job_id.id,
-                                "job_title": application.job_id.job_title,
-                                "company_name": application.job_id.username.username
-                            },
-                            "interviewer_name": next_interview.interviewer.name.username,
-                            "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
-                        }
-                        applications_json.append(application_json)  
-                    except Exception as e:
-                        print(str(e))
-                        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                        interviewer_name = feedback.interview_schedule.interviewer.name.username
+                    except AttributeError:
+                        interviewer_name = "Unknown"
+                    all_feedbacks.append({
+                        "interviewer_name": interviewer_name,
+                        "feedback": feedback.remarks
+                    })
 
-            return Response(applications_json, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PrevInterviewRemarksView(APIView):
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not request.user.role == 'interviewer':
-                return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
-
-            resume_id = request.GET.get('id')
-            resume = CandidateResume.objects.get(id = resume_id)
-            application_id = JobApplication.objects.get(resume = resume).id
-            if not application_id:
-                return Response({"error":"Application ID is requrired"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            application_evaluations = CandidateEvaluation.objects.filter(job_application = application_id)
-            evaluation_serializer = CandidateEvaluationSerializer(application_evaluations, many=True)
-            
-            return Response({"data":evaluation_serializer.data},status= status.HTTP_200_OK)
-        
+            return Response({
+                "feedback": all_feedbacks,
+                "applied_jobs": applied_jobs_list,
+                "candidate_data": candidate_data
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-class CandidateApplicationsView(APIView):
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not request.user.role == 'candidate':
-                return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
-
-            user = CustomUser.objects.get(username = request.user)
-            candidate_resume = CandidateResume.objects.get(candidate_name = user.username, candidate_email = user.email)
-            applications= JobApplication.objects.filter(resume = candidate_resume)
-            applications_serialized = JobApplicationSerializer(applications, many=True)
-            return Response({"data":applications_serialized.data}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-class RecruitersList(APIView):
-
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-
-            if request.user.role != 'manager':  
-                return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
-
-            org = Organization.objects.filter(manager=request.user).first()  
-            if not org:
-                print("org not found")
-                return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
-
-            all_recruiters = RecruiterProfile.objects.filter(organization=org)
-
-            id_list = [
-                {"id": recruiter.name.id, "name": recruiter.name.username, "role": "recruiter"}
-                for recruiter in all_recruiters
-            ]
-
-            id_list.append({"id": request.user.id, "name": request.user.username, "role": "manager"})  
-
-            return Response({"data": id_list}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  # Changed status to 500
-
-class RecruiterProfileView(APIView):
-
-    permission_classes = [IsRecruiter]
-
-    def get(self, request):
-        try:
-            user = request.user
-            user = CustomUser.objects.get(username = user).id
-            print(user)
-            try:
-                recruiter_profile = RecruiterProfile.objects.get(name = user)
-            
-            except RecruiterProfile.DoesNotExist:
-                return Response({"error":"Recruiter Profile does not exists"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            recruiter_serializer = RecruiterProfileSerializer(recruiter_profile)
-            return Response({"data":recruiter_serializer.data}, status= status.HTTP_200_OK)
-
-        except Exception as e:
-            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-class CloseJobView(APIView):
-    permission_classes = [IsManager]
-    def post(self, request):
-        try:
-            job_id = request.GET.get('id')
 
-            if not job_id:
-                return Response({"error":"job_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                job = JobPostings.objects.get(id = job_id)
-            except JobPostings.DoesNotExist:
-                return Response({"error":"Job Post does not exists"},status=status.HTTP_400_BAD_REQUEST)
-
-            job.status = 'closed'
-            job_applications = JobApplication.objects.filter(job_id = job).exclude(status='selected').exclude(status='rejected')
-
-            for job_application in job_applications:
-                job_application.status = 'rejected'
-                job_application.save()
-
-            job.save()
-
-            # generate invoice here for single job post
-            return Response({"message":"Job  Post Closed Successfully"},status=status.HTTP_200_OK )
-
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-class InvoicesAPIView(APIView):
-    permission_classes = [IsManager]
-
+class CandidateStatusForJobView(APIView):
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        job_id = request.GET.get("job_id")
+        candidate_id = request.GET.get("candidate_id")
+
+        if not job_id or not candidate_id:
+            return Response({"error": "Job ID and Candidate ID are required"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            organization = Organization.objects.get(manager = request.user)
-            jobs= JobPostings.objects.filter(organization = organization).filter(status = 'closed')
-            print(request.user)
+            job_details = get_object_or_404(JobPostings, id=job_id)
+            candidate = get_object_or_404(CandidateProfile, id=candidate_id)
 
-            if not jobs.exists():
-                return Response({"noJobs": True}, status=status.HTTP_200_OK)
+            is_new_position = not JobPostings.objects.filter(job_title=job_details.job_title, organization__manager=request.user).exclude(id=job_id).exists()
+
+            candidate_skills = set(candidate.skills.split(",")) if candidate.skills else set()
+            job_skills = set(job_details.primary_skills.split(",") + job_details.secondary_skills.split(","))
             
-            invoices = []
+            matched_skills = list(candidate_skills & job_skills)
+            unmatched_skills = list(job_skills - candidate_skills)
 
-            for job in jobs:
-                total = 100
-                context = {
-                    "agency_name": job.organization.name,
-                    "client_name": job.username.username,
-                    "client_email": job.username.email,
-                    "job_title": job.job_title,
-                    "ctc": job.ctc,
-                    "service_fee":23.13,
-                    "payment_within": 32,
-                    "invoice_id": 10212,
-                    "invoice_after": 12,
-                    "replacement_clause" : 23,
-                    "date":45,
-                    "total":total,
-                    "email":job.username.email
-                }
-
-                invoice = generate_invoice(context)
-                # buffer = generate_invoice(context)
-                # buffer.seek(0)
-
-                # pdf_base64 = base64.b64encode(buffer.read()).decode('utf-8')
-
-                invoices.append({"invoice":invoice, "job_title":job.job_title, "job_id":job.id})
-
-            return Response({"invoices":invoices}, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-
-class AgencyDashboardAPI(APIView):
-    permission_classes = [IsManager]
-    def get(self, request):
-        try:
-            user = request.user
-            agency_name = Organization.objects.get(manager = user).name
-
-            approval_pending = JobPostings.objects.filter(organization__name = agency_name, approval_status='pending').count()
-            interviews_scheduled = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).count()
-            recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, is_assigned=None).count()
-            jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(organization__name=agency_name).count()  
-            opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
-
-            upcoming_interviews = []
-            applications = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).order_by('-next_interview__schedule_date')[:20]
-
-            for application in applications:
-                application_details = {
-                    "interviewer_name" : application.next_interview.interviewer.name.username,
-                    "round_num" : application.round_num,
-                    "candidate_name": application.resume.candidate_name,
-                    "scheduled_time": application.next_interview.schedule_date,
-                    "job_title": application.job_id.job_title,
-                }
-
-                upcoming_interviews.append(application_details)
-
-            latest_jobs = JobPostings.objects.filter(organization__name = agency_name).order_by('-created_at')[:10]
+            job_application = JobApplication.objects.filter(resume__candidate_name=candidate.name, job_id=job_id).first()
+            if not job_application:
+                return Response({"error": "Candidate has not applied for this job"}, status=status.HTTP_404_NOT_FOUND)
             
-            jobs_details = []
-            for job in latest_jobs:
+            num_of_rounds =InterviewerDetails.objects.filter(id = job_id).count()
+            total_rounds = [
+                'Shortlisted',
+            ]
+            for i in range(1,num_of_rounds+1):
+                total_rounds.append(f"Round-{i}")
+            total_rounds.append("Rejected")
+            total_rounds.append("Selected")
 
-                selected = JobApplication.objects.filter(job_id = job, status = 'selected').count()
-                rejected = JobApplication.objects.filter(job_id = job.id, status = "rejected").count()
-                applications = JobApplication.objects.filter(job_id = job.id).count()
-                number_of_rounds =  InterviewerDetails.objects.filter(job_id = job.id).count()
-                rejected_at_last_round = JobApplication.objects.filter(job_id = job.id, round_num = number_of_rounds, status = 'rejected').count()
-                interviewed = selected + rejected_at_last_round
+            if job_application.status == "rejected":
+                selected_round = "Rejected"
+            else:
+                selected_round = f"Round-{job_application.round_num}" if job_application.round_num else "Not Assigned"
 
-
-                job_details = {
-                    "role":job.job_title,
-                    "positions_left": job.num_of_positions - selected,
-                    "applications": applications,
-                    "interviewed":interviewed,
-                    "rejected": rejected,
-                    "feedback_pending": 0,
-                    "offered": selected,
-                }
-
-                jobs_details.append(job_details)
-
-            data = {
-                "approval_pending": approval_pending,
-                "interviews_scheduled": interviews_scheduled,
-                "recruiter_allocation_pending": recruiter_allocation_pending,
-                "jobpost_edit_requests": jobpost_edit_requests,
-                "opened_jobs": opened_jobs
+            next_interview = getattr(job_application, 'next_interview', None)
+            interview_data = {
+                "next_round_time": next_interview.schedule_date if next_interview else None,
+                "interviewer": next_interview.interviewer.name.username if next_interview else None,
+                "meet_link": next_interview.meet_link if next_interview else None,
+                "interview_type": next_interview.interviewer.type_of_interview if next_interview else None,
+                "interview_mode": next_interview.interviewer.mode_of_interview if next_interview else None,
             }
 
-            return Response({"data":data, "latest_jobs":jobs_details, "upcoming_interviews":upcoming_interviews }, status=status.HTTP_200_OK)
+            response_data = {
+                "current_stage": job_application.status,
+                "recruiter_name": job_application.sender.username if job_application.sender else None,
+                "num_of_rounds": InterviewerDetails.objects.filter(job_id=job_details).count(),
+                "matched_skills": matched_skills,
+                "unmatched_skills": unmatched_skills,
+                "new_position": is_new_position,
+                "job_experience": job_details.years_of_experience,
+                "job_graduation": job_details.qualifications,
+                "num_of_positions": job_details.num_of_positions,
+                "created_by": job_details.username.username,
+                "created_at": job_details.created_at,
+                "all_rounds" : total_rounds,
+                "selected_round": selected_round,
+                **interview_data,
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class NotificationToUpdateProfileView(APIView):
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            candidate_id = request.GET.get('id')
+
+            if not candidate_id:
+                return Response({"error":"Candidate Id is not sent"}, status= status.HTTP_400_BAD_REQUEST)
+
+            try:
+                candidate_email =  CandidateProfile.objects.get(id = candidate_id).email
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Candidate Profile Does Not Exists"}, status=status.HTTP_400_BAD_REQUEST)
+            message = """
+Your Profile is not updated yet!
+Please update the profile
+Interviewers are waiting to check your profile
+"""
+
+            subject = "Update your profile - HireSync!"
+            try:
+                send_mail( 
+                    subject=subject,
+                    message= message,
+                    recipient_list=[candidate_email],
+                    from_email='',
+                )
+
+                return Response({"message":"Notification Sent Successfully"}, status=status.HTTP_200_OK)
+            
+            except Exception as e:
+                print(str(e))
+                return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
             print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

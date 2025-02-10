@@ -1,0 +1,452 @@
+from ..models import *
+from ..permissions import *
+from ..serializers import *
+from ..authentication_views import *
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.db import transaction
+from django.contrib.auth import authenticate
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
+from django.conf import settings 
+from django.core.mail import send_mail
+from rest_framework.parsers import MultiPartParser, FormParser
+from datetime import datetime
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.shortcuts import render
+
+from django.shortcuts import get_object_or_404
+from ..utils import *
+
+
+
+# Complete Candidate Profile
+
+# Candidate basic details
+class CandidateProfileView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                candidate_profile_serializer = CandidateProfileSerializer(candidate_profile)
+                return Response(candidate_profile_serializer.data, status = status.HTTP_200_OK)
+            
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+    def put(self,request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                data = request.data
+
+                skills = data.get('skills')
+                
+                date_str= data.get('date_of_birth', None)
+
+                formatted_date = date_str
+                
+                print(formatted_date)
+
+                profile = request.FILES.get('profile', None)
+                input_data_json = {
+                    "profile": profile,
+                    "about" : data.get('about',""),
+                    "first_name" : data.get('first_name',""),
+                    "middle_name" : data.get('middle_name',''),
+                    "last_name" : data.get('last_name',' '),
+                    "communication_address" : data.get('communication_address',''),
+                    "permanent_address": data.get('permanent_address',''),
+                    "phone_num" : data.get('phone_num',''),
+                    "date_of_birth": formatted_date,
+                    "designation": data.get('designation',''),
+                    "linked_in" : data.get('linked_in', None),
+                    "instagram": data.get('instagram', None),
+                    "facebook":data.get('facebook', None),
+                    "blood_group": data.get('blood_group'),
+                    "experience_years": data.get('experience_years',""),
+                    "skills": skills,
+                }
+                
+                candidate_profile_serializer = CandidateProfileSerializer(instance = candidate_profile, data = input_data_json, partial = True)
+
+                if(candidate_profile_serializer.is_valid()):
+                    candidate_profile_serializer.save()
+                    return Response({"message":"Candidate Profile updated successfully"}, status = status.HTTP_200_OK)
+
+                else:
+                    print(candidate_profile_serializer.errors)
+                    return Response({"error":candidate_profile_serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
+
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+# Candidate Experiences  Add or View  
+class CandidateExperiencesView(APIView):
+       
+    parser_classes = (MultiPartParser, FormParser)
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                candidate_certificates = CandidateExperiences.objects.filter(candidate = candidate_profile)
+
+                candidate_certificate_serializer = CandidateExperienceSerializer(candidate_certificates,many=True)
+                return Response(candidate_certificate_serializer.data, status=status.HTTP_200_OK)
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+            except CandidateCertificates.DoesNotExist:
+                return Response({"message":"Candidate Doesnot Added any certificates"}, status= status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+
+                experience = request.data
+                if experience: 
+                    CandidateExperiences.objects.create(
+                        candidate = candidate_profile,
+                        company_name= experience.get('company_name'),
+                        from_date = experience.get('from_date'),
+                        to_date = experience.get('to_date'),
+                        status = experience.get('status'),
+                        reason_for_resignation = experience.get('reason_for_resignation'),
+                        relieving_letter = experience.get('relieving_letter',''),
+                        pay_slip1 = experience.get('pay_slip1',''),
+                        pay_slip2 = experience.get('pay_slip2',''),
+                        pay_slip3 = experience.get('pay_slip3',''),
+                    )
+
+                    return Response({"error":"Candidate Experiences added successfully"}, status = status.HTTP_200_OK)
+                
+                else:
+                    return Response({"error":"You haven't added any experiences"}, status = status.HTTP_400_BAD_REQUEST)
+                
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request):
+        try: 
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            id = request.GET.get('id')
+
+            try:
+                id = int(id)  
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+            experience = get_object_or_404(CandidateExperiences, id=id)
+
+            if experience.candidate.name.id == request.user.id:
+                experience.delete()
+                return Response({"message": "Candidate Experience deleted successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+             
+
+# Candidate Ceritificates Add Or View
+class CandidateCertificatesView(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                candidate_certificates = CandidateCertificates.objects.filter(candidate = candidate_profile)
+
+                candidate_certificate_serializer = CandidateCertificateSerializer(candidate_certificates,many=True)
+                return Response(candidate_certificate_serializer.data, status=status.HTTP_200_OK)
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+            except CandidateCertificates.DoesNotExist:
+                return Response({"message":"Candidate Doesnot Added any certificates"}, status= status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+    
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name=user)
+            except CandidateProfile.DoesNotExist:
+                return Response({"error": "Candidate profile not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            data = request.data
+            if not data.get('certificate_name') or not data.get('certificate_image'):
+                return Response({"error": "Both 'certificate_name' and 'certificate_image' are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            certificate_name = data.get('certificate_name')
+            certificate_image = data.get('certificate_image')
+
+            if not hasattr(certificate_image, 'name') or not certificate_image.content_type.startswith('image/'):
+                return Response({"error": "Invalid certificate image"}, status=status.HTTP_400_BAD_REQUEST)
+
+            CandidateCertificates.objects.create(
+                candidate=candidate_profile,
+                certificate_name=certificate_name,
+                certificate_image=certificate_image
+            )
+
+            return Response({"message": "Candidate certificate added successfully"}, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            # Log the error for debugging
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def delete(self, request):
+        try: 
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            id = request.GET.get('id')
+
+            try:
+                id = int(id)  
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+            certificate = get_object_or_404(CandidateCertificates, id=id)
+
+            if certificate.candidate.name.id == request.user.id:
+                certificate.delete()
+                return Response({"message": "Candidate Certificate deleted successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+# Candidate Education Details Add or View
+class CandidateEducationView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                candidate_certificates = CandidateEducation.objects.filter(candidate = candidate_profile)
+
+                candidate_education_serializer = CandidateEducationSerializer(candidate_certificates,many=True)
+                return Response(candidate_education_serializer.data, status=status.HTTP_200_OK)
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Candidate Profile doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+        except CandidateCertificates.DoesNotExist:
+            return Response({"message":"Candidate Doesnot Added any education details"}, status= status.HTTP_200_OK)
+        
+    def post(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error":"User is not authenticated"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error":"You are not allowed to run this"}, status = status.HTTP_400_BAD_REQUEST)
+
+
+
+            user = request.user
+            try:
+                candidate_profile = CandidateProfile.objects.get(name = user)
+                # print(request.body)
+                education = request.data
+                print(education)
+                if education:
+                    
+                        CandidateEducation.objects.create(
+                            candidate = candidate_profile,
+                            institution_name = education.get('institution_name'),
+                            education_proof = education.get('education_proof'),
+                            field_of_study = education.get('field_of_study'),
+                            start_date = education.get('start_date'),
+                            end_date = education.get('end_date'),
+                            degree = education.get('degree')
+                        )
+
+                        return Response({"error": "Your education details added successfully"}, status = status.HTTP_200_OK)
+                
+                else:
+                    return Response({"error":"You haven't send any education details"}, status = status.HTTP_400_BAD_REQUEST)
+                
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Cant find candidate profile"}, status = status.HTTP_400_BAD_REQUEST)   
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+    def delete(self, request):
+        try: 
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to perform this action"}, status=status.HTTP_403_FORBIDDEN)
+
+            id = request.GET.get('id')
+
+            try:
+                id = int(id)  
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+            education = get_object_or_404(CandidateEducation, id=id)
+
+            if education.candidate.name.id == request.user.id:
+                education.delete()
+                return Response({"message": "Candidate Education deleted successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "You are not allowed to delete this experience"}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Candidates List Of Applications
+class CandidateApplicationsView(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not request.user.role == 'candidate':
+                return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
+
+            user = CustomUser.objects.get(username = request.user)
+            candidate_resume = CandidateResume.objects.get(candidate_name = user.username, candidate_email = user.email)
+            applications= JobApplication.objects.filter(resume = candidate_resume)
+            applications_serialized = JobApplicationSerializer(applications, many=True)
+            return Response({"data":applications_serialized.data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+# Candidate Upcoming Interviews 
+class CandidateUpcomingInterviews(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to run this"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            
+            candidate_profile = CandidateProfile.objects.get(name=user)
+
+            applications = JobApplication.objects.filter(resume__candidate_name=candidate_profile)
+
+            applications_json = []
+
+            for application in applications:
+                if application.next_interview is not None:
+                    next_interview = application.next_interview
+                    try:
+                        application_json = {
+                            "round_num": application.round_num,
+                            "job_id": {
+                                "id": application.job_id.id,
+                                "job_title": application.job_id.job_title,
+                                "company_name": application.job_id.username.username
+                            },
+                            "interviewer_name": next_interview.interviewer.name.username,
+                            "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
+                        }
+                        applications_json.append(application_json)  
+                    except Exception as e:
+                        print(str(e))
+                        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(applications_json, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

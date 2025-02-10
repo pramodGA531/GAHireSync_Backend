@@ -1,0 +1,781 @@
+from ..models import *
+from ..permissions import *
+from ..serializers import *
+from ..authentication_views import *
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.db import transaction
+from django.contrib.auth import authenticate
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
+from django.conf import settings 
+from django.core.mail import send_mail
+from rest_framework.parsers import MultiPartParser, FormParser
+from datetime import datetime
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.shortcuts import render
+
+from django.shortcuts import get_object_or_404
+from ..utils import *
+
+
+
+def generate_random_password(length=8):
+    characters = string.ascii_letters + string.digits
+    password = ''.join(random.choice(characters) for _ in range(length))
+    return password
+
+
+
+# Job Postings
+
+# Get Terms and Conditions by company code
+class GetOrganizationTermsView(APIView):
+    permission_classes = [IsClient]  
+
+    def get(self, request):
+        user = request.user
+        org_code = request.GET.get('org_code')
+        try:
+            organization = Organization.objects.get(org_code = org_code)
+
+        except Organization.DoesNotExist:
+            return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        client = ClientDetails.objects.get(user=user)
+        clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
+
+        if clientTerms.count() > 0:
+            organization_terms=clientTerms.first()
+        else:
+            organization_terms = OrganizationTerms.objects.get(organization = organization)
+
+        serializer = OrganizationTermsSerializer(organization_terms)
+        data = serializer.data
+        context = {
+            "service_fee": data.get("service_fee"),
+            "invoice_after": data.get("invoice_after"),
+            "payment_within": data.get("payment_within"),
+            "replacement_clause": data.get("replacement_clause"),
+            "interest_percentage": data.get("interest_percentage"),
+            "data":data
+        }
+
+        context['data_json'] = json.dumps(context['data'])
+
+        html = render_to_string("organizationTerms.html", context)
+        return HttpResponse(html)
+
+# Create Job Post
+class JobPostingView(APIView):
+    permission_classes = [IsAuthenticated]  
+
+    def post(self, request):
+        data = request.data
+        username = request.user
+        organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
+        if not username or username.role != 'client':
+            return Response({"error": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not organization:
+            return Response({"error": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                interview_rounds = data.get('interview_rounds', [])
+                acceptedterms = data.get('accepted_terms', [])
+                job_close_duration_raw = data.get('job_close_duration')
+                try:
+                    job_close_duration = datetime.strptime(job_close_duration_raw, "%Y-%m-%dT%H:%M:%S.%fZ").date()
+                except (ValueError, TypeError):
+                    return Response({"error": "Invalid date format for job_close_duration. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
+                job_posting = JobPostings.objects.create(
+                    username=username,
+                    organization=organization,
+                    job_title=data.get('job_title', ''),
+                    job_department=data.get('job_department'),
+                    job_description=data.get('job_description'),
+                    primary_skills=data.get('primary_skills'),
+                    secondary_skills=data.get('secondary_skills'),
+                    years_of_experience=data.get('years_of_experience','Not Specified'),
+                    ctc=data.get('ctc',"Not Specified"),
+                    rounds_of_interview = len(interview_rounds),
+                    job_locations=data.get('job_locations'),
+                    job_type=data.get('job_type'),
+                    job_level=data.get('job_level'),
+                    qualifications=data.get('qualifications'),
+                    timings=data.get('timings'),
+                    other_benefits=data.get('other_benefits'),
+                    working_days_per_week=data.get('working_days_per_week'),
+                    decision_maker=data.get('decision_maker'),
+                    decision_maker_email=data.get('decision_maker_email'),
+                    bond=data.get('bond'),
+                    rotational_shift = data.get('rotational_shift') == "yes",
+                    age = data.get('age_limit'),
+                    gender = data.get('gender'), 
+                    industry = data.get('industry'),
+                    differently_abled = data.get('differently_abled'),
+                    visa_status = data.get('visa_status'),
+                    time_period = data.get('time_period'),
+                    notice_period = data.get('notice_period'),
+                    notice_time = data.get('notice_time'),
+                    qualification_department = data.get('qualification_department'),
+                    languages = data.get('languages'),
+                    num_of_positions = data.get('num_of_positions'),
+                    job_close_duration  = job_close_duration,
+                    status='opened',
+                    is_approved=False,
+                    is_assigned=None,
+                    created_at=None
+                )
+
+                if interview_rounds:
+                    for round_data in interview_rounds:
+                        interviewer = CustomUser.objects.get(username = round_data.get('name'))
+                        InterviewerDetails.objects.create(
+                            job_id=job_posting,
+                            round_num=round_data.get('round_num'),
+                            name=interviewer,
+                            type_of_interview=round_data.get('type_of_interview', ''),
+                            mode_of_interview=round_data.get('mode_of_interview'),
+                        )
+                        print("mode of interview is ",round_data.get('mode_of_interview'), " and total interviewer data is ",round_data)
+                client = ClientDetails.objects.get(user=username)
+                client_message = f"""
+    Dear {username.first_name},
+    Your job posting for "{job_posting.job_title}" has been successfully created with the following details:
+
+    **Organization:** {organization.name}
+    **Job Title:** {job_posting.job_title}
+    **Department:** {job_posting.job_department}
+    **Job Location:** {job_posting.job_locations}
+    **CTC:** {job_posting.ctc}
+    **Years of Experience Required:** {job_posting.years_of_experience}
+    **Primary Skills:** {(job_posting.primary_skills or [])}
+    **Secondary Skills:** {(job_posting.secondary_skills or [])}
+
+  
+
+    Thank you for using our platform.
+
+    Best regards,
+    The Recruitment Team
+"""
+
+                manager_message = f"""
+Dear {organization.manager.first_name},
+
+A new job posting has been created for your organization "{organization.name}" by {username.first_name} {username.last_name}.
+
+**Job Title:** {job_posting.job_title}
+**Department:** {job_posting.job_department}
+**Location:** {job_posting.job_locations}
+**CTC:** {job_posting.ctc}
+**Years of Experience:** {job_posting.years_of_experience}
+
+
+
+Please review and approve the posting at your earliest convenience.
+
+Best regards,
+The Recruitment Team
+"""
+
+                send_mail(
+                    subject="Job Posting Created Successfully",
+                    message=client_message,
+                    from_email='',
+                    recipient_list=[username.email]
+                )
+
+                send_mail(
+                    subject="New Job Posting Created",
+                    message=manager_message,
+                    from_email='',
+                    recipient_list=[organization.manager.email]
+                )
+
+                clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
+                if clientTerms.count() < 0:
+                    ClientTermsAcceptance.objects.create(client=client,organization=organization,service_fee = acceptedterms.service_fee,replacement_clause = acceptedterms.replacement_clause,invoice_after = acceptedterms.invoice_after,payment_within = acceptedterms.payment_within,interest_percentage = acceptedterms.interest_percentage)
+            return Response(
+                {"message": "Job and interview rounds created successfully", "job_id": job_posting.id},
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            print("error is ",str(e))
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def put(self, request, job_id):
+        job_posting = get_object_or_404(JobPostings, id=job_id)
+
+        data = request.data
+
+        if job_posting.username != request.user:
+            return Response({"error": "You do not have permission to edit this job posting."}, status=status.HTTP_403_FORBIDDEN)
+
+        job_posting.job_title = data.get('job_title', job_posting.job_title)
+        job_posting.job_department = data.get('job_department', job_posting.job_department)
+        job_posting.job_description = data.get('job_description', job_posting.job_description)
+        job_posting.primary_skills = data.get('primary_skills', job_posting.primary_skills)
+        job_posting.secondary_skills = data.get('secondary_skills', job_posting.secondary_skills)
+        job_posting.years_of_experience = data.get('years_of_experience', job_posting.years_of_experience)
+        job_posting.ctc = data.get('ctc', job_posting.ctc)
+        job_posting.rounds_of_interview = data.get('rounds_of_interview', job_posting.rounds_of_interview)
+        job_posting.job_locations = data.get('job_locations', job_posting.job_locations)
+        job_posting.job_type = data.get('job_type', job_posting.job_type)
+        job_posting.job_level = data.get('job_level', job_posting.job_level)
+        job_posting.qualifications = data.get('qualifications', job_posting.qualifications)
+        job_posting.timings = data.get('timings', job_posting.timings)
+        job_posting.other_benefits = data.get('other_benefits', job_posting.other_benefits)
+        job_posting.working_days_per_week = data.get('working_days_per_week', job_posting.working_days_per_week)
+        job_posting.decision_maker = data.get('decision_maker', job_posting.decision_maker)
+        job_posting.decision_maker_email = data.get('decision_maker_email', job_posting.decision_maker_email)
+        job_posting.bond = data.get('bond', job_posting.bond)
+        job_posting.rotational_shift = data.get('rotational_shift', job_posting.rotational_shift)
+        job_posting.age = data.get('age_limit', job_posting.age)
+        job_posting.gender = data.get('gender', job_posting.gender)
+        job_posting.industry = data.get('industry', job_posting.industry)
+        job_posting.differently_abled = data.get('differently_abled', job_posting.differently_abled)
+        job_posting.visa_status = data.get('visa_status', job_posting.visa_status)
+        job_posting.time_period = data.get('time_period', job_posting.time_period)
+        job_posting.notice_period = data.get('notice_period', job_posting.notice_period)
+        job_posting.languages = data.get('languages', job_posting.languages)
+        job_posting.notice_time = data.get('notice_time', job_posting.notice_time)
+        job_posting.num_of_positions = data.get('num_of_positions', job_posting.num_of_positions)
+        job_posting.job_close_duration = data.get('job_close_duration', job_posting.job_close_duration)
+
+        job_posting.save()
+
+        return Response({"message": "Job posting updated successfully", "id": job_posting.id}, status=status.HTTP_200_OK)
+    
+# View All Job posts by client
+class getClientJobposts(APIView):
+    def get(self,request):
+        try:
+            if request.GET.get('id'):
+                id = request.GET.get('id')
+                jobpost = JobPostings.objects.get(id=id)
+                serializer = JobPostingsSerializer(jobpost)
+            else:
+                jobpost = JobPostings.objects.filter(username = request.user)
+                serializer = JobPostingsSerializer(jobpost,many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            print(str(e))
+            return Response(status=status.HTTP_400_BAD_REQUEST, errorData = (str(e)))
+        
+
+# Edit Requests for the Job
+
+# Edit Requests For Created Job posts
+class JobEditRequestsView(APIView):
+    def get(self, request):
+        try:
+            user = request.user
+            if(user.role != 'client'):
+                return Response({"error":"You are not allowed to view this"}, status=status.HTTP_400_BAD_REQUEST)
+            if(request.GET.get('id')):
+                id = request.GET.get('id')
+                try:  
+                    job = JobPostings.objects.get(id = id)
+                    edited_job = JobPostingsEditedVersion.objects.get(id = id)
+                    if(edited_job.status != 'pending'):
+                        return Response({"error":"You have already reacted to this job post edit"}, status = status.HTTP_400_BAD_REQUEST)
+                    serialized_edited_job = JobPostEditedSerializer(edited_job)
+                    serialized_job = JobPostingsSerializer(job)
+                    return Response({"data":serialized_edited_job.data,"job":serialized_job.data}, status = status.HTTP_200_OK)
+                except JobPostings.DoesNotExist:
+                    return Response({"error":"job posting not found"},status = status.HTTP_400_BAD_REQUEST)
+                except JobPostingsEditedVersion.DoesNotExist:
+                    return Response({"error":"Job posting edited not found"},status = status.HTTP_400_BAD_REQUEST)
+            else:
+                edited_jobs = JobPostingsEditedVersion.objects.filter(username = user)
+                if not edited_jobs:
+                    return Response({"details":"There are no Edit Job Requests"}, status = status.HTTP_200_OK)
+                serialized_edited_jobs = JobPostEditedSerializerMinFields(edited_jobs,many=True)
+                return Response(serialized_edited_jobs.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+# Accept Edit request of the agecy
+class AcceptJobEditRequestView(APIView):
+    def get(self, request):
+        try:
+            id = request.GET.get('id')
+            user = request.user
+            if user.role != 'client':
+                return Response({"error":"You are not allowed to do this request"}, status=status.HTTP_400_BAD_REQUEST)
+            edited_job = JobPostingsEditedVersion.objects.get(id=id)
+            if not edited_job:
+                return Response({"error":"Unable to process your request"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            edited_job = JobPostingsEditedVersion.objects.get(id=id)
+            job_post = JobPostings.objects.get(id=id)
+            organization = job_post.organization
+            manager_mail = organization.manager.email
+
+            edited_data_serializer = JobPostUpdateSerializer(edited_job)
+            edited_data = edited_data_serializer.data
+            if 'notice_time' not in edited_data:
+                edited_data['notice_time'] = ''
+            if 'time_period' not in edited_data:
+                edited_data['time_period'] = ''
+                
+            job_post_serializer = JobPostUpdateSerializer(instance=job_post, data=edited_data, partial=True)
+            if job_post_serializer.is_valid():
+                job_post_serializer.save()
+            else:
+                print(job_post_serializer.errors)
+                return Response(job_post_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            edited_interviewers = InterviewerDetailsEditedVersion.objects.filter(job_id= id)
+            edited_inter_serializer = InterviewDetailsEditedSerializer(edited_interviewers,many = True)
+            edited_inter_data = edited_inter_serializer.data
+
+            for interviewer in edited_inter_data:
+                interviewer_instance = InterviewerDetails.objects.get(job_id = job_post, round_num = interviewer['round_num'] )
+
+                interviewer_instance.type_of_interview = interviewer.get('type_of_interview')
+                interviewer_instance.mode_of_interview = interviewer.get('mode_of_interview')
+                interviewer_instance.save()
+
+            job_edit_status = JobPostingsEditedVersion.objects.get(id = id)
+            job_edit_status.status = 'accepted'
+            job_edit_status.save()
+            
+             
+            
+             
+            client_email_message = f"""
+            # Dear Manager,
+
+            We are pleased to inform you that your requested changes to the job posting have been accepted and processed successfully.
+
+            Thank you for your continued support. The job posting has been updated accordingly.
+
+            Best regards,  
+            The Recruitment Team
+            """
+
+            # Send the email to the manager
+            send_mail(
+                subject="Accepted Edit Request",
+                message=client_email_message,
+                from_email='your-client@example.com',  # Replace with your actual sender email
+                recipient_list=[manager_mail]
+            )
+
+            return Response({"message": "Job edit request accepted successfully"}, status = status.HTTP_200_OK)
+
+        except JobPostingsEditedVersion.DoesNotExist:
+            return Response({"error": "Edited job post not found"}, status=status.HTTP_404_NOT_FOUND)
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+# Reject Edit Request of the agency
+class RejectJobEditRequestView(APIView):
+    def get(self, request):
+        try:
+            if(not request.user):
+                return Response({"error":"You are not an user"},status=status.HTTP_400_BAD_REQUEST)
+            if not request.user.role =='client':
+                return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
+            id = request.GET.get('id')
+            job = JobPostings.objects.get(id=id)
+            organization = organization.organization
+            manager_mail = organization.manager.email
+            edited_job =JobPostingsEditedVersion.objects.get(id = job)
+            edited_job.status = 'rejected'
+            edited_job.save()
+            client_email_message = f"""
+            # Dear Manager,
+
+            We are sorry to inform you that your requested changes to the job posting have been Rejected 
+
+            Thank you for your continued support. The job posting has been Rejected.
+
+            Best regards,  
+            The Recruitment Team
+            """
+
+            # Send the email to the manager
+            send_mail(
+                subject="Accepted Edit Request",
+                message=client_email_message,
+                from_email='your-client@example.com',  # Replace with your actual sender email
+                recipient_list=[manager_mail]
+            )
+            return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
+        except JobPostings.DoesNotExist:
+            return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
+        except JobPostingsEditedVersion.DoesNotExist:
+            return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(e)
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# Interviewers
+
+# Adding and Vieweing Clients Interviewers
+class InterviewersView(APIView):
+    def get(self, request,*args, **kwargs):
+        try:
+            user = request.user
+            client = ClientDetails.objects.get(user = user)
+            serializer = ClientDetailsInterviewersSerializer(client)
+            return Response(serializer.data["interviewers"], status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    def post(self, request):
+        try:
+            user = request.user
+            client = ClientDetails.objects.get(user = user)
+            # org = Organization.objects.get(manager=user)
+
+            username = request.data.get('username')
+            email = request.data.get('email')
+
+            password = generate_random_password()
+
+            user_serializer = CustomUserSerializer(data={
+                'email': email,
+                'username': username,
+                'role': CustomUser.INTERVIEWER,
+                'credit': 0,
+                'password': password,
+            })
+
+            if user_serializer.is_valid(raise_exception=True):
+                new_user = user_serializer.save()
+                new_user.set_password(password)
+                new_user.save()
+                
+                client.interviewers.add(new_user)
+
+                subject = "Account Created on HireSync"
+                message = f"""
+Dear {username},
+
+Welcome to HireSync! Your interviewer account has been successfully created.
+
+Here are your account details:
+Username: {username}
+Email: {email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+
+                send_mail(
+                    subject=subject,
+                    message=message,
+                    from_email='',
+                    recipient_list=[email],
+                    fail_silently=False,
+                )
+
+                return Response(
+                    {"message": "Interviewer account created successfully, and email sent."},
+                    status=status.HTTP_201_CREATED
+                )
+
+        except ClientDetails.DoesNotExist:
+            return Response(
+                {"error": "Client not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+
+# Handling Candidates Applicaitons
+
+# Get all the applicaitons
+class GetResumeView(APIView):
+    def get(self,request):
+        try:
+            user = request.user
+            if (user.role != "client"):
+                return Response({"error":"User client is only allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
+            
+            if request.GET.get("jobid"):
+                id = request.GET.get("jobid")
+                applications_all = JobApplication.objects.filter(job_id = id)
+                applications_serializer = JobApplicationSerializer(applications_all, many=True)
+        
+                candidates = []
+                for application in applications_all:
+                    # if application.status == 'pending':
+                        candidates.append(application.resume)
+
+                candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
+                
+
+                job = JobPostings.objects.get(id = id)
+                job_data = {
+                    "job_id": id,
+                    "job_title" : job.job_title,
+                    "job_description": job.job_description,
+                    "ctc": job.ctc, 
+                }
+                return Response({"data":candidates_serializer.data, "job_data": job_data},   status=status.HTTP_200_OK)
+            
+            else:
+                job_postings = JobPostings.objects.filter(username = user )
+                job_applications_json = []
+                for job_post in job_postings:
+                    job_id = job_post.id
+                    num_of_postings = job_post.num_of_positions
+                    last_date = job_post.job_close_duration
+                    total_applications = JobApplication.objects.filter(job_id=job_id).count()
+                    processing_count = JobApplication.objects.filter(job_id =job_id,status = 'processing').count()
+                    selected_count = JobApplication.objects.filter(job_id=job_id, status="selected").count()
+                    pending_count = JobApplication.objects.filter(job_id=job_id, status="pending").count()
+                    rejected_count = JobApplication.objects.filter(job_id=job_id, status="rejected").count()
+
+                    # Append data to the response list
+                    job_applications_json.append({
+                        "job_id": job_id,
+                        "num_of_postings": num_of_postings,
+                        "last_date": last_date,
+                        "applications_sent": total_applications,
+                        "processing": processing_count,
+                        "selected": selected_count,
+                        "pending": pending_count,
+                        "rejected": rejected_count,
+                    })
+                return Response(job_applications_json, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+     
+# reject applicaiton
+class RejectApplicationView(APIView):
+    def post(self, request):
+        try:
+            user = request.user
+            if not user:
+                return Response({"error":"User Does not exists"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            if user.role != 'client':
+                return Response({"error":"User Role not matches"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            id = request.GET.get('id')          # <--- candidate application id
+            if not id:
+                return Response({"error":"Application Id is mandatory to reject the application"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            candidate_resume = CandidateResume.objects.get(id = id)
+            job_application = JobApplication.objects.get(resume = candidate_resume)
+            job_application.status = "rejected"
+            job_application.feedback = request.data.get("feedback")
+            job_application.next_interview = None
+            job_application.save()
+
+            return Response({"message":"Rejected Successfully"}, status = status.HTTP_200_OK)
+        
+        except CandidateResume.DoesNotExist:
+            return Response({"error":"Candidate Resume not exists with that id"}, status = status.HTTP_400_BAD_REQUEST)
+        
+        except JobApplication.DoesNotExist:
+            return Response({"error": "Job Application does not exists"}, status = status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+# accept applicaiton
+class AcceptApplicationView(APIView):
+
+    permission_classes = [IsClient]
+
+    def create_user_and_profile(self, candidate_name, candidate_email):
+
+        password = generate_random_password()
+
+        # Serialize and create the user
+        user_serializer = CustomUserSerializer(data={
+            'email': candidate_email,
+            'username': candidate_name,
+            'role': CustomUser.CANDIDATE,
+            'credit': 0,
+            'password': password,
+        })
+
+        if user_serializer.is_valid(raise_exception=True):
+            new_user = user_serializer.save()
+            new_user.set_password(password)
+            new_user.save()
+
+            candidate_profile= CandidateProfile.objects.create(
+                name = new_user,
+                email =candidate_email,
+            )
+            subject = "Account Created on HireSync"
+            message = f"""
+Dear {candidate_name},
+
+Welcome to HireSync! Your Candidate account has been successfully created.
+
+Here are your account details:
+Username: {candidate_name}
+Email: {candidate_email}
+Password: {password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: https://hiresync.com/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+                """
+            send_mail(
+                        subject=subject,
+                        message=message,
+                        from_email='noreply@hiresync.com',
+                        recipient_list=[candidate_email],
+                        fail_silently=False,
+                )
+            return candidate_profile
+        else:
+            raise serializers.ValidationError(user_serializer.errors)
+        
+
+    def post(self, request):
+        try:
+            resume_id = request.GET.get('id')
+            
+            try:
+                resume = CandidateResume.objects.get(id = resume_id)
+                job_application = JobApplication.objects.get(resume = resume)
+            except JobApplication.DoesNotExist:
+                return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            with transaction.atomic():
+                job_application.status = 'processing'
+                job_application.round_status = 'pending'
+                job_application.round_num = 1
+                candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                job_application.save()
+
+            return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+  
+   
+class NextInterviewerDetails(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+            job_id = request.GET.get('id')
+            if not job_id:
+                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                job = JobPostings.objects.get(id=job_id)
+            except JobPostings.DoesNotExist:
+                return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            if job.username != request.user:
+                return Response({"error": "You are not authorized to view this job posting"}, status=status.HTTP_403_FORBIDDEN)
+
+            resume_id = request.GET.get('resume_id')
+            if not resume_id:
+                return Response({"error": "Resume ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                job_application = JobApplication.objects.get(resume_id=resume_id, job_id=job)
+            except JobApplication.DoesNotExist:
+                return Response({"error": "Job application not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            next_round = job_application.round_num + 1 if job_application.round_num else 1
+
+            try:
+                next_interview_details = InterviewerDetails.objects.get(job_id=job_id, round_num=next_round)
+                serializer = InterviewerDetailsSerializer(next_interview_details)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except InterviewerDetails.DoesNotExist:
+                return Response({"message": "There are no further rounds"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "An error occurred while processing your request"},status=status.HTTP_400_BAD_REQUEST)
+
+
+# Get all the scheduled interviews for the job
+class ScheduledInterviewsForJobId(APIView):
+    def get(self, request, job_id):
+        try:
+            interviews = InterviewSchedule.objects.select_related("interviewer", "candidate", "job_id").filter(job_id=job_id)
+            serializer = InterviewScheduleSerializer(interviews, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# Get all interview details
+class AllInterviewsView(APIView):
+    def get(self, request):
+        try:
+            if request.user.is_authenticated:
+                if request.user.role != 'client':
+                    return Response({"error":"Sorry, You are not allowed"},status=status.HTTP_400_BAD_REQUEST)                
+
+                # requiredfields-->   job_title, interviewer_name, candidate_name, scheduled_interview, application_status, job_postings_deadline, job_post_status, round_num
+                response_json = []
+                all_interviews = InterviewSchedule.objects.filter(job_id__in = JobPostings.objects.filter(username = request.user).values_list('id', flat=True))
+                for interview in all_interviews:
+                    job_post = JobPostings.objects.get(id = interview.job_id)
+                    job_title = job_post.job_title
+                    interviewer_name = interview.interviewer.name.username
+                    candidate_name = interview.candidate.candidate_name
+                    scheduled_interview = interview.schedule_date
+                    interview_status = interview.status
+                    if JobApplication.objects.get(next_interview = interview):
+                        candidate_status = JobApplication.objects.get(next_interview = interview).status
+                    else:
+                        candidate_staus = "cleared"
+                    job_post_status = job_post.status
+                    job_submission_date = job_post.job_close_duration
+
+                    json_fromat = {
+                        "job"
+                    }
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+     

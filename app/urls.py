@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import *
+from .role_views import *
 from .authentication_views import *
+from .views import *
 
 urlpatterns = [
     path('signup/client/',ClientSignupView.as_view(),name="client_signup"),
@@ -62,7 +63,7 @@ urlpatterns = [
 
     path('negotiate-terms/', NegotiateTermsView.as_view(), name='negotiate-terms'),
     path('agency/recruiters/', RecruitersView.as_view(), name='agency-recruiters'),
-    path('assign-recruiter/', UpdateRecruiterView.as_view(), name='update-recruiters'),
+    path('assign-recruiter/', AssignRecruiterView.as_view(), name='update-recruiters'),
 
     path('candidate/upcoming-interviews/', CandidateUpcomingInterviews.as_view(), name='candidate-upcoming-interviews'),
     path('candidate/profile/', CandidateProfileView.as_view(), name='candidate-profile-details'),
@@ -72,8 +73,13 @@ urlpatterns = [
     path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
 
     path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
+    path('recruiter/schedule_interview/pending_application/', ScheduleInterview.as_view(), name='schedule-interviews'),
     
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
+
+    path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
+    path('candidate_status_for_job/',CandidateStatusForJobView.as_view(), name='candidate-status-for-particular-job'),
+    path('notification_to_update_profile/', NotificationToUpdateProfileView.as_view(), name='notification-to-update-profile'),
 ]

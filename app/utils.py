@@ -17,6 +17,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import six
 from django.core.mail import send_mail
+from .models import *
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
@@ -288,3 +289,29 @@ HireSync Inc.
         from_email="your-email@example.com",
         recipient_list=[user.email],
     )
+
+
+
+def calculate_profile_percentage(candidate):
+           
+        fields_to_check = [
+            'profile', 'about', 'email', 'first_name', 'middle_name', 'last_name',
+            'communication_address', 'current_salary', 'expected_salary', 'joining_details',
+            'permanent_address', 'phone_num', 'date_of_birth', 'designation', 'linked_in',
+            'instagram', 'facebook', 'blood_group', 'experience_years', 'skills'
+        ]
+        
+        total_fields = len(fields_to_check)
+        filled_fields = sum(1 for field in fields_to_check if getattr(candidate, field))
+        
+        # Base profile percentage calculation
+        base_profile_completion = (filled_fields / total_fields) * 80  
+        
+        # Additional weightage for documents and education
+        document_completion = 10 if CandidateDocuments.objects.filter(candidate=candidate).exists() else 0
+        education_completion = 10 if CandidateEducation.objects.filter(candidate=candidate).exists() else 0
+        
+        # Calculate total profile completion
+        profile_completion = base_profile_completion + document_completion + education_completion
+        
+        return round(profile_completion, 2)

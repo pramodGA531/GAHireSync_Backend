@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from .models import *
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -266,3 +268,30 @@ class RecruiterProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecruiterProfile
         fields = '__all__'
+
+
+class CandidateEducationSerializer(serializers.ModelSerializer):
+    result = serializers.SerializerMethodField()
+    class Meta:
+        model = CandidateEducation
+        fields = ['result']
+    
+    def get_result(self, obj):
+        return f"{obj.field_of_study} - {obj.institution_name}"
+
+class CandidateExperienceSerializer(serializers.ModelSerializer):
+    duration = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CandidateExperiences
+        fields = ['company_name','duration']
+
+    def get_duration(self,obj):
+        from_date = obj.from_date
+        to_date = datetime.today().date() if obj.is_working == True else obj.to_date
+
+        if to_date is None:
+            return "Ongoing"  
+
+        diff = relativedelta(to_date, from_date)
+        return f"{diff.years} years, {diff.months} months"

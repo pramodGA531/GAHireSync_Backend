@@ -374,8 +374,9 @@ class InterviewSchedule(models.Model):
     id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)
     interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE,)
-    schedule_date = models.DateTimeField(null= True, blank=True)
+    schedule_date = models.DateTimeField(null= True, blank=True, default="")
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    meet_link = models.URLField(null=True, blank=True)
     round_num = models.IntegerField(default=0)
     status = models.CharField(max_length=20,choices=STATUS_CHOICES, default='scheduled')
 
@@ -390,6 +391,7 @@ class JobApplication(models.Model):
     HOLD = 'hold'
     PENDING = 'pending'
     PROCESSING = 'processing'
+    ACCEPTED = 'accepted'
     APPLIED = 'applied'
 
     STATUS = [
@@ -397,8 +399,13 @@ class JobApplication(models.Model):
         (REJECTED, 'rejected'),
         (HOLD, 'hold'),
         (PENDING, 'pending'),
-        (APPLIED ,'applied'),
         (PROCESSING, 'processing'),
+    ]
+
+    ROUND_STATUS  =[
+        (PENDING , 'pending'),
+        (ACCEPTED, 'accepted'),
+        (REJECTED, 'rejected')
     ]
     id = models.AutoField(primary_key=True)
     resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
@@ -408,6 +415,7 @@ class JobApplication(models.Model):
     receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
     message = models.TextField(null=True, blank=True)
     round_num = models.IntegerField(default=0)
+    round_status = models.CharField(max_length=30, choices=ROUND_STATUS, default='pending')
     next_interview = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE, blank=True, default=None,null=True)
     application_date = models.DateTimeField(auto_now_add=True)
     feedback = models.TextField(blank= True,default= None ,  null=True)
@@ -509,6 +517,9 @@ class CandidateProfile(models.Model):
     middle_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
     communication_address = models.TextField(blank=True)
+    current_salary = models.TextField(blank=True, default='50000')
+    expected_salary = models.TextField(blank=True, default= '70000')
+    joining_details= models.TextField(blank= True, default = 'Can join in 7 days')
     permanent_address = models.TextField(blank=True)
     phone_num = models.CharField(max_length=15, blank=True)  
     date_of_birth = models.DateField(null=True, blank=True)
@@ -526,6 +537,14 @@ class CandidateProfile(models.Model):
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
 
+
+class CandidateDocuments(models.Model):
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name="candidate_documents")
+    document_name = models.CharField(max_length=50)
+    document = models.FileField(upload_to='Candidate/Documents', null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.candidate.name.username}'s {self.document_name}"
 
 class CandidateCertificates(models.Model):
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name='candidate_certificates')
@@ -547,7 +566,7 @@ class CandidateExperiences(models.Model):
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name='candidate_experience')
     company_name = models.CharField(max_length=100)
     from_date = models.DateField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=WORKING)
+    is_working = models.BooleanField(default=False)
     to_date = models.DateField(null=True ,blank=True)
     reason_for_resignation = models.TextField(null=True,blank=True)
     relieving_letter  = models.FileField(upload_to='Candidate/Experience/Leter', null=True, blank=True)

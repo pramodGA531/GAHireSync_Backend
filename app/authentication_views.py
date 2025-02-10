@@ -259,7 +259,7 @@ class ForgotPasswordAPIView(APIView):
         try:
             user = CustomUser.objects.get(email=email)
         except CustomUser.DoesNotExist:
-            return Response({'error': 'User with this email does not exist.'}, status=404)
+            return Response({'error': 'User with this email does not exist.'}, status=status.HTTP_404_NOT_FOUND)
         else:
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -280,7 +280,7 @@ Please click the link below to reset your password:
             message = template.render(context)
 
             send_mail('Reset your password', message,'', [email])
-            return Response({'success': 'Password reset email has been sent.'})
+            return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
 
 class ResetPasswordAPIView(APIView):
     def get(self, request, uidb64, token):
