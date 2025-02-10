@@ -148,10 +148,10 @@ class JobPostings(models.Model):
     rotational_shift = models.BooleanField()
     status = models.CharField(max_length=10, default='opened')      # (opened) or (closed)
     is_approved = models.BooleanField(default=True)
-    is_assigned = models.ForeignKey(CustomUser, related_name='assigned_jobs', on_delete=models.CASCADE, limit_choices_to={"role": "recruiter"}, null=True, blank=True)
+    assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     age = models.CharField(max_length=255 )
-    gender = models.CharField(max_length = 100 ,)
+    gender = models.CharField(max_length = 100 ,) 
     visa_status = models.CharField(max_length=100, )
     time_period = models.CharField(max_length=50 ,default=" ",blank=True )
     qualification_department = models.CharField(max_length=50,)
@@ -191,7 +191,7 @@ class JobPostingsEditedVersion(models.Model):
         (PENDING,'pending'),
     ]
 
-    id = models.ForeignKey(JobPostings, on_delete= models.CASCADE,primary_key=True)
+    id = models.OneToOneField(JobPostings, on_delete= models.CASCADE,primary_key=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"client"},related_name="job_post_by_client")
     edited_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"},related_name="job_post_edited_by_manager")
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, default="")

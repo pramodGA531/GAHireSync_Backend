@@ -34,7 +34,7 @@ class AgencyDashboardAPI(APIView):
 
             approval_pending = JobPostings.objects.filter(organization__name = agency_name, approval_status='pending').count()
             interviews_scheduled = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).count()
-            recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, is_assigned=None).count()
+            recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, assigned_to=None).count()
             jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(organization__name=agency_name).count()  
             opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
 
@@ -108,10 +108,10 @@ class OrgJobPostings(APIView):
                     selected = JobApplication.objects.filter(job_id = job, status='selected').count()
                     rejected = JobApplication.objects.filter(job_id = job, status='rejected').count()
                     number_of_rounds = InterviewerDetails.objects.filter(job_id = job).count()
-                    print(job.is_assigned)
+                    print(job.assigned_to)
                     job_json = {
                         "job_id": job.id,
-                        "recruiter_name": job.is_assigned.username if job.is_assigned else "Not-Assigned",
+                        # "recruiter_name": job.assigned_to.username if job.assigned_to else "Not-Assigned",
                         "client_name": job.username.username,
                         "job_status": job.status,
                         "job_title": job.job_title,
@@ -380,20 +380,30 @@ HireSync Team
 
 # Assign job post to the recruiter
 class AssignRecruiterView(APIView):
-    def post(self,request):
+    def post(self, request):
         try:
             user = request.user
             org = Organization.objects.get(manager=user)
+
             if org:
                 job_id = request.data.get('job_id')
-                job = JobPostings.objects.get(id=job_id,organization = org)
-                recruiter_id = request.data.get('recruiter_id')
-                recruiter = CustomUser.objects.get(id=recruiter_id)
-                job.is_assigned = recruiter
+                job = JobPostings.objects.get(id=job_id, organization=org)
+
+                recruiter_ids = request.data.get('recruiter_ids', [])  
+                recruiters = CustomUser.objects.filter(id__in=recruiter_ids)
+
+                job.assigned_to.set(recruiters)  # Assign multiple recruiters
                 job.save()
-                return Response({"detail":"Recruiter Assigned Successfully"}, status=status.HTTP_200_OK)
+
+                return Response({"detail": "Recruiters Assigned Successfully"}, status=status.HTTP_200_OK)
+        except Organization.DoesNotExist:
+            return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+        except JobPostings.DoesNotExist:
+            return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        except CustomUser.DoesNotExist:
+            return Response({"detail": "One or more recruiters not found"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 

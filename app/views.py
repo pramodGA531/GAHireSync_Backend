@@ -338,18 +338,16 @@ class JobEditStatusAPIView(APIView):
             print(str(e))
             return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
         
-
-
-
 class RecJobPostings(APIView):
-    def get(self, request,*args, **kwargs):
+    def get(self, request,*args, **kwargs): 
         try:
             user = request.user
             org = Organization.objects.filter(recruiters__id=user.id).first()
-            job_postings = JobPostings.objects.filter(organization=org, is_assigned = user)
+            job_postings = JobPostings.objects.filter(organization=org, assigned_to = user)
             serializer = JobPostingsSerializer(job_postings,many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
+            print(str(e))
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
 

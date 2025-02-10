@@ -71,7 +71,7 @@ class InterviewerDetailsSerializer(serializers.ModelSerializer):
         fields = '__all__'  
 
 class JobPostingsSerializer(serializers.ModelSerializer):
-    is_assigned = CustomUserSerializer()
+    assigned_to = CustomUserSerializer(many=True)
     username = CustomUserSerializer()
     organization = OrganizationSerializer()
     interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
@@ -81,6 +81,14 @@ class JobPostingsSerializer(serializers.ModelSerializer):
         fields = '__all__'  
 
 
+class ClientJobPostingsSerializer(serializers.ModelSerializer):
+    assigned_to = CustomUserSerializer(many=True)
+    username = CustomUserSerializer()
+    organization = OrganizationSerializer()
+    interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
+    class Meta:
+        model = JobPostings
+        fields = '__all__'
 
 class CandidateResumeSerializer(serializers.ModelSerializer):
     class Meta:

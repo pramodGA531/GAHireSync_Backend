@@ -245,30 +245,74 @@ class RejectCandidate(APIView):
 
 # Directly shortlist the candidate and send the notification to the client, recruiter
 class SelectCandidate(APIView):
-    def closeJob(self, id):
+    permission_classes = [IsInterviewer]
+
+    def sendAlert(self, job_id):
         try:
-            job = JobPostings.objects.get(id = id)
-            job.status = 'closed'
-            job.save()
-            remaining_applications = JobApplication.objects.exclude(status = 'selected').exclude(status = 'rejected')
-            for application in remaining_applications:
-                application.status = 'rejected'
-                application.save()
+            try:
+                job_post = JobPostings.objects.get(id = id)
+            except JobPostings.DoesNotExist:
+                return Response({"error":'Job posting does not exists'},status= status.HTTP_400_BAD_REQUEST)
 
-                # TODO send_mail()
+            client_email = job_post.username.email
+            manager_email = job_post.organization.manager.email
+            recruiters_emails = job_post.assigned_to.values_list('email', flat=True)
 
-            return Response({"message":"All positions are filled for this job posting successfully, Job posting is closed"}, status = status.HTTP_200_OK)
+            subject = f"JOB POST {job_post.job_title} ALL OPENINGS ARE COMPLETED"
+            client_message = '''
+All openings of the given job post are completed successfully,
+If you want to recruit more people for the same job post , please go through the below link and give the number of positions you want
+link here
+
+Thankyou for choosing hiresync,
+Best Regards, 
+Kalki,
+HireSync.
+'''         
+
+            organization_recruiters_message = f'''
+All openings for the job post {job_post.job_title} are filled successfully
+Client will inform you if they want more job posts
+Thank you for choosing hiresync
+
+Best Regards,
+Kalki,
+HireSync.
+'''
+            send_mail(
+                subject=subject,
+                message=client_message,
+                from_email='',
+                recipient_list=[client_email]
+            )
+
+            send_mail(
+                subject=subject,
+                message=organization_recruiters_message,
+                from_email='',
+                recipient_list=[manager_email, recruiters_emails]
+            )
+
+            return Response({"message":"Candidate Selected Successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+        
     def post(self, request):
         try:
             resume_id = request.GET.get('id')
             round_num = request.GET.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
-            print(request.data)
+
+
+            num_of_postings_completed = JobApplication.objects.filter(job_id = application.job_id, status = 'selected').count()
+            req_postings = JobPostings.objects.get(id= application.job_id.id).num_of_positions
+
+            if(num_of_postings_completed >= req_postings):
+                return Response({"error":"All job openings are filled"}, status=status.HTTP_400_BAD_REQUEST)
+            
+
             primary_skills = request.data.get('primary_skills')
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
@@ -295,7 +339,7 @@ class SelectCandidate(APIView):
             job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
 
             if applications_selected >= job_postings_req:
-                return self.closeJob(application.job_id.id)
+                return self.sendAlert(application.job_id.id)
 
             return Response({"message":"Candidate selected"},status = status.HTTP_201_CREATED)
         except Exception as e:

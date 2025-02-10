@@ -17,10 +17,6 @@ urlpatterns = [
 
     path('changepassword/', changePassword.as_view(), name='changepassword'),
 
-    path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
-    path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
-    path('client/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
-    path('client/get-resumes/',GetResumeView.as_view(),name = 'get-resumes'),
 
     path('job-postings/', JobPostingView.as_view(), name='create-job-posting'),
     path('org-job-postings/', OrgJobPostings.as_view(), name='org-job-posting'),
@@ -28,7 +24,6 @@ urlpatterns = [
     path('org/get-recruiters/', RecruitersList.as_view(), name='get-recruiters-to-allot'),
     path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
     path('org/accept-job/', AcceptJobPostView.as_view(), name='accept-job-post'),
-    path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
     path('job-details/recruiter/<int:job_id>/', RecJobDetails.as_view(), name='rec-job-details'),
     path('accept-job-post/',AcceptJobEditRequestView.as_view(),name = 'accept-job-post'),
@@ -43,6 +38,10 @@ urlpatterns = [
     path('organization-terms/', OrganizationTermsView.as_view(), name='organization-terms'),
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
+    path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
+    path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
+    path('client/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
+    path('client/get-resumes/',GetResumeView.as_view(),name = 'get-resumes'),
     path('client/reject-application/',RejectApplicationView.as_view(), name ='reject-application'),
     path('client/accept-application/',AcceptApplicationView.as_view(), name ='accept-application'),
     path('client/select-application/',SelectApplicationView.as_view(), name ='select-application'),
@@ -73,6 +72,7 @@ urlpatterns = [
     path('candidate/applications/', CandidateApplicationsView.as_view(), name="candidate-application-view"),
     path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
 
+    path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
     path('recruiter/schedule_interview/pending_application/', ScheduleInterview.as_view(), name='schedule-interviews'),
     

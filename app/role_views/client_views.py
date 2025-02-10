@@ -131,7 +131,6 @@ class JobPostingView(APIView):
                     job_close_duration  = job_close_duration,
                     status='opened',
                     is_approved=False,
-                    is_assigned=None,
                     created_at=None
                 )
 
@@ -266,11 +265,23 @@ class getClientJobposts(APIView):
             if request.GET.get('id'):
                 id = request.GET.get('id')
                 jobpost = JobPostings.objects.get(id=id)
-                serializer = JobPostingsSerializer(jobpost)
+                serializer = ClientJobPostingsSerializer(jobpost)
+                return Response(serializer.data , status=status.HTTP_200_OK)
             else:
-                jobpost = JobPostings.objects.filter(username = request.user)
-                serializer = JobPostingsSerializer(jobpost,many=True)
-            return Response(serializer.data)
+                jobposts = JobPostings.objects.filter(username = request.user)
+                jobs = []
+                for job in jobposts:
+                    job_details = {
+                        "id": job.id,
+                        "job_title": job.job_title,
+                        "ctc":job.ctc,
+                        "status": job.status,
+                        "job_close_duration": job.job_close_duration,
+                        "approval_status": job.approval_status,
+                    }
+                    jobs.append(job_details)
+            return Response(jobs, status=status.HTTP_200_OK)
+        
         except Exception as e:
             print(str(e))
             return Response(status=status.HTTP_400_BAD_REQUEST, errorData = (str(e)))
@@ -761,6 +772,12 @@ HireSync Team
             except JobApplication.DoesNotExist:
                 return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
             
+            num_of_postings_completed = JobApplication.objects.filter(job_id = job_application.job_id, status = 'selected').count()
+            req_postings = JobPostings.objects.get(id= job_application.job_id.id).num_of_positions
+
+            if(num_of_postings_completed >= req_postings):
+                return Response({"error":"All job openings are filled"}, status=status.HTTP_400_BAD_REQUEST)
+            
             with transaction.atomic():
                 job_application.status = 'selected'
                 job_application.round_num = 0
@@ -858,3 +875,21 @@ class AllInterviewsView(APIView):
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
      
+
+def closeJob(self, id):
+        try:
+            job = JobPostings.objects.get(id = id)
+            job.status = 'closed'
+            job.save()
+            remaining_applications = JobApplication.objects.exclude(status = 'selected').exclude(status = 'rejected')
+            for application in remaining_applications:
+                application.status = 'rejected'
+                application.save()
+
+                # TODO send_mail()
+
+            return Response({"message":"All positions are filled for this job posting successfully, Job posting is closed"}, status = status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
