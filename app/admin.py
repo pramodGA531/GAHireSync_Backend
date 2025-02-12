@@ -90,10 +90,10 @@ class JobApplicationAdmin(admin.ModelAdmin):
 
 @admin.register(InterviewSchedule)
 class InterviewScheduleAdmin(admin.ModelAdmin):
-    list_display = ( 'interviewer', 'schedule_date', 'status')
+    list_display = ( 'interviewer', 'scheduled_date', 'status')
     search_fields = ( 'interviewer__name', 'job_id__job_title')
     list_filter = ('status',)
-    ordering = ('schedule_date',)
+    ordering = ('scheduled_date',)
 
 @admin.register(CandidateEvaluation)
 class CandidateEvaluationAdmin(admin.ModelAdmin):

@@ -858,7 +858,7 @@ class AllInterviewsView(APIView):
                     job_title = job_post.job_title
                     interviewer_name = interview.interviewer.name.username
                     candidate_name = interview.candidate.candidate_name
-                    scheduled_interview = interview.schedule_date
+                    scheduled_interview = interview.scheduled_date
                     interview_status = interview.status
                     if JobApplication.objects.get(next_interview = interview):
                         candidate_status = JobApplication.objects.get(next_interview = interview).status

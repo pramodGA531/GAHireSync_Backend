@@ -374,7 +374,7 @@ class InterviewSchedule(models.Model):
     id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)
     interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE,)
-    schedule_date = models.DateField(null= True, blank=True, )
+    scheduled_date = models.DateField(null= True, blank=True, )
     from_time = models.TimeField(null=True, blank=True,default="00:00:00" )
     to_time = models.TimeField(null=True, blank=True,default="00:00:00" )
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
@@ -383,7 +383,7 @@ class InterviewSchedule(models.Model):
     status = models.CharField(max_length=20,choices=STATUS_CHOICES, default='scheduled')
 
     def __str__(self):
-        return f"Interview scheduled for "
+        return f"Interview scheduled for {self.candidate.candidate_name} at {self.scheduled_date}"
     
     
 # Job Application Model

@@ -43,7 +43,9 @@ class ScheduledInterviewsView(APIView):
                             "candidate_name" : scheduled_interview.candidate.candidate_name,
                             "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
                             "round_num" : scheduled_interview.round_num,
-                            "scheduled_date": scheduled_interview.schedule_date
+                            "scheduled_date": scheduled_interview.scheduled_date,
+                            "from_time": scheduled_interview.from_time,
+                            "to_time": scheduled_interview.to_time,
                         }
                         return Response(interview_details_json, status = status.HTTP_200_OK)
                     except Exception as e:
@@ -69,7 +71,7 @@ class ScheduledInterviewsView(APIView):
                 for interview in interviews:
                     application_id = JobApplication.objects.get(resume = interview.candidate)
                     id = interview.id
-                    schedule_date = interview.schedule_date
+                    scheduled_date = interview.scheduled_date
                     round_of_interview = interview.round_num
                     interviewer_name = interview.interviewer.name.username
                     job_id = interview.job_id.id
@@ -89,7 +91,7 @@ class ScheduledInterviewsView(APIView):
                         "candidate_name":candidate_name,
                         "interviewer_name":interviewer_name,
                         "round_of_interview":round_of_interview,
-                        "schedule_date":schedule_date,
+                        "schedule_date":scheduled_date,
                         "status":statuss,
                         "application_id":application_id.id,
                         
@@ -176,8 +178,11 @@ class PromoteCandidateView(APIView):
         try:
             resume_id = int(request.GET.get('id'))
             round_num = int(request.GET.get('round_num'))
-
-            application = JobApplication.objects.get(resume = resume_id)
+            try:
+                application = JobApplication.objects.get(resume__id = resume_id)
+            except JobApplication.DoesNotExist:
+                print("query doesnot exist")
+                return Response({"error":"Job application matching query doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
 
             primary_skills = request.data.get('primary_skills')
             secondary_skills = request.data.get('secondary_skills')
@@ -204,7 +209,7 @@ class PromoteCandidateView(APIView):
             application.status = 'processing'
             application.save()
 
-            return Response({"message":"Next Interview for this application Scheduled successfully"},status = status.HTTP_201_CREATED)
+            return Response({"message":"Candidate promoted to nexts round successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)

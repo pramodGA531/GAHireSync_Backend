@@ -30,14 +30,16 @@ class AgencyDashboardAPI(APIView):
             opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
 
             upcoming_interviews = []
-            applications = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).order_by('-next_interview__schedule_date')[:20]
+            applications = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).order_by('-next_interview__scheduled_date')[:20]
 
             for application in applications:
                 application_details = {
                     "interviewer_name" : application.next_interview.interviewer.name.username,
                     "round_num" : application.round_num,
                     "candidate_name": application.resume.candidate_name,
-                    "scheduled_time": application.next_interview.schedule_date,
+                    "scheduled_time": application.next_interview.scheduled_date,
+                    "from_time": application.next_interview.from_time,
+                    "to_time": application.next_interview.to_time,
                     "job_title": application.job_id.job_title,
                 }
 

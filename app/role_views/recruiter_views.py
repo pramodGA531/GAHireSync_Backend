@@ -166,7 +166,7 @@ class ScheduleInterview(APIView):
                         "job_title" : application.job_id.job_title,
                         "round_num" : application.round_num,
                         "candidate_name": application.resume.candidate_name ,
-                        "next_interview": application.next_interview.schedule_date if application.next_interview else None,
+                        "next_interview": application.next_interview.scheduled_date if application.next_interview else None,
                     })
                 
                 return Response(pending_arr, status=status.HTTP_200_OK)
@@ -213,11 +213,12 @@ class ScheduleInterview(APIView):
             application_id = request.GET.get('application_id')
             application = JobApplication.objects.get(id = application_id)
             interviewer = InterviewerDetails.objects.get(job_id = application.job_id, round_num = application.round_num)
-            scheduled_date_and_time = request.data.get('schedule_date_and_time')
+            scheduled_date = request.data.get('scheduled_date')
+            from_time = request.data.get('from_time')
+            to_time = request.data.get('to_time')
             meet_link = request.data.get('meet_link','')
-            print(meet_link)
 
-            if(scheduled_date_and_time is None):
+            if(scheduled_date is None):
                 return Response({"error":"Please select date and time"}, status = status.HTTP_400_BAD_REQUEST)
 
             with transaction.atomic():
@@ -225,9 +226,11 @@ class ScheduleInterview(APIView):
                 next_scheduled_interview = InterviewSchedule.objects.create(
                     candidate = application.resume,
                     interviewer = interviewer,
-                    schedule_date = scheduled_date_and_time,
+                    scheduled_date = scheduled_date,
                     job_id = application.job_id,
                     meet_link = meet_link,
+                    from_time = from_time,
+                    to_time = to_time,
                     round_num = application.round_num,
                     status = 'pending'
                 )
@@ -235,25 +238,70 @@ class ScheduleInterview(APIView):
                 application.next_interview = next_scheduled_interview
                 application.save()
 
+
+                start_datetime = f"{scheduled_date}T{from_time}Z"
+                end_datetime = f"{scheduled_date}T{to_time}Z"
+
+                print(start_datetime, end_datetime)
+
+                google_calendar_link = f"""
+            https://www.google.com/calendar/render?action=TEMPLATE
+            &text=Interview+Scheduled
+            &details=Your+interview+is+scheduled+from+{from_time}+to+{to_time}
+            &location={meet_link}
+            &dates={start_datetime}/{end_datetime}
+            """.replace("\n", "").replace(" ", "")
+
                 interviewer_email = interviewer.name.email
                 candidate_email = application.resume.candidate_email
 
                 message = f"""
 Your next interview is scheduled successfully,
-Scheduled date and time is {scheduled_date_and_time}
+Scheduled date and time is {scheduled_date }  from {from_time} to {to_time}
 Please be ready by that time
 
-Best Regards
+**Join Here:** {meet_link}
+
+[Click here to Add to Google Calendar]({google_calendar_link})
+
+Best Regards,  
 {application.sender.username}
 """             
-                send_mail(
-                    subject="Next Interview Scheduled",
-                    message=message,
-                    recipient_list=[interviewer_email, candidate_email],
-                    from_email=''
-                )
+                
+                google_calendar_link = f"""
+            https://www.google.com/calendar/render?action=TEMPLATE
+            &text=Interview+Scheduled
+            &details=Your+interview+is+scheduled+from+{from_time}+to+{to_time}
+            &location={meet_link}
+            &dates={start_datetime}/{end_datetime}
+            """.replace("\n", "").replace(" ", "")
 
-                return Response({"message":"Next Interview Scheduled Successfully"}, status=status.HTTP_200_OK)
+            # HTML Email Content with a Button
+            html_message = f"""
+            <html>
+            <body>
+                <p>Your next interview is scheduled successfully.</p>
+                <p><strong>Scheduled date and time:</strong> {scheduled_date} from {from_time} to {to_time}</p>
+                <p><strong>Join Here:</strong> <a href="{meet_link}" target="_blank">{meet_link}</a></p>
+                <p>
+                    <a href="{google_calendar_link}" style="background-color:#007BFF; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-size:16px; display:inline-block;">
+                        Add to Google Calendar
+                    </a>
+                </p>
+                <p>Best Regards,<br>{application.sender.username}</p>
+            </body>
+            </html>
+            """
+
+            send_mail(
+                subject="Next Interview Scheduled",
+                message="Your interview details...",
+                html_message=html_message,  # Send HTML content
+                recipient_list=[interviewer_email, candidate_email],
+                from_email=''
+            )
+
+            return Response({"message": "Next Interview Scheduled Successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -337,5 +385,5 @@ class ScreenResume(APIView):
             analysis = screen_profile_ai(job,resume)
             return Response(analysis, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-   
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
