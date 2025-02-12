@@ -6,23 +6,14 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from rest_framework.permissions import IsAuthenticated
-from django.conf import settings 
 from django.core.mail import send_mail
-from rest_framework.parsers import MultiPartParser, FormParser
-from datetime import datetime
-from django.http import HttpResponse
-from django.template.loader import render_to_string
-from django.shortcuts import render
-
-from django.shortcuts import get_object_or_404
 from ..utils import *
-
+from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 
 
 class AgencyDashboardAPI(APIView):
@@ -518,4 +509,96 @@ class CloseJobView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-     
+
+class AgencyJobPosts(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        user = request.user
+
+        if not user.is_authenticated:
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            all_jobs = JobPostings.objects.filter(organization__manager=user).select_related('username').prefetch_related('assigned_to')
+
+            total_postings = 0
+            num_of_open_jobs = 0
+            pending_approval = 0
+            expired_jobs = 0
+            closed_positions = 0
+
+
+            jobs_list = []
+            for job in all_jobs:
+                applied = JobApplication.objects.filter(job_id=job.id).count()
+                under_review = JobApplication.objects.filter(job_id=job.id, status='processing').count()
+                hired = JobApplication.objects.filter(job_id=job.id, status='selected').count()
+                rejected = JobApplication.objects.filter(job_id=job.id, status='rejected').count()
+                
+                num_of_rounds = job.rounds_of_interview
+                rounds_details = []
+
+                rounds_details.extend([
+                                     {"Vacancies": job.num_of_positions},
+                                     {"Applied": applied},
+                                     {"Under Review": under_review},
+                                    ])
+
+                for round_num in range(1, num_of_rounds + 1):
+                    count = JobApplication.objects.filter(
+                        job_id=job.id,
+                        round_num=round_num,
+                        status='processing'
+                    ).count()
+                    
+                    rounds_details.append({f"Interview Round {round_num}": count})
+                
+                rounds_details.extend([
+                                     {"Hired":hired},
+                                     {"Rejected" : rejected}
+                                    ])
+
+                job_details = {
+                    "job_title": job.job_title,
+                    "recruiter_name": list(job.assigned_to.values_list('username', flat=True)) if job.assigned_to.exists() else ["Not Assigned"],
+                    "client_name": job.username.username if job.username else "Unknown",
+                    "deadline": job.job_close_duration,
+                    "status": job.status,
+                    "approval_status": job.approval_status,
+                    "id": job.id,
+                    "rounds_details": rounds_details,
+                }
+
+                jobs_list.append(job_details)
+                total_postings += job.num_of_positions
+
+                if job.approval_status == 'pending':
+                    pending_approval+=1
+
+                if job.status == 'opened':
+                    num_of_open_jobs += 1
+                
+                if job.job_close_duration < timezone.now().date():
+                    expired_jobs+=1
+
+                applications_closed = JobApplication.objects.filter(job_id = job.id, status = 'selected').count()
+                closed_positions += applications_closed
+            
+
+            org_jobs = {
+                "new_positions": total_postings,
+                "open_job_posts": num_of_open_jobs,
+                "active_job_posts": num_of_open_jobs,
+                "pending_approval": pending_approval,
+                "closed_positions": closed_positions,
+                "expired_posts": expired_jobs,
+            }
+
+            return Response({"data": jobs_list, "org_jobs": org_jobs}, status=status.HTTP_200_OK)
+
+        except ObjectDoesNotExist:
+            return Response({"error": "No job postings found for the manager."}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            return Response({"error": f"Something went wrong: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

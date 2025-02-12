@@ -156,7 +156,7 @@ class CandidateExperiencesView(APIView):
                         company_name= experience.get('company_name'),
                         from_date = experience.get('from_date'),
                         to_date = experience.get('to_date'),
-                        status = experience.get('status'),
+                        is_working = experience.get('status',False),
                         reason_for_resignation = experience.get('reason_for_resignation'),
                         relieving_letter = experience.get('relieving_letter',''),
                         pay_slip1 = experience.get('pay_slip1',''),

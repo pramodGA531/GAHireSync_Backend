@@ -278,7 +278,7 @@ class RecruiterProfileSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class CandidateEducationSerializer(serializers.ModelSerializer):
+class CandidateEducationSerializer2(serializers.ModelSerializer):
     result = serializers.SerializerMethodField()
     class Meta:
         model = CandidateEducation
@@ -287,7 +287,7 @@ class CandidateEducationSerializer(serializers.ModelSerializer):
     def get_result(self, obj):
         return f"{obj.field_of_study} - {obj.institution_name}"
 
-class CandidateExperienceSerializer(serializers.ModelSerializer):
+class CandidateExperienceSerializer2(serializers.ModelSerializer):
     duration = serializers.SerializerMethodField()
 
     class Meta:
