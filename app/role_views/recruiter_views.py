@@ -218,6 +218,34 @@ class ScheduleInterview(APIView):
             to_time = request.data.get('to_time')
             meet_link = request.data.get('meet_link','')
 
+
+            # Checking all interviews at that time for the interviewer
+            candidate_interviews = InterviewSchedule.objects.filter(
+                candidate=application.resume,
+                scheduled_date=scheduled_date,
+                from_time=from_time,
+                to_time=to_time
+            )
+
+            if candidate_interviews.exists(): 
+                return Response(
+                    {"error": "Candidate at that time has another interview, please schedule after some time"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            interviewer_interviews = InterviewSchedule.objects.filter(
+                interviewer=interviewer,
+                scheduled_date=scheduled_date,
+                from_time=from_time,
+                to_time=to_time
+            )
+
+            if interviewer_interviews.exists(): 
+                return Response(
+                    {"error": "Interviewer has scheduled another interview at the same time, please schedule after some time"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             if(scheduled_date is None):
                 return Response({"error":"Please select date and time"}, status = status.HTTP_400_BAD_REQUEST)
 
@@ -237,36 +265,12 @@ class ScheduleInterview(APIView):
 
                 application.next_interview = next_scheduled_interview
                 application.save()
-
-
                 start_datetime = f"{scheduled_date}T{from_time}Z"
                 end_datetime = f"{scheduled_date}T{to_time}Z"
 
-                print(start_datetime, end_datetime)
-
-                google_calendar_link = f"""
-            https://www.google.com/calendar/render?action=TEMPLATE
-            &text=Interview+Scheduled
-            &details=Your+interview+is+scheduled+from+{from_time}+to+{to_time}
-            &location={meet_link}
-            &dates={start_datetime}/{end_datetime}
-            """.replace("\n", "").replace(" ", "")
 
                 interviewer_email = interviewer.name.email
                 candidate_email = application.resume.candidate_email
-
-                message = f"""
-Your next interview is scheduled successfully,
-Scheduled date and time is {scheduled_date }  from {from_time} to {to_time}
-Please be ready by that time
-
-**Join Here:** {meet_link}
-
-[Click here to Add to Google Calendar]({google_calendar_link})
-
-Best Regards,  
-{application.sender.username}
-"""             
                 
                 google_calendar_link = f"""
             https://www.google.com/calendar/render?action=TEMPLATE
@@ -276,7 +280,6 @@ Best Regards,
             &dates={start_datetime}/{end_datetime}
             """.replace("\n", "").replace(" ", "")
 
-            # HTML Email Content with a Button
             html_message = f"""
             <html>
             <body>
@@ -296,7 +299,7 @@ Best Regards,
             send_mail(
                 subject="Next Interview Scheduled",
                 message="Your interview details...",
-                html_message=html_message,  # Send HTML content
+                html_message=html_message,  
                 recipient_list=[interviewer_email, candidate_email],
                 from_email=''
             )

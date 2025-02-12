@@ -255,7 +255,7 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
     candidate=CandidateResumeSerializer()
     class Meta:
         model = InterviewSchedule
-        fields = ['interviewer', 'schedule_date',"candidate"]
+        fields = ['interviewer', 'scheduled_date',"candidate","from_time","to_time"]
 
 class CandidateCertificateSerializer(serializers.ModelSerializer):
     class Meta:
