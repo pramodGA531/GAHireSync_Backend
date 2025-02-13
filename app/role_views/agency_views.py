@@ -14,6 +14,7 @@ from django.core.mail import send_mail
 from ..utils import *
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
+from django.utils.timezone import now,is_aware, make_naive
 
 
 class AgencyDashboardAPI(APIView):
@@ -282,8 +283,13 @@ class OrgJobEdits(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+
+
 # Get all the recruiters and Add the recruiter
 class RecruitersView(APIView):
+
+    permission_classes = [IsManager]
+
     def get(self, request,*args, **kwargs):
         try:
             user = request.user
@@ -604,3 +610,130 @@ class AgencyJobPosts(APIView):
 
         except Exception as e:
             return Response({"error": f"Something went wrong: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AllRecruitersView(APIView):
+    permission_classes  = [IsManager]
+
+    def get(self, request):
+        try:
+            user = request.user
+            organization = Organization.objects.get(manager = user)
+            recruiters = organization.recruiters.all()
+
+            recruiters_list = []
+            for recruiter in recruiters:
+                recruiter_json = {
+                    "name": recruiter.username,
+                    "email": recruiter.email,
+                    "phone" : "",
+                    "profile":"",
+                    "id": recruiter.id,
+                }
+                recruiters_list.append(recruiter_json)
+            return Response({"data":recruiters_list}, status= status.HTTP_200_OK)
+        
+        except Organization.DoesNotExist:
+            return Response({"error":"Organization with that id doesnot exists"}, status = status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class RecruiterTaskTrackingView(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            user = request.user
+            job_data = []
+
+            job_postings = JobPostings.objects.filter(organization__manager=user)
+            current_time = now().date()
+
+            for job in job_postings:
+                job_close_duration = job.job_close_duration
+
+                if is_aware(job_close_duration):
+                    job_close_duration = make_naive(job_close_duration)
+
+                if current_time > job_close_duration - timedelta(days=5):
+                    priority = "high"
+                elif current_time > job_close_duration - timedelta(days=10):
+                    priority = "medium"
+                else:
+                    priority = "low"
+
+                jobs_closed = JobApplication.objects.filter(job_id=job.id, status='selected').count()
+                status_percentage = (jobs_closed / job.num_of_positions * 100) if job.num_of_positions > 0 else 0
+
+                job_json = {
+                    "job_title": job.job_title,
+                    "num_of_positions": job.num_of_positions,
+                    "priority": priority,
+                    "due_date": job.job_close_duration,
+                    "status": round(status_percentage, 2),  
+                    "recruiters": list(job.assigned_to.values_list('username', flat=True)),
+                }
+                job_data.append(job_json)
+
+            try:
+                organization = Organization.objects.get(manager=user)
+            except Organization.DoesNotExist:
+                return Response({"error": "No organization found for this manager"}, status=status.HTTP_404_NOT_FOUND)
+
+            all_recruiters = organization.recruiters.all()
+            recruiters_list = [{"name": recruiter.username} for recruiter in all_recruiters]
+
+            # Get recent activities
+            recent_activities = []
+            resumes = JobApplication.objects.filter(sender__in=all_recruiters).order_by('-updated_at')[:6]
+            for resume in resumes:
+                task = ""
+                if resume.status == 'pending':
+                    task = f"{resume.resume.candidate_name}'s Resume is sent to {resume.job_id.job_title}"
+                elif resume.status == 'processing' and resume.next_interview:
+                    task = f"New meeting scheduled for {resume.resume.candidate_name}"
+
+                time_diff = datetime.now() - resume.updated_at
+                thumbnail = f"Updated {time_diff.seconds // 60} minutes ago" if time_diff.seconds < 3600 else f"Updated {time_diff.days} days ago"
+
+                recent_activities.append({
+                    "name": resume.sender.username,
+                    "job_title": resume.job_id.job_title,
+                    "task": task,
+                    "thumbnail": thumbnail
+                })
+
+            five_days_ago = datetime.now() - timedelta(days=5)
+            new_jobs = JobPostings.objects.filter(organization__manager=user, created_at__gte=five_days_ago).count()
+            on_going = JobPostings.objects.filter(organization__manager=user, assigned_to__isnull=False).count()
+
+            completed_posts = 0
+            completed_deadline = 0
+            completed_jobs = JobPostings.objects.filter(organization__manager=user, status='closed')
+
+            for job in completed_jobs:
+                positions_closed = JobApplication.objects.filter(job_id=job.id, status='selected').count()
+                if positions_closed >= job.num_of_positions:
+                    completed_posts += 1
+                else:
+                    completed_deadline += 1
+
+            main_components = {
+                "new": new_jobs,
+                "on_going": on_going,
+                "completed_posts": completed_posts,
+                "completed_deadline": completed_deadline
+            }
+
+            return Response({
+                "job_data": job_data,
+                "recruiters_list": recruiters_list,
+                "recent_activities": recent_activities,
+                "main_components": main_components
+            }, status=status.HTTP_200_OK)
+
+        except ObjectDoesNotExist as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)

@@ -80,6 +80,9 @@ urlpatterns = [
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
     path('manager/job-posts/',AgencyJobPosts.as_view(),name='agency-job-posts' ),
+    path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
+    path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(),name='agency-recruiters-task-tracking' ),
+
 
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
     path('candidate_status_for_job/',CandidateStatusForJobView.as_view(), name='candidate-status-for-particular-job'),

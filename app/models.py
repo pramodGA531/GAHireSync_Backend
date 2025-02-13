@@ -415,7 +415,8 @@ class JobApplication(models.Model):
     next_interview = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE, blank=True, default=None,null=True)
     application_date = models.DateTimeField(auto_now_add=True)
     feedback = models.TextField(blank= True,default= None ,  null=True)
-
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now = True,)
     class Meta:
         unique_together = ('job_id','resume')
 
