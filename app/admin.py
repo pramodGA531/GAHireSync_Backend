@@ -52,7 +52,7 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 @admin.register(ClientDetails)
 class ClientDetailsAdmin(admin.ModelAdmin):
-    list_display = ('name_of_organization', 'username', 'user', 'contact_number', 'website_url', 'gst_number')
+    list_display = ('name_of_organization', 'username', 'user', 'contact_number', 'website_url',)
     search_fields = ('name_of_organization', 'username', 'user')
     ordering = ('name_of_organization',)
 

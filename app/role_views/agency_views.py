@@ -651,10 +651,8 @@ class RecruiterTaskTrackingView(APIView):
             current_time = now().date()
 
             for job in job_postings:
+                
                 job_close_duration = job.job_close_duration
-
-                if is_aware(job_close_duration):
-                    job_close_duration = make_naive(job_close_duration)
 
                 if current_time > job_close_duration - timedelta(days=5):
                     priority = "high"
@@ -684,7 +682,8 @@ class RecruiterTaskTrackingView(APIView):
             all_recruiters = organization.recruiters.all()
             recruiters_list = [{"name": recruiter.username} for recruiter in all_recruiters]
 
-            # Get recent activities
+            print(recruiters_list)
+
             recent_activities = []
             resumes = JobApplication.objects.filter(sender__in=all_recruiters).order_by('-updated_at')[:6]
             for resume in resumes:
@@ -693,9 +692,19 @@ class RecruiterTaskTrackingView(APIView):
                     task = f"{resume.resume.candidate_name}'s Resume is sent to {resume.job_id.job_title}"
                 elif resume.status == 'processing' and resume.next_interview:
                     task = f"New meeting scheduled for {resume.resume.candidate_name}"
+                
 
-                time_diff = datetime.now() - resume.updated_at
-                thumbnail = f"Updated {time_diff.seconds // 60} minutes ago" if time_diff.seconds < 3600 else f"Updated {time_diff.days} days ago"
+                time_diff = now() - resume.updated_at
+                print(time_diff.seconds)
+                if time_diff.seconds < 60:
+                    thumbnail = f"Updated {time_diff.seconds} seconds ago"
+                elif time_diff.seconds < 3600:
+                    thumbnail = f"Updated {time_diff.seconds // 60} minutes ago"
+                elif time_diff.seconds < 86400:
+                    thumbnail = f"Updated {time_diff.seconds // 3600} hours ago"
+                else:
+                    thumbnail = f"Updated {time_diff.days} days ago"                                        
+
 
                 recent_activities.append({
                     "name": resume.sender.username,

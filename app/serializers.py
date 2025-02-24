@@ -47,7 +47,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class ClientDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientDetails
-        fields = '__all__'  
+        exclude = ['gst_number']
+
 
 
 class OrganizationTermsSerializer(serializers.ModelSerializer):
@@ -55,7 +56,7 @@ class OrganizationTermsSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = OrganizationTerms
-        fields = '__all__'  
+        exclude = ['gst_number']
 
 class NegotiationSerializer(serializers.ModelSerializer):
     organization = OrganizationSerializer()
