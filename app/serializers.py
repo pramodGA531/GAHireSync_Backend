@@ -28,7 +28,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
     recruiters = CustomUserSerializer(many=True,read_only=True)
     class Meta:
         model = Organization
-        fields = '__all__'  
+        exclude = ['gst_number']
 
 
 class ClientDetailsInterviewersSerializer(serializers.ModelSerializer):
@@ -46,9 +46,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class ClientDetailsSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ClientDetails
+        model = ClientDetails 
         exclude = ['gst_number']
 
+    
 
 
 class OrganizationTermsSerializer(serializers.ModelSerializer):
@@ -56,7 +57,7 @@ class OrganizationTermsSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = OrganizationTerms
-        exclude = ['gst_number']
+        fields = '__all__'
 
 class NegotiationSerializer(serializers.ModelSerializer):
     organization = OrganizationSerializer()
@@ -220,6 +221,8 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
             "age",
             "gender",
             "visa_status",
+            "passport_availability",
+            "probation_type",
             "time_period",
             "notice_period",
             "notice_time",

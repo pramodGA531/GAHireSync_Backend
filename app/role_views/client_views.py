@@ -108,6 +108,7 @@ class JobPostingView(APIView):
                     rounds_of_interview = len(interview_rounds),
                     job_locations=data.get('job_locations'),
                     job_type=data.get('job_type'),
+                    probation_type =data.get('probation_type',""),
                     job_level=data.get('job_level'),
                     qualifications=data.get('qualifications'),
                     timings=data.get('timings'),
@@ -122,6 +123,7 @@ class JobPostingView(APIView):
                     industry = data.get('industry'),
                     differently_abled = data.get('differently_abled'),
                     visa_status = data.get('visa_status'),
+                    passport_availability = data.get('passport_availability',''),
                     time_period = data.get('time_period'),
                     notice_period = data.get('notice_period'),
                     notice_time = data.get('notice_time'),
@@ -247,6 +249,10 @@ The Recruitment Team
         job_posting.industry = data.get('industry', job_posting.industry)
         job_posting.differently_abled = data.get('differently_abled', job_posting.differently_abled)
         job_posting.visa_status = data.get('visa_status', job_posting.visa_status)
+
+        job_posting.probation_type = data.get('probation_type', job_posting.probation_type)
+        job_posting.passport_availability = data.get('passport_availability', job_posting.passport_availability)
+
         job_posting.time_period = data.get('time_period', job_posting.time_period)
         job_posting.notice_period = data.get('notice_period', job_posting.notice_period)
         job_posting.languages = data.get('languages', job_posting.languages)

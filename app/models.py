@@ -58,7 +58,7 @@ class Organization(models.Model):
     org_code = models.CharField(max_length=255,unique=True)
     contact_number = models.CharField(max_length=255,unique=True)
     website_url = models.CharField(max_length=255,unique=True)
-    # gst_number = models.CharField(max_length=255,blank=True)
+    gst_number = models.CharField(max_length=255,blank=True)
     company_pan = models.CharField(max_length=255,unique=True)
     company_address = models.CharField(max_length=255,unique=True)
     is_subscribed = models.BooleanField(default=False)
@@ -114,7 +114,7 @@ class ClientDetails(models.Model):
     designation = models.TextField()
     contact_number = models.BigIntegerField()
     website_url = models.CharField(max_length=255)
-    # gst_number = models.CharField(max_length=100, blank=True)
+    gst_number = models.CharField(max_length=100, blank=True)
     company_pan = models.CharField(max_length=20)
     company_address = models.TextField()
     interviewers = models.ManyToManyField(CustomUser, related_name="client_interviewers", blank=True)
@@ -137,6 +137,7 @@ class JobPostings(models.Model):
     rounds_of_interview = models.IntegerField()
     job_locations = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100, )
+    probation_type = models.CharField(max_length=20, blank=True)    # paid or unpaid
     job_level = models.CharField(max_length=100, )
     qualifications = models.TextField()
     timings = models.CharField(max_length=100 )
@@ -153,6 +154,7 @@ class JobPostings(models.Model):
     age = models.CharField(max_length=255 )
     gender = models.CharField(max_length = 100 ,) 
     visa_status = models.CharField(max_length=100, )
+    passport_availability = models.CharField(max_length=50,)
     time_period = models.CharField(max_length=50 ,default=" ",blank=True )
     qualification_department = models.CharField(max_length=50,)
     notice_period = models.CharField(max_length=30,)
@@ -205,6 +207,7 @@ class JobPostingsEditedVersion(models.Model):
     rounds_of_interview = models.IntegerField()
     job_locations = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100, )
+    probation_type = models.CharField(max_length=20, blank=True)    # paid or unpaid
     job_level = models.CharField(max_length=100, )
     qualifications = models.TextField()
     timings = models.CharField(max_length=100 )
@@ -217,6 +220,7 @@ class JobPostingsEditedVersion(models.Model):
     age = models.CharField(max_length=255 , )
     gender = models.CharField(max_length = 100 , )
     visa_status = models.CharField(max_length=100, )
+    passport_availability = models.CharField(max_length=50,)
     time_period = models.CharField(max_length=50 , default=" ",blank=True)
     qualification_department = models.CharField(max_length=50,)
     notice_period = models.CharField(max_length=30,default=" ",blank=True )
@@ -594,3 +598,6 @@ class RecruiterProfile(models.Model):
 
     def __str__(self):
         return self.name.username
+
+class NewTable(models.Model):
+    name=models.CharField(max_length=20)
