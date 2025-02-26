@@ -395,6 +395,7 @@ class JobApplication(models.Model):
     SELECTED = 'selected'
     REJECTED = 'rejected'
     HOLD = 'hold'
+    JOINED = 'joined'
     PENDING = 'pending'
     PROCESSING = 'processing'
     ACCEPTED = 'accepted'
@@ -403,6 +404,7 @@ class JobApplication(models.Model):
     STATUS = [
         (SELECTED, 'selected'),
         (REJECTED, 'rejected'),
+        (JOINED, 'joined'),
         (HOLD, 'hold'),
         (PENDING, 'pending'),
         (PROCESSING, 'processing'),
@@ -599,5 +601,27 @@ class RecruiterProfile(models.Model):
     def __str__(self):
         return self.name.username
 
-class NewTable(models.Model):
-    name=models.CharField(max_length=20)
+class SelectedCandidates(models.Model):
+
+    JOINING_STATUS_CHOICES = [
+        ('joined', 'joined'),
+        ('not_joined', 'not_joined'),
+        ('resign','resign'),
+        ('pending','pending'),
+        ('rejected', 'rejected'),
+    ]
+
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
+    application = models.OneToOneField(JobApplication, on_delete=models.CASCADE)
+    ctc = models.IntegerField()
+    joining_date = models.DateField()
+    resigned_data = models.DateField(null=True, blank=True)
+    other_benefits = models.CharField(max_length=250, blank=True)
+    joining_status = models.CharField(max_length=20, choices=JOINING_STATUS_CHOICES,default='pending')
+    candidate_acceptance = models.BooleanField(default= False)
+    recruiter_acceptance = models.BooleanField(default=False)
+    feedback  = models.CharField(max_length=250, blank=True)
+
+    def __str__(self):
+        return self.application.resume.candidate_name
+    

@@ -198,6 +198,8 @@ class ScheduleInterview(APIView):
                     "job_title" : application.job_id.job_title,
                     "job_ctc" : application.job_id.ctc,
                     "application_id": application.id,
+                    "interview_type": next_interview_details.type_of_interview,
+                    "interview_mode": next_interview_details.mode_of_interview,
                 }
 
                 return Response(application_details, status=status.HTTP_200_OK)
@@ -390,3 +392,56 @@ class ScreenResume(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
+
+class ReConfirmResumes(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            job_applications = JobApplication.objects.filter(sender = request.user, status = 'selected')
+            selected_candidates = SelectedCandidates.objects.filter(application__in = job_applications, candidate_acceptance = True)
+            candidates_list = []
+            for candidate in selected_candidates:
+                job_post = candidate.application.job_id
+                selected_candidate_json = {
+                    "job_title": job_post.job_title,
+                    "job_description": job_post.job_description,
+                    "client_name": job_post.username.username,
+                    "accepted_ctc": candidate.ctc,
+                    "joining_date": candidate.joining_date,
+                    "candidate_name": candidate.candidate.name.username,
+                    "selected_candidate_id": candidate.id,
+                    "actual_ctc": job_post.ctc,
+                    "recruiter_acceptance": candidate.recruiter_acceptance,
+                }
+                candidates_list.append(selected_candidate_json)
+
+            return Response(candidates_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
+class AcceptReconfirmResumes(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            id = request.GET.get('selected_candidate_id')
+            selected_candidate = SelectedCandidates.objects.get(id = id)
+            selected_candidate.recruiter_acceptance = True
+            selected_candidate.save()
+            
+            return Response({"message":"Reconfirmed successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
+class RejectReconfirmResumes(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            id = request.GET.get('selected_candidate_id')
+            selected_candidate = SelectedCandidates.objects.get(id = id)
+            selected_candidate.feedback = request.data.get('feedback')
+            selected_candidate.save()
+            
+            return Response({"message":"Feedback sent to client successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)

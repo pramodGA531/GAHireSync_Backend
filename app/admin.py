@@ -21,6 +21,7 @@ from .models import (
     CandidateExperiences,
     CandidateEducation,
     RecruiterProfile,
+    SelectedCandidates
 )
 
 @admin.register(CustomUser)
@@ -100,7 +101,7 @@ class CandidateEvaluationAdmin(admin.ModelAdmin):
     list_display = ('interview_schedule', 'score', 'remarks')
     search_fields = ('interview_schedule__candidate_resume__candidate_name',)
     list_filter = ('score',)
-    ordering = ('-interview_schedule__schedule_date',)
+    ordering = ('-interview_schedule__scheduled_date',)
 
 @admin.register(ClientTermsAcceptance)
 class ClientTermsAcceptanceAdmin(admin.ModelAdmin):
@@ -124,3 +125,9 @@ admin.site.register(CandidateCertificates)
 admin.site.register(CandidateEducation)
 admin.site.register(CandidateExperiences)
 admin.site.register(RecruiterProfile)
+
+@admin.register(SelectedCandidates)
+class SelectedCandidatesAdmin(admin.ModelAdmin):
+    list_display = ('application','joining_date','ctc','joining_status','candidate')
+    search_fields = ('candidate__name',)
+    ordering = ('-joining_date',)
