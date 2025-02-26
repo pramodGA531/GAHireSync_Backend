@@ -74,8 +74,9 @@ class ClientSignupView(APIView):
 
     def post(self, request, *args, **kwargs):
         combined_values = request.data
-
+        print("calling this view ")
         try:
+            print("CustomUser.CLIENT table",CustomUser.CLIENT)
             with transaction.atomic():
                 user_serializer = CustomUserSerializer(data={
                     'email': combined_values.get('email'),
@@ -84,6 +85,7 @@ class ClientSignupView(APIView):
                     'credit' : 50,
                     'password': combined_values.get('password')
                 })
+                print('user_serializer',user_serializer)
                 if user_serializer.is_valid(raise_exception=True):
                     user = user_serializer.save()
                     user.set_password(combined_values.get('password'))

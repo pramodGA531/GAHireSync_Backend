@@ -442,19 +442,22 @@ class RecruitersList(APIView):
 # Get all invoice
 class InvoicesAPIView(APIView):
     permission_classes = [IsManager]
-
     def get(self, request):
         try:
             organization = Organization.objects.get(manager = request.user)
             jobs= JobPostings.objects.filter(organization = organization).filter(status = 'closed')
             print(request.user)
-
+            print(f"fetch  the jobid's-> joined application (by filtering) 
+                  1)jobid's terms and conditions(  fields => % of ctc , duration to generate invoice ,tax type by using the state variable,orgization details ,client details ) 
+                  2) joined application agreed ctc")
+                
             if not jobs.exists():
                 return Response({"noJobs": True}, status=status.HTTP_200_OK)
             
             invoices = []
 
             for job in jobs:
+                print("job",job)
                 total = 100
                 context = {
                     "agency_name": job.organization.name,

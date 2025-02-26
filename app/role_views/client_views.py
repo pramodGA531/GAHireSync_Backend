@@ -76,6 +76,7 @@ class JobPostingView(APIView):
     permission_classes = [IsAuthenticated]  
 
     def post(self, request):
+        print("role",request.user)
         data = request.data
         username = request.user
         organization = Organization.objects.filter(org_code=data.get('organization_code')).first()

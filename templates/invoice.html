@@ -102,3 +102,138 @@
     </div>
 </body>
 </html>
+
+
+
+
+
+{% comment %} static data is in the below  {% endcomment %}
+
+{% comment %} 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .invoice-container {
+            width: 50%;
+            background-color: lightcyan;
+
+            margin: auto;
+            border: 1px solid #000;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin:50px 0px 0px 0px ;
+        }
+        .header img {
+            height: 100px;
+        }
+        .section-container {
+            display: flex;
+            justify-content: space-between;
+           
+        }
+        .section {
+            border: 1px solid #000;
+            padding: 10px;
+            width: 48%; /* Adjust width to ensure they fit side by side */
+        }
+        .bold {
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        .total-section {
+            text-align: right;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="header">
+            <img src="../Pictures/ALL SCREEN SHOTS/Ameer passport pic.jpg" alt="Company Logo">
+            <div>
+                <p><strong>Invoice:</strong> INV12345</p>
+                <p><strong>Dated:</strong> 2025-02-26</p>
+            </div>
+        </div>
+        
+        <div class="section-container">
+            <div class="section">
+                <p class="bold">Buyer/ Service Provided to</p>
+                <p><strong>John Doe</strong><br>ABC Corporation<br>Address: 123, Elm Street, City, Country</p>
+                <p><strong>GST NO:</strong> ABCD1234GST</p>
+                <p>Contact person: Jane Smith</p>
+            </div>
+
+            <div class="section">
+                <p class="bold">Service Provider</p>
+                <p><strong>XYZ Ltd.</strong><br>(XYZ Unit)<br>Address: 456, Oak Avenue, City, Country</p>
+                <p><strong>GSTIN:</strong> XYZ5678GST</p>
+                <p>Contact Person: Robert Brown<br>Email: <a href="mailto:robert.brown@xyz.com">robert.brown@xyz.com</a><br>Mobile No: +1234567890</p>
+            </div>
+        </div>
+
+        <table>
+            <tr>
+                <th>SL No</th>
+                <th>Service Description with HSN Code</th>
+                <th>Candidate Name</th>
+                <th>Job Title</th>
+                <th>Date of Joining</th>
+                <th>CTC</th>
+                <th>Recruitment Service Fee (% of CTC)</th>
+                <th>Recruitment Service Fee</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>Software Development Services (HSN 9983)</td>
+                <td>Sarah Johnson</td>
+                <td>Software Engineer</td>
+                <td>2025-02-01</td>
+                <td>₹ 12,00,000</td>
+                <td>10%</td>
+                <td>₹ 1,20,000</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>Recruitment for IT Sector (HSN 9983)</td>
+                <td>Michael Lee</td>
+                <td>Data Scientist</td>
+                <td>2025-02-15</td>
+                <td>₹ 14,00,000</td>
+                <td>10%</td>
+                <td>₹ 1,40,000</td>
+            </tr>
+        </table>
+        
+        <div class="total-section">
+            <p>Sub-Total: ₹ 2,60,000</p>
+            <p>SGST @9%: ₹ 23,400</p>
+            <p>CGST @9%: ₹ 23,400</p>
+            <p><strong>Total: ₹ 2,86,800</strong></p>
+        </div>
+    </div>
+</body>
+</html>
+ {% endcomment %}
