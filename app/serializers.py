@@ -307,3 +307,11 @@ class CandidateExperienceSerializer2(serializers.ModelSerializer):
 
         diff = relativedelta(to_date, from_date)
         return f"{diff.years} years, {diff.months} months"
+    
+class SelectedCandidateSerialzier(serializers.ModelSerializer):
+    application = JobApplicationSerializer()
+    class Meta:
+        model = SelectedCandidates
+        fields = '__all__'
+
+    

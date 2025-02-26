@@ -450,3 +450,72 @@ class CandidateUpcomingInterviews(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class SelectedJobsCandidate(APIView):
+    permission_classes = [IsCandidate]
+    def get(self, request):
+        try:
+            selected_jobs = SelectedCandidates.objects.filter(candidate__name = request.user)
+            selected_jobs_list = []
+            for selected_job in selected_jobs:
+                job = selected_job.application.job_id
+                details_json = {
+                    "job_title": job.job_title,
+                    "job_description": job.job_description,
+                    "job_ctc": job.ctc,
+                    "agreed_ctc": selected_job.ctc,
+                    "joining_date": selected_job.joining_date,
+                    "selected_candidate_id": selected_job.id,
+                    "candidate_acceptance": selected_job.candidate_acceptance,
+                    "recruiter_acceptance": selected_job.recruiter_acceptance,
+                }
+                selected_jobs_list.append(details_json)
+
+            return Response(selected_jobs_list, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class CandidateAcceptJob(APIView):
+    permission_classes = [IsCandidate]
+    def get(self, request):
+        try:
+            id = request.GET.get('selected_candidate_id')
+            user = request.user
+            selected_candidate = SelectedCandidates.objects.get(id= id)
+            actual_user = selected_candidate.candidate.name
+
+            if (user != actual_user):
+                return Response({"error":"Users are not matching"}, status=status.HTTP_400_BAD_REQUEST)
+
+            selected_candidate.candidate_acceptance = True
+            selected_candidate.save()
+
+            return Response({"message":"Accepted and Reconfirmation notification sent to recruiter successfully"}, status = status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   
+
+
+class CandidateRejectJob(APIView):
+    permission_classes = [IsCandidate]
+    def get(self, request):
+        try:
+            id = request.GET.get('selected_candidate_id')
+            user = request.user
+            selected_candidate = SelectedCandidates.objects.get(id= id)
+            actual_user = selected_candidate.candidate.name
+
+            if (user != actual_user):
+                return Response({"error":"Users are not matching"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            selected_candidate.feedback = request.data.get('feedback')
+            selected_candidate.save()
+
+            return Response({"message":"Your feedback send to client successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   

@@ -774,7 +774,7 @@ HireSync Team
             except JobApplication.DoesNotExist:
                 return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
             
-            num_of_postings_completed = JobApplication.objects.filter(job_id = job_application.job_id, status = 'selected').count()
+            num_of_postings_completed = JobApplication.objects.filter(job_id = job_application.job_id, status = 'joined').count()
             req_postings = JobPostings.objects.get(id= job_application.job_id.id).num_of_positions
 
             if(num_of_postings_completed >= req_postings):
@@ -910,8 +910,17 @@ class HandleSelect(APIView):
             data = request.data
             application = JobApplication.objects.get(id = id)
 
+            job_post = JobPostings.objects.get(id = application.job_id.id)
+            selected_applications = JobApplication.objects.filter(job_id = job_post.id, status = 'joined').count()
+
+            if selected_applications >= job_post.num_of_positions:
+                return Response({"message":"All Job Postings are filled, If you want to recruit extra members recruit renew your job post"}, status = status.HTTP_200_OK)
+
+            candidate = CandidateProfile.objects.get(email = application.resume.candidate_email)
+
             SelectedCandidates.objects.create(
                 application = application,
+                candidate = candidate,
                 ctc = data.get('ctc'),
                 joining_date = data.get('joining_date'),
                 joining_status = data.get('joining_status',''),

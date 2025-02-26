@@ -21,6 +21,7 @@ from .models import (
     CandidateExperiences,
     CandidateEducation,
     RecruiterProfile,
+    SelectedCandidates
 )
 
 @admin.register(CustomUser)
@@ -124,3 +125,9 @@ admin.site.register(CandidateCertificates)
 admin.site.register(CandidateEducation)
 admin.site.register(CandidateExperiences)
 admin.site.register(RecruiterProfile)
+
+@admin.register(SelectedCandidates)
+class SelectedCandidatesAdmin(admin.ModelAdmin):
+    list_display = ('application','joining_date','ctc','joining_status','candidate')
+    search_fields = ('candidate__name',)
+    ordering = ('-joining_date',)

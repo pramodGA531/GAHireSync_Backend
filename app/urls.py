@@ -73,10 +73,16 @@ urlpatterns = [
     path('candidate/experience/', CandidateExperiencesView.as_view(), name='candidate-experience'), 
     path('candidate/applications/', CandidateApplicationsView.as_view(), name="candidate-application-view"),
     path('candidate/education/', CandidateEducationView.as_view(), name='candidate-experience'), 
+    path('candidate/selected-jobs/', SelectedJobsCandidate.as_view(), name = 'list-of-selected-jobs'),
+    path('candidate/handle-accepted/', CandidateAcceptJob.as_view(), name='handle-select'),
+    path('candidate/handle-rejected/', CandidateRejectJob.as_view(), name='handle-reject'),
 
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
     path('recruiter/schedule_interview/pending_application/', ScheduleInterview.as_view(), name='schedule-interviews'),
+    path('recruiter/candidate-selected-jobs/', ReConfirmResumes.as_view(), name = 'list-of-cadidate-selected-jobs'),
+    path('recruiter/reconfirmation-accept/', AcceptReconfirmResumes.as_view(), name='handle-select'),
+    path('recruiter/reconfirmation-reject/', RejectReconfirmResumes.as_view(), name='handle-reject'),
     
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),

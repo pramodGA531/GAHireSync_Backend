@@ -611,6 +611,7 @@ class SelectedCandidates(models.Model):
         ('rejected', 'rejected'),
     ]
 
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
     application = models.OneToOneField(JobApplication, on_delete=models.CASCADE)
     ctc = models.IntegerField()
     joining_date = models.DateField()
@@ -619,6 +620,7 @@ class SelectedCandidates(models.Model):
     joining_status = models.CharField(max_length=20, choices=JOINING_STATUS_CHOICES,default='pending')
     candidate_acceptance = models.BooleanField(default= False)
     recruiter_acceptance = models.BooleanField(default=False)
+    feedback  = models.CharField(max_length=250, blank=True)
 
     def __str__(self):
         return self.application.resume.candidate_name
