@@ -914,7 +914,7 @@ class HandleSelect(APIView):
                 application = application,
                 ctc = data.get('ctc'),
                 joining_date = data.get('joining_date'),
-                joining_status = data.get('pending'),
+                joining_status = data.get('joining_status',''),
                 other_benefits = data.get('other_benefits', ''),
             )
             
