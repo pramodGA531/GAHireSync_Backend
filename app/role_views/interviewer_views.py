@@ -192,7 +192,7 @@ class PromoteCandidateView(APIView):
             remarks = CandidateEvaluation.objects.create(
                 primary_skills_rating = primary_skills,
                 secondary_skills_ratings = secondary_skills,
-                round_num = round_num-1,
+                round_num = round_num,
                 remarks = remarks,
                 status = "SELECTED",
                 job_application = application,
@@ -255,7 +255,7 @@ class SelectCandidate(APIView):
     def sendAlert(self, job_id):
         try:
             try:
-                job_post = JobPostings.objects.get(id = id)
+                job_post = JobPostings.objects.get(id = job_id)
             except JobPostings.DoesNotExist:
                 return Response({"error":'Job posting does not exists'},status= status.HTTP_400_BAD_REQUEST)
 
@@ -323,28 +323,31 @@ HireSync.
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
 
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating = primary_skills,
-                secondary_skills_ratings = secondary_skills,
-                round_num = round_num,
-                remarks = remarks,
-                status = "SELECTED",
-                job_application = application,
-                score = score,
-                job_id = application.job_id,
-                interview_schedule = application.next_interview,
-            )
-            application.next_interview.status = 'completed'
-            application.next_interview.save()
-            application.status = 'selected'
-            application.next_interview = None
-            application.save()
 
-            applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
-            job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
+            with transaction.atomic():
 
-            if applications_selected >= job_postings_req:
-                return self.sendAlert(application.job_id.id)
+                remarks = CandidateEvaluation.objects.create(
+                    primary_skills_rating = primary_skills,
+                    secondary_skills_ratings = secondary_skills,
+                    round_num = round_num,
+                    remarks = remarks,
+                    status = "SELECTED",
+                    job_application = application,
+                    score = score,
+                    job_id = application.job_id,
+                    interview_schedule = application.next_interview,
+                )
+                application.next_interview.status = 'completed'
+                application.next_interview.save()
+                application.status = 'hold'
+                application.next_interview = None
+                application.save()
+
+                applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
+                job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
+
+                if applications_selected >= job_postings_req:
+                    return self.sendAlert(application.job_id.id)
 
             return Response({"message":"Candidate selected"},status = status.HTTP_201_CREATED)
         except Exception as e:

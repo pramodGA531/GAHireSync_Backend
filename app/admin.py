@@ -100,7 +100,7 @@ class CandidateEvaluationAdmin(admin.ModelAdmin):
     list_display = ('interview_schedule', 'score', 'remarks')
     search_fields = ('interview_schedule__candidate_resume__candidate_name',)
     list_filter = ('score',)
-    ordering = ('-interview_schedule__schedule_date',)
+    ordering = ('-interview_schedule__scheduled_date',)
 
 @admin.register(ClientTermsAcceptance)
 class ClientTermsAcceptanceAdmin(admin.ModelAdmin):

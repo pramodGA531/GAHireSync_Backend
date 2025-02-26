@@ -597,14 +597,10 @@ class GetResumeView(APIView):
      
 # reject applicaiton
 class RejectApplicationView(APIView):
+    permission_classes = [IsClient]
     def post(self, request):
         try:
             user = request.user
-            if not user:
-                return Response({"error":"User Does not exists"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            if user.role != 'client':
-                return Response({"error":"User Role not matches"}, status = status.HTTP_400_BAD_REQUEST)
             
             id = request.GET.get('id')          # <--- candidate application id
             if not id:
@@ -785,7 +781,7 @@ HireSync Team
                 return Response({"error":"All job openings are filled"}, status=status.HTTP_400_BAD_REQUEST)
             
             with transaction.atomic():
-                job_application.status = 'selected'
+                job_application.status = 'hold'
                 job_application.round_num = 0
                 candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
                 job_application.save()
@@ -880,7 +876,59 @@ class AllInterviewsView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-     
+        
+
+class CandidatesOnHold(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            user = request.user
+            job_posts = JobPostings.objects.filter(username = user)
+            candidates_on_hold = JobApplication.objects.filter(job_id__in = job_posts, status = 'hold')
+            
+            candidate_list = []
+            for candidate in candidates_on_hold:
+                candidate_json = {
+                    "candidate_name":candidate.resume.candidate_name,
+                    "job_title": candidate.job_id.job_title,
+                    "organization_name": candidate.job_id.organization.name,
+                    "application_id": candidate.id,
+                }
+                candidate_list.append(candidate_json)
+
+            return Response(candidate_list, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+
+class HandleSelect(APIView):
+    permission_classes = [IsClient]
+    def post(self, request):
+        try:
+            id = request.GET.get('id')
+            data = request.data
+            application = JobApplication.objects.get(id = id)
+
+            SelectedCandidates.objects.create(
+                application = application,
+                ctc = data.get('ctc'),
+                joining_date = data.get('joining_date'),
+                joining_status = data.get('pending'),
+                other_benefits = data.get('other_benefits', ''),
+            )
+            
+            application.status = 'selected'
+            application.save()
+
+            # send email and sms notifications here
+
+            return Response({"message":"Candidate is Selected"},status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+        
 
 def closeJob(self, id):
         try:

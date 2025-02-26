@@ -198,6 +198,8 @@ class ScheduleInterview(APIView):
                     "job_title" : application.job_id.job_title,
                     "job_ctc" : application.job_id.ctc,
                     "application_id": application.id,
+                    "interview_type": next_interview_details.type_of_interview,
+                    "interview_mode": next_interview_details.mode_of_interview,
                 }
 
                 return Response(application_details, status=status.HTTP_200_OK)
