@@ -49,9 +49,13 @@ urlpatterns = [
     path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
     path('client/add-interviewers/', InterviewersView.as_view(), name='add-interviewers'),
     path('client/get-interviewers/', InterviewersView.as_view(), name='get-interviewers'),
+    path('client/closed-jobslist/',ClosedJobsClient.as_view(), name='list-of-closed-jobs' ),
+    path('client/reopen-job/', ReopenJob.as_view(), name='reopen-new-job'),
     path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('client/on-hold/', CandidatesOnHold.as_view(), name= 'candidates-on-hold' ),
+    path('client/today-joinings', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
+    path('client/update-joining-status/', UpdateJoiningStatus.as_view(), name='update-joining-status-of-candidate'),
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
