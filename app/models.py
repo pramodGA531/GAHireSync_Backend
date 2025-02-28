@@ -395,20 +395,16 @@ class JobApplication(models.Model):
     SELECTED = 'selected'
     REJECTED = 'rejected'
     HOLD = 'hold'
-    JOINED = 'joined'
     PENDING = 'pending'
     PROCESSING = 'processing'
     ACCEPTED = 'accepted'
     APPLIED = 'applied'
-    NOT_JOINED = 'not_joined'
 
     STATUS = [
         (SELECTED, 'selected'),
         (REJECTED, 'rejected'),
-        (JOINED, 'joined'),
         (HOLD, 'hold'),
         (PENDING, 'pending'),
-        (NOT_JOINED , 'not_joined'),
         (PROCESSING, 'processing'),
     ]
 

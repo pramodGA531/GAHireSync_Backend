@@ -55,6 +55,7 @@ urlpatterns = [
     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('client/on-hold/', CandidatesOnHold.as_view(), name= 'candidates-on-hold' ),
     path('client/today-joinings', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
+    path('client/update-joining-status/', UpdateJoiningStatus.as_view(), name='update-joining-status-of-candidate'),
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),

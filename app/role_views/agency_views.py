@@ -748,3 +748,13 @@ class RecruiterTaskTrackingView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        
+class ViewSelectedCandidates(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            candidates_details = []
+            candidates = JobApplication.objects.filter(job_id__organization__manager = request.user, status = 'selected')
+        except Exception as e:
+            return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)

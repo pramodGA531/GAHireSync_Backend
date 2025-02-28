@@ -776,7 +776,7 @@ HireSync Team
             except JobApplication.DoesNotExist:
                 return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
             
-            num_of_postings_completed = JobApplication.objects.filter(job_id = job_application.job_id, status = 'joined').count()
+            num_of_postings_completed = JobApplication.objects.filter(job_id = job_application.job_id, status = 'selected', ).count()
             req_postings = JobPostings.objects.get(id= job_application.job_id.id).num_of_positions
 
             if(num_of_postings_completed >= req_postings):
@@ -913,7 +913,8 @@ class HandleSelect(APIView):
             application = JobApplication.objects.get(id = id)
 
             job_post = JobPostings.objects.get(id = application.job_id.id)
-            selected_applications = JobApplication.objects.filter(job_id = job_post.id, status = 'joined').count()
+            selected_applications = SelectedCandidates.objects.filter(application__job_id = job_post.id , status = 'joined').count()
+            # selected_applications = JobApplication.objects.filter(job_id = job_post.id, status = 'joined').count()
 
             if selected_applications >= job_post.num_of_positions:
                 return Response({"message":"All Job Postings are filled, If you want to recruit extra members recruit renew your job post"}, status = status.HTTP_200_OK)
@@ -925,7 +926,7 @@ class HandleSelect(APIView):
                 candidate = candidate,
                 ctc = data.get('ctc'),
                 joining_date = data.get('joining_date'),
-                joining_status = data.get('joining_status',''),
+                joining_status = "pending",
                 other_benefits = data.get('other_benefits', ''),
             )
             
@@ -1057,7 +1058,7 @@ class ReopenJob(APIView):
                         num_of_positions=new_positions,  
                         job_close_duration=new_job_close_duration,  
                         status='opened',  
-                        
+
                         username=job_post.username,
                         organization=job_post.organization,
                         job_title=job_post.job_title,
@@ -1179,6 +1180,27 @@ class TodayJoingings(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+class UpdateJoiningStatus(APIView):
+    permission_classes  = [IsClient]
+    def post(self, request):
+        try:
+            data = request.data
+            new_status = data.get('status')
+            application_id = request.GET.get('application_id')
+            
+            if new_status not in dict(JobApplication.STATUS):
+                return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+        
+            selected_application = SelectedCandidates.objects.get(application__id = application_id)
+
+            selected_application.status = new_status
+            selected_application.save()
+            
+            return Response({'message': 'Application status updated successfully', 'status': selected_application.status}, status=status.HTTP_200_OK)
+        except JobApplication.DoesNotExist:
+            return Response({'error': 'Application not found'}, status=status.HTTP_404_NOT_FOUND)
+        except json.JSONDecodeError:
+            return Response({'error': 'Invalid JSON format'}, status=status.HTTP_400_BAD_REQUEST)        
 
 def closeJob(self, id):
         try:
