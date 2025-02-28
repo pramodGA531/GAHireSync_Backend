@@ -400,6 +400,7 @@ class JobApplication(models.Model):
     PROCESSING = 'processing'
     ACCEPTED = 'accepted'
     APPLIED = 'applied'
+    NOT_JOINED = 'not_joined'
 
     STATUS = [
         (SELECTED, 'selected'),
@@ -407,6 +408,7 @@ class JobApplication(models.Model):
         (JOINED, 'joined'),
         (HOLD, 'hold'),
         (PENDING, 'pending'),
+        (NOT_JOINED , 'not_joined'),
         (PROCESSING, 'processing'),
     ]
 

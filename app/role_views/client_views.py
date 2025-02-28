@@ -19,7 +19,8 @@ from datetime import datetime
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.shortcuts import render
-
+from datetime import date
+from django.db.utils import IntegrityError
 from django.shortcuts import get_object_or_404
 from ..utils import *
 
@@ -268,6 +269,7 @@ The Recruitment Team
 class getClientJobposts(APIView):
     def get(self,request):
         try:
+            print("entered")
             if request.GET.get('id'):
                 id = request.GET.get('id')
                 jobpost = JobPostings.objects.get(id=id)
@@ -937,6 +939,245 @@ class HandleSelect(APIView):
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
         
+class ClosedJobsClient(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            closed_jobs = JobPostings.objects.filter(username = request.user, )
+            closed_jobs_list = []
+            for job in closed_jobs:
+                closed_job_json = {
+                    "job_title": job.job_title,
+                    "job_department": job.job_department,
+                    "organization": job.organization.name,
+                    "job_id": job.id,
+                }
+                closed_jobs_list.append(closed_job_json)
+            return Response(closed_jobs_list, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, request):
+        try:
+            user = request.user
+            job_post = JobPostings.objects.get(id = request.GET.get('job_id'))
+            if user != job_post.username:
+                return Response({"error":"usernames are not matching"}, status= status.HTTP_400_BAD_REQUEST)
+            
+            job_post.status = 'closed'
+            job_post.save()
+            
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+class ReopenJob(APIView):
+    permission_classes = [IsClient]
+
+    def get(self, request):
+        try:
+            user = request.user
+            job_id = request.GET.get('id')
+
+            if not job_id:
+                return Response({"error":"JobId is not sent"}, status=status.HTTP_400_BAD_REQUEST)
+
+            job_post = JobPostings.objects.get(id=job_id)
+
+            if user != job_post.username:
+                return Response({"error": "Usernames are not matching"}, status=status.HTTP_400_BAD_REQUEST)
+
+            interviewers = InterviewerDetails.objects.filter(job_id=job_post)
+            interviewers_list = [
+                {   
+                    "round_num":interviewer.round_num,
+                    "interviewer_name": interviewer.name.username,
+                    "mode_of_interview": interviewer.mode_of_interview,
+                    "type_of_interview": interviewer.type_of_interview,
+                }
+                for interviewer in interviewers
+            ]
+
+            client_details = ClientDetails.objects.get(user=user)
+            company_interviewers = [
+                {"interviewer_name": interviewer.username, "id": interviewer.id}
+                for interviewer in client_details.interviewers.all()
+            ]
+
+            response_json = {
+                "job_title": job_post.job_title,
+                "job_description": job_post.job_description,
+                "job_department": job_post.job_department,
+                # "primary_skills": job_post.primary_skills,
+                # "secondary_skills": job_post.secondary_skills,
+                "ctc": job_post.ctc,
+                "rounds_of_interview": job_post.rounds_of_interview,
+                "job_id": job_post.id,
+                "interviewer_details": interviewers_list,
+                "company_interviewers": company_interviewers,  # Include all eligible interviewers
+            }
+
+            return Response(response_json, status=status.HTTP_200_OK)
+
+        except JobPostings.DoesNotExist:
+            return Response({"error": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        except ClientDetails.DoesNotExist:
+            return Response({"error": "Client details not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        try:
+            user = request.user
+            job_id = request.GET.get('job_id')
+
+            if not job_id:
+                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                job_post = JobPostings.objects.get(id=job_id)
+            except JobPostings.DoesNotExist:
+                return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            if user != job_post.username:
+                return Response({"error": "Usernames do not match"}, status=status.HTTP_403_FORBIDDEN)
+
+            new_positions = request.data.get('num_of_positions', job_post.num_of_positions)
+            new_ctc_range = request.data.get('ctc', job_post.ctc)
+            new_job_close_duration = request.data.get('job_close_duration', job_post.job_close_duration)
+            
+            with transaction.atomic():
+                try:
+                    new_job_post = JobPostings.objects.create(
+                        ctc=new_ctc_range,  
+                        num_of_positions=new_positions,  
+                        job_close_duration=new_job_close_duration,  
+                        status='opened',  
+                        
+                        username=job_post.username,
+                        organization=job_post.organization,
+                        job_title=job_post.job_title,
+                        job_department=job_post.job_department,
+                        job_description=job_post.job_description,
+                        primary_skills=job_post.primary_skills,
+                        secondary_skills=job_post.secondary_skills,
+                        years_of_experience=job_post.years_of_experience,
+                        rounds_of_interview=job_post.rounds_of_interview,
+                        job_locations=job_post.job_locations,
+                        job_type=job_post.job_type,
+                        probation_type=job_post.probation_type,
+                        job_level=job_post.job_level,
+                        qualifications=job_post.qualifications,
+                        timings=job_post.timings,
+                        other_benefits=job_post.other_benefits,
+                        working_days_per_week=job_post.working_days_per_week,
+                        decision_maker=job_post.decision_maker,
+                        decision_maker_email=job_post.decision_maker_email,
+                        bond=job_post.bond,
+                        rotational_shift=job_post.rotational_shift,
+                        is_approved=False,
+                        age=job_post.age,
+                        gender=job_post.gender,
+                        visa_status=job_post.visa_status,
+                        passport_availability=job_post.passport_availability,
+                        time_period=job_post.time_period,
+                        qualification_department=job_post.qualification_department,
+                        notice_period=job_post.notice_period,
+                        notice_time=job_post.notice_time,
+                        industry=job_post.industry,
+                        differently_abled=job_post.differently_abled,
+                        languages=job_post.languages,
+                        approval_status='pending'
+                    )
+                except IntegrityError:
+                    return Response({"error": "Database integrity error while creating job post"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                except ValidationError as e:
+                    return Response({"error": f"Invalid job post data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+                interviewer_details = request.data.get('interviewer_details', [])
+
+                if not isinstance(interviewer_details, list):
+                    return Response({"error": "Invalid format for interviewer details"}, status=status.HTTP_400_BAD_REQUEST)
+
+                for interviewe in interviewer_details:
+                    try:
+                        interviewer = CustomUser.objects.get(id=interviewe.get("interviewer_id"))
+                    except CustomUser.DoesNotExist:
+                        return Response({"error": f"Interviewer with ID {interviewe.get('interviewer_id')} not found"}, status=status.HTTP_404_NOT_FOUND)
+
+                    try:
+                        InterviewerDetails.objects.create(
+                            job_id=new_job_post,
+                            name=interviewer,
+                            round_num=interviewe.get("round_num"),
+                            type_of_interview=interviewe.get("type_of_interview"),
+                            mode_of_interview=interviewe.get("mode_of_interview"),
+                        )
+                    except ValidationError as e:
+                        return Response({"error": f"Invalid interviewer data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({"message": "Job Post Renewed successfully", "new_job_id": new_job_post.id}, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class TodayJoingings(APIView):
+    def get(self, request):
+        try:
+            client_user = request.user  
+
+            today=date.today() 
+
+            today_joinings = SelectedCandidates.objects.filter(
+                joining_date__gte=today, 
+                joining_date__lt=today + timedelta(days=1),
+                application__job_id__username=client_user 
+            ).select_related('application__job_id') 
+
+
+            # Prepare response data
+            response_data = []
+            for selected in today_joinings:
+                application = selected.application
+                job_posting = application.job_id  
+
+                response_data.append({
+                    "selected_candidate": {
+                        "id": selected.id,
+                        "application_id": application.id,
+                        "ctc": selected.ctc,
+                        "joining_date": selected.joining_date,
+                        "joining_status": selected.joining_status
+                    },
+                    "application": {
+                        "id": application.id,
+                        # "resume_id": application.resume.id,
+                        "job_id": application.job_id.id,
+                        "status": application.status,
+                        "sender_id": application.sender.username,
+                        "receiver_id": application.receiver.username,
+                        "feedback": application.feedback
+                    },
+                    "job_posting": {
+                        "id": job_posting.id,
+                        "job_title": job_posting.job_title,
+                        "job_description": job_posting.job_description,
+                        "organization_id": job_posting.organization.id,
+                        "job_locations": job_posting.job_locations,
+                        "job_type": job_posting.job_type
+                    }
+                })
+
+            return Response({"data": response_data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 
 def closeJob(self, id):

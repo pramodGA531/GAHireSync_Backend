@@ -638,6 +638,8 @@ class AllRecruitersView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
 
 class RecruiterTaskTrackingView(APIView):
     permission_classes = [IsManager]
