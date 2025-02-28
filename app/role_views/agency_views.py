@@ -754,7 +754,21 @@ class ViewSelectedCandidates(APIView):
 
     def get(self, request):
         try:
-            candidates_details = []
-            candidates = JobApplication.objects.filter(job_id__organization__manager = request.user, status = 'selected')
+            user = request.user
+            selected_candidates_list = []
+            applications = JobApplication.objects.filter(job_id__organization__manager = user, status = 'selected')
+            selected_candidates = SelectedCandidates.objects.filter(application__in = applications)
+            for candidate in selected_candidates:
+                job = candidate.application.job_id
+                candidate_json = {
+                    "candidate_name" : candidate.candidate.name.username,
+                    "date_of_joining": candidate.joining_date,
+                    "joining_status": candidate.joining_status,
+                    "client_name": job.username.username,
+                    "job_title": job.job_title,
+                }
+                selected_candidates_list.append(candidate_json)
+            
+            return Response()
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)

@@ -1188,7 +1188,7 @@ class UpdateJoiningStatus(APIView):
             new_status = data.get('status')
             application_id = request.GET.get('application_id')
             
-            if new_status not in dict(JobApplication.STATUS):
+            if new_status not in dict(SelectedCandidates.JOINING_STATUS_CHOICES):
                 return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
         
             selected_application = SelectedCandidates.objects.get(application__id = application_id)
