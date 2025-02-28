@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.utils.timezone import now,is_aware, make_naive
 
 
+
 class AgencyDashboardAPI(APIView):
     permission_classes = [IsManager]
     def get(self, request):
@@ -447,9 +448,9 @@ class InvoicesAPIView(APIView):
             organization = Organization.objects.get(manager = request.user)
             jobs= JobPostings.objects.filter(organization = organization).filter(status = 'closed')
             print(request.user)
-            print(f"fetch  the jobid's-> joined application (by filtering) 
-                  1)jobid's terms and conditions(  fields => % of ctc , duration to generate invoice ,tax type by using the state variable,orgization details ,client details ) 
-                  2) joined application agreed ctc")
+            # print(f"fetch  the jobid's-> joined application (by filtering) 
+            #       1)jobid's terms and conditions(  fields => % of ctc , duration to generate invoice ,tax type by using the state variable,orgization details ,client details ) 
+            #       2) joined application agreed ctc model for the SelectedCandidates ctc and joining date those all things")
                 
             if not jobs.exists():
                 return Response({"noJobs": True}, status=status.HTTP_200_OK)

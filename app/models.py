@@ -616,6 +616,7 @@ class SelectedCandidates(models.Model):
     ctc = models.IntegerField()
     joining_date = models.DateField()
     resigned_data = models.DateField(null=True, blank=True)
+    
     other_benefits = models.CharField(max_length=250, blank=True)
     joining_status = models.CharField(max_length=20, choices=JOINING_STATUS_CHOICES,default='pending')
     candidate_acceptance = models.BooleanField(default= False)
