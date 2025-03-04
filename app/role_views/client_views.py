@@ -1296,7 +1296,15 @@ class UpdateJoiningStatus(APIView):
 
             selected_application.status = new_status
             selected_application.save()
-            
+            # if new_status=="joined":
+                # here call the invoice function here so, do it 
+                # here fetch the selected_application table data and selected
+                # pass
+                
+                
+                
+                
+                
             return Response({'message': 'Application status updated successfully', 'status': selected_application.status}, status=status.HTTP_200_OK)
         except JobApplication.DoesNotExist:
             return Response({'error': 'Application not found'}, status=status.HTTP_404_NOT_FOUND)
