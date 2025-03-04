@@ -19,6 +19,7 @@ from datetime import datetime
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.shortcuts import render
+from app.utils import generate_invoice
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from ..utils import *
@@ -26,6 +27,8 @@ from ..utils import *
 
 # Recruiter Profile
 
+
+print("generate_invoice",generate_invoice)
 
 class RecruiterProfileView(APIView):
 
@@ -418,13 +421,22 @@ class ReConfirmResumes(APIView):
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
 class AcceptReconfirmResumes(APIView):
+    # Here I need to generate the invoices for now monday need to send or create via celery library 
     permission_classes = [IsRecruiter]
     def get(self, request):
+        print("caling")
         try:
             id = request.GET.get('selected_candidate_id')
             selected_candidate = SelectedCandidates.objects.get(id = id)
             selected_candidate.recruiter_acceptance = True
             selected_candidate.save()
+            application=selected_candidate.application
+            print("application",application)
+            job_posting=application.job_id
+            print("job_posting",job_posting)
+            
+            
+            # here I need to fetch the application id with that id terms and conditions need and org,client details too 
             
             return Response({"message":"Reconfirmed successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
