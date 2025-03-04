@@ -21,7 +21,8 @@ from .models import (
     CandidateExperiences,
     CandidateEducation,
     RecruiterProfile,
-    SelectedCandidates
+    SelectedCandidates,
+    JobPostTerms
 )
 
 @admin.register(CustomUser)
@@ -131,3 +132,9 @@ class SelectedCandidatesAdmin(admin.ModelAdmin):
     list_display = ('application','joining_date','ctc','joining_status','candidate')
     search_fields = ('candidate__name',)
     ordering = ('-joining_date',)
+
+@admin.register(JobPostTerms)
+class JobPostTermsAdmin(admin.ModelAdmin):
+    list_display = ('job_id',)
+    search_fields = ('job_id__job_title',)
+    ordering = ('-created_at',)

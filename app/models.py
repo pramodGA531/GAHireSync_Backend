@@ -364,6 +364,23 @@ class SecondarySkillSet(models.Model):
         return f"{self.candidate.candidate_name} skill {self.skill}"
 
 
+class JobPostTerms(models.Model):
+    job_id = models.OneToOneField(JobPostings, on_delete=models.CASCADE)
+    description = models.TextField(default ='')
+    service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
+    replacement_clause = models.IntegerField(default=90)
+    invoice_after = models.IntegerField(default=30)
+    payment_within = models.IntegerField(default=7)
+    interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+    def is_valid(self):
+        return self.valid_until >= timezone.now()
+    
+    def __str__(self):
+        return f"{self.job_id.job_title}'s terms and conditions"
+
 # Interview Schedule Model
 class InterviewSchedule(models.Model):
     SCHEDULED = 'scheduled'
@@ -531,6 +548,7 @@ class CandidateProfile(models.Model):
     blood_group = models.CharField(max_length=10,blank=True)
     experience_years = models.CharField(max_length=30, blank=True)
     skills = models.TextField(blank=True)  
+    current_company = models.CharField(max_length=200, blank=True)
 
     def __str__(self):
         return self.name.username
@@ -605,20 +623,23 @@ class SelectedCandidates(models.Model):
         ('joined', 'joined'),
         ('not_joined', 'not_joined'),
         ('resign','resign'),
+        ('left', 'left'),
         ('pending','pending'),
         ('rejected', 'rejected'),
     ]
 
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
-    application = models.OneToOneField(JobApplication, on_delete=models.CASCADE)
+    application = models.OneToOneField(JobApplication, on_delete=models.CASCADE, related_name= 'selected_candidates')
     ctc = models.IntegerField()
     joining_date = models.DateField()
-    resigned_data = models.DateField(null=True, blank=True)
+    resigned_date = models.DateField(null=True, blank=True)
     other_benefits = models.CharField(max_length=250, blank=True)
     joining_status = models.CharField(max_length=20, choices=JOINING_STATUS_CHOICES,default='pending')
     candidate_acceptance = models.BooleanField(default= False)
     recruiter_acceptance = models.BooleanField(default=False)
     feedback  = models.CharField(max_length=250, blank=True)
+    left_reason = models.CharField(max_length=200, blank=True)
+    is_replacement_eligible = models.BooleanField(default= False)
 
     def __str__(self):
         return self.application.resume.candidate_name
