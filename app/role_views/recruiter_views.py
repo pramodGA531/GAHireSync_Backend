@@ -20,7 +20,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.shortcuts import render
 from app.utils import generate_invoice
-
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from ..utils import *
 
@@ -225,18 +225,15 @@ class ScheduleInterview(APIView):
 
 
             # Checking all interviews at that time for the interviewer
-            candidate_interviews = InterviewSchedule.objects.filter(
-                candidate=application.resume,
-                scheduled_date=scheduled_date,
-                from_time=from_time,
-                to_time=to_time
+            overlapping_interviews = InterviewSchedule.objects.filter(
+                interviewer=interviewer,
+                scheduled_date=scheduled_date
+            ).filter(
+                Q(from_time__lt=to_time, to_time__gt=from_time)  
             )
 
-            if candidate_interviews.exists(): 
-                return Response(
-                    {"error": "Candidate at that time has another interview, please schedule after some time"},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            if overlapping_interviews.exists():
+                raise ValidationError("The interview timing overlaps with another scheduled interview.")
 
             interviewer_interviews = InterviewSchedule.objects.filter(
                 interviewer=interviewer,

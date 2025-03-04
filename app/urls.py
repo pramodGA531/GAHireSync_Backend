@@ -54,8 +54,10 @@ urlpatterns = [
     path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('client/on-hold/', CandidatesOnHold.as_view(), name= 'candidates-on-hold' ),
-    path('client/today-joinings', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
+    path('client/today-joinings/', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
+    path('client/joined-candidates/', AllJoinedCandidates.as_view(), name='all-joined-candidates'),
     path('client/update-joining-status/', UpdateJoiningStatus.as_view(), name='update-joining-status-of-candidate'),
+    path('client/candidate-left/', CandidateLeftView.as_view(), name='updating-joining-status-of-candidate-as-left'),
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
@@ -93,7 +95,7 @@ urlpatterns = [
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
     path('manager/job-posts/',AgencyJobPosts.as_view(),name='agency-job-posts' ),
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
-    path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(),name='agency-recruiters-task-tracking' ),
+    path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
 
 
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
