@@ -22,7 +22,9 @@ from .models import (
     CandidateEducation,
     RecruiterProfile,
     SelectedCandidates,
-    JobPostTerms
+    JobPostTerms,
+    SkillMetricsModel,
+    SkillMetricsModelEdited
 )
 
 @admin.register(CustomUser)
@@ -138,3 +140,15 @@ class JobPostTermsAdmin(admin.ModelAdmin):
     list_display = ('job_id',)
     search_fields = ('job_id__job_title',)
     ordering = ('-created_at',)
+
+@admin.register(SkillMetricsModel)
+class SkillMetricsModelAdmin(admin.ModelAdmin):
+    list_display = ('job_id','skill_name','is_primary','metric_type')
+    search_fields = ('job_id__job_title','is_primary')
+    ordering = ('-job_id__created_at',)
+
+@admin.register(SkillMetricsModelEdited)
+class SkillMetricsModelEditedAdmin(admin.ModelAdmin):
+    list_display = ('job_id','skill_name','is_primary','metric_type')
+    search_fields = ('job_id__job_title','is_primary')
+    ordering = ('-job_id__created_at',)

@@ -175,9 +175,8 @@ class OrgJobEdits(APIView):
         data = request.data
         username = request.user
         id = request.GET.get('id')
-        # print(" is the job id")
-        # if(id != data.get('job_post_id')):
-        #     return Response({"details":"job post details are not matching"}, status = status.HTTP_400_BAD_REQUEST)
+        primary_skills = data.get('primary_skills')
+        secondary_skills = data.get('secondary_skills')
         organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
         job = JobPostings.objects.get(id = id)
         if not username or username.role != 'manager':
@@ -202,8 +201,7 @@ class OrgJobEdits(APIView):
                 interview_rounds = data.get('interview_details', [])
                 client = JobPostings.objects.get(id=id).username
                 client_email=client.email
-                
-                print("client",client)
+
                 job_posting = JobPostingsEditedVersion.objects.create(
                     id = job,
                     username = client,
@@ -212,8 +210,6 @@ class OrgJobEdits(APIView):
                     job_title=data.get('job_title', ''),
                     job_department=data.get('job_department'),
                     job_description=data.get('job_description'),
-                    primary_skills=data.get('primary_skills'),
-                    secondary_skills=data.get('secondary_skills'),
                     years_of_experience=data.get('years_of_experience','Not Specified'),
                     ctc=data.get('ctc',"Not Specified"),
                     rounds_of_interview = len(interview_rounds),
@@ -240,8 +236,37 @@ class OrgJobEdits(APIView):
                     languages = data.get('languages'),
                     num_of_positions = data.get('num_of_positions'),
                     job_close_duration  = data.get('job_close_duration'),
+                    passport_availability = data.get('passport_availability'),
                     status = 'pending'
                 )
+
+                for skill in primary_skills:
+                    skill_metric = SkillMetricsModelEdited.objects.create(
+                        job_id = job_posting,
+                        is_primary = True,
+                        skill_name = skill.get('skill_name'),
+                        metric_type = skill.get('metric_type'),
+                    )
+                    if skill.get('metric_type') == 'rating':
+                        skill_metric.rating = skill.get('rating')
+                    elif skill.get('metric_type') == 'rating':
+                        skill_metric.experience = skill.get('experience')
+
+                    skill_metric.save()
+
+                for skill in secondary_skills:
+                    skill_metric = SkillMetricsModelEdited.objects.create(
+                        job_id = job_posting,
+                        is_primary = False,
+                        skill_name = skill.get('skill_name'),
+                        metric_type = skill.get('metric_type'),
+                    )
+                    if skill.get('metric_type') == 'rating':
+                        skill_metric.rating = skill.get('rating')
+                    elif skill.get('metric_type') == 'rating':
+                        skill_metric.experience = skill.get('experience')
+
+                    skill_metric.save()
 
                 if interview_rounds:
                     for round_data in interview_rounds:
@@ -272,9 +297,10 @@ class OrgJobEdits(APIView):
                     from_email='',
                     recipient_list=[client_email]
                 )
+
             return Response(
-                {"detail": "Job post and interview rounds edit request sent successfully"},
-                status=status.HTTP_201_CREATED
+                {"message": "Job post and interview rounds edit request sent successfully"},
+                status=status.HTTP_200_OK
             )
 
         except Exception as e:
@@ -283,8 +309,6 @@ class OrgJobEdits(APIView):
                 {"detail": f"An error occurred: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-
 
 # Get all the recruiters and Add the recruiter
 class RecruitersView(APIView):

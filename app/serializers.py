@@ -72,25 +72,36 @@ class InterviewerDetailsSerializer(serializers.ModelSerializer):
         model = InterviewerDetails
         fields = '__all__'  
 
+class SkillMetricSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SkillMetricsModel
+        fields = '__all__'
+
 class JobPostingsSerializer(serializers.ModelSerializer):
     assigned_to = CustomUserSerializer(many=True)
     username = CustomUserSerializer()
     organization = OrganizationSerializer()
     interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
-    
+    skills = SkillMetricSerializer(many=True)
     class Meta:
         model = JobPostings
         fields = '__all__'  
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        primary_skills = []
+        secondary_skills = []
+        for skill in data['skills']:
+            if (skill.get('is_primary', True)):
+                primary_skills.append(skill)
+            else:
+                secondary_skills.append(skill)
 
-class ClientJobPostingsSerializer(serializers.ModelSerializer):
-    assigned_to = CustomUserSerializer(many=True)
-    username = CustomUserSerializer()
-    organization = OrganizationSerializer()
-    interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
-    class Meta:
-        model = JobPostings
-        fields = '__all__'
+        data['primary_skills'] = primary_skills
+        data['secondary_skills'] = secondary_skills
+
+        del data['skills']
+        return data
 
 class CandidateResumeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -160,9 +171,15 @@ class InterviewDetailsEditedSerializer(serializers.ModelSerializer):
         model = InterviewerDetailsEditedVersion
         fields = '__all__'
 
+class SkillMetricsModelEditedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SkillMetricsModelEdited
+        fields = '__all__'
+
 class JobPostEditedSerializer(serializers.ModelSerializer):
     interview_details  = InterviewDetailsEditedSerializer(many=True, read_only=True, source='interviewerdetailseditedversion_set')
     edited_by_username = serializers.SerializerMethodField()
+    skills = SkillMetricsModelEditedSerializer(many = True)
     
     class Meta:
         model = JobPostingsEditedVersion
@@ -170,6 +187,22 @@ class JobPostEditedSerializer(serializers.ModelSerializer):
 
     def get_edited_by_username(self,obj):
         return obj.edited_by.username if obj.edited_by else None
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        primary_skills = []
+        secondary_skills = []
+        for skill in data['skills']:
+            if (skill.get('is_primary', True)):
+                primary_skills.append(skill)
+            else:
+                secondary_skills.append(skill)
+
+        data['primary_skills'] = primary_skills
+        data['secondary_skills'] = secondary_skills
+
+        del data['skills']
+        return data
     
     
 
@@ -201,8 +234,6 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
             "job_title",
             "job_department",
             "job_description",
-            "primary_skills",
-            "secondary_skills",
             "years_of_experience",
             "ctc",
             "rounds_of_interview",

@@ -144,8 +144,6 @@ class JobPostingView(APIView):
                     job_title=data.get('job_title', ''),
                     job_department=data.get('job_department'),
                     job_description=data.get('job_description'),
-                    primary_skills=data.get('primary_skills'),
-                    secondary_skills=data.get('secondary_skills'),
                     years_of_experience=data.get('years_of_experience','Not Specified'),
                     ctc=data.get('ctc',"Not Specified"),
                     rounds_of_interview = len(interview_rounds),
@@ -179,6 +177,36 @@ class JobPostingView(APIView):
                     created_at=None
                 )
 
+                primary_skills = data.get('primarySkills')
+                secondary_skills = data.get('secondarySkills')
+
+                for skill in primary_skills:
+                    skill_metric = SkillMetricsModel.objects.create(
+                        job_id = job_posting,
+                        is_primary = True,
+                        skill_name = skill.get('skill_name'),
+                        metric_type = skill.get('skill_metric'),
+                    )
+                    if skill.get('skill_metric') == 'rating':
+                        skill_metric.rating = skill.get('metric_value')
+                    elif skill.get('skill_metric') == 'experience':
+                        skill_metric.experience = skill.get('metric_value')
+
+                    skill_metric.save()
+
+                for skill in secondary_skills:
+                    skill_metric = SkillMetricsModel.objects.create(
+                        job_id = job_posting,
+                        is_primary = False,
+                        skill_name = skill.get('skill_name'),
+                        metric_type = skill.get('skill_metric'),
+                    )
+                    if skill.get('skill_metric') == 'rating':
+                        skill_metric.rating = skill.get('metric_value')
+                    elif skill.get('skill_metric') == 'experience':
+                        skill_metric.experience = skill.get('metric_value')
+                    skill_metric.save()
+
                 if interview_rounds:
                     for round_data in interview_rounds:
                         interviewer = CustomUser.objects.get(username = round_data.get('name'))
@@ -201,9 +229,6 @@ class JobPostingView(APIView):
     **Job Location:** {job_posting.job_locations}
     **CTC:** {job_posting.ctc}
     **Years of Experience Required:** {job_posting.years_of_experience}
-    **Primary Skills:** {(job_posting.primary_skills or [])}
-    **Secondary Skills:** {(job_posting.secondary_skills or [])}
-
   
 
     Thank you for using our platform.
@@ -316,7 +341,7 @@ class getClientJobposts(APIView):
             if request.GET.get('id'):
                 id = request.GET.get('id')
                 jobpost = JobPostings.objects.get(id=id)
-                serializer = ClientJobPostingsSerializer(jobpost)
+                serializer = JobPostingsSerializer(jobpost)
                 return Response(serializer.data , status=status.HTTP_200_OK)
             else:
                 jobposts = JobPostings.objects.filter(username = request.user)

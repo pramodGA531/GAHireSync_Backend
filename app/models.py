@@ -130,8 +130,6 @@ class JobPostings(models.Model):
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
     job_description = models.TextField()
-    primary_skills = models.TextField()
-    secondary_skills = models.TextField(blank=True, null=True)
     years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
@@ -165,12 +163,6 @@ class JobPostings(models.Model):
     num_of_positions = models.IntegerField(default=1)
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
-
-    def get_primary_skills_list(self):
-        return self.primary_skills.split(",") if self.primary_skills else []
-
-    def get_secondary_skills_list(self):
-        return self.secondary_skills.split(",") if self.secondary_skills else []
     
     def get_locations(self):
         return self.job_locations.split(",") if self.job_locations else []
@@ -200,8 +192,6 @@ class JobPostingsEditedVersion(models.Model):
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
     job_description = models.TextField()
-    primary_skills = models.TextField()
-    secondary_skills = models.TextField(blank=True, null=True)
     years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
@@ -249,7 +239,36 @@ class JobPostingsEditedVersion(models.Model):
         return self.job_title
 
 
-# Interviewer Details Model
+class SkillMetricsModel(models.Model):
+    METRIC_CHOICES = [
+        ('rating', 'rating'),
+        ('experience', 'experience'),
+    ]
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE, related_name="skills")
+    skill_name = models.CharField(max_length=50,)
+    is_primary = models.BooleanField(default=False)
+    rating = models.CharField(max_length=20, blank=True)    
+    experience = models.CharField(max_length=30, blank=True)
+    metric_type = models.CharField(max_length=15, choices=METRIC_CHOICES)
+
+    def __str__(self):
+        return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
+    
+class SkillMetricsModelEdited(models.Model):
+    METRIC_CHOICES = [
+        ('rating', 'rating'),
+        ('experience', 'experience'),
+    ]
+    job_id = models.ForeignKey(JobPostingsEditedVersion, on_delete=models.CASCADE, related_name="skills")
+    skill_name = models.CharField(max_length=50,)
+    is_primary = models.BooleanField(default=False)
+    rating = models.CharField(max_length=20, blank=True)    
+    experience = models.CharField(max_length=30, blank=True)
+    metric_type = models.CharField(max_length=15, choices=METRIC_CHOICES)
+
+    def __str__(self):
+        return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
+
 class InterviewerDetails(models.Model):
     FACE = 'face_to_face'
     ONLINE = 'online'
