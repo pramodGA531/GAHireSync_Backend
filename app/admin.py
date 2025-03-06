@@ -14,8 +14,6 @@ from .models import (
     ClientTermsAcceptance,
     JobPostingsEditedVersion,
     InterviewerDetailsEditedVersion,
-    PrimarySkillSet,
-    SecondarySkillSet,
     CandidateProfile,
     CandidateCertificates,
     CandidateExperiences,
@@ -24,7 +22,8 @@ from .models import (
     SelectedCandidates,
     JobPostTerms,
     SkillMetricsModel,
-    SkillMetricsModelEdited
+    SkillMetricsModelEdited,
+    CandidateSkillSet
 )
 
 @admin.register(CustomUser)
@@ -121,8 +120,6 @@ class JobPostingEditedVersionAdmin(admin.ModelAdmin):
 class InterviewerDetailsEditedVersionAdmin(admin.ModelAdmin):
     list_display = ('job_id','round_num','name')
 
-admin.site.register(PrimarySkillSet)
-admin.site.register(SecondarySkillSet)
 admin.site.register(CandidateProfile)
 admin.site.register(CandidateCertificates)
 admin.site.register(CandidateEducation)
@@ -152,3 +149,7 @@ class SkillMetricsModelEditedAdmin(admin.ModelAdmin):
     list_display = ('job_id','skill_name','is_primary','metric_type')
     search_fields = ('job_id__job_title','is_primary')
     ordering = ('-job_id__created_at',)
+
+@admin.register(CandidateSkillSet)
+class CandidateSkillSetAdmin(admin.ModelAdmin):
+    list_display = ('candidate',)

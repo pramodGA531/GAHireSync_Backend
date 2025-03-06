@@ -113,13 +113,22 @@ class JobPostSkillsView(APIView):
             
             job_id = request.GET.get('id')
             job = JobPostings.objects.get(id = job_id)
+            
+            skills = job.skills.all()
             skills_json = {
-                "primary_skills" : job.primary_skills,
-                "secondary_skills" : job.secondary_skills
+                "primary_skills": [
+                    {"skill_name": skill.skill_name, "skill_metric": skill.metric_type}
+                    for skill in job.skills.all() if skill.is_primary
+                ],
+                "secondary_skills": [
+                    {"skill_name": skill.skill_name, "skill_metric": skill.metric_type}
+                    for skill in job.skills.all() if not skill.is_primary
+                ]
             }
 
+
             resume_id = request.GET.get('resume_id')
-            print(resume_id)
+            
             application = JobApplication.objects.get(resume__id = resume_id)
 
             application_round = application.round_num

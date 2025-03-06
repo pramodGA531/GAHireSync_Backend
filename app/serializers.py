@@ -108,15 +108,6 @@ class CandidateResumeSerializer(serializers.ModelSerializer):
         model = CandidateResume
         fields = '__all__'  
 
-class PrimarySkillSetSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PrimarySkillSet
-        fields = ['skill','years_of_experience']
-
-class SecondarySkillSetSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SecondarySkillSet
-        fields = ['skill','years_of_experience']
 
 
 class JobApplicationSerializer(serializers.ModelSerializer):
@@ -127,14 +118,36 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         model = JobApplication
         fields = '__all__'  
 
+class CandidateSkillSetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CandidateSkillSet
+        fields = '__all__'
 
 class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
-    primary_skills = PrimarySkillSetSerializer(many=True, read_only  = True)
-    secondary_skills = SecondarySkillSetSerializer(many = True, read_only = True)
+
     job_application = JobApplicationSerializer( read_only = True)
+    skills = CandidateSkillSetSerializer(many=True)
+
     class Meta: 
         model = CandidateResume
         exclude = ('contact_number','alternate_contact_number','candidate_email')
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        primary_skills = []
+        secondary_skills = []
+        for skill in data['skills']:
+            if (skill.get('is_primary', True)):
+                primary_skills.append(skill)
+            else:
+                secondary_skills.append(skill)
+
+        data['primary_skills'] = primary_skills
+        data['secondary_skills'] = secondary_skills
+
+        del data['skills']
+        return data
+
 
 class JobApplicationSerializer(serializers.ModelSerializer):
     job_id = JobPostingsSerializer()

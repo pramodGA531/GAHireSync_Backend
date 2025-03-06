@@ -83,6 +83,7 @@ class CandidateResumeView(APIView):
                 return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
             
             primary_skills = json.loads(data.get('primary_skills', '[]'))
+ 
             secondary_skills = json.loads(data.get('secondary_skills', '[]'))
 
             if not primary_skills:
@@ -121,21 +122,38 @@ class CandidateResumeView(APIView):
                     job_status=data.get('job_status', ''),
                 )
 
-                # Add Primary Skills
-                for skill, experience in primary_skills:
-                    PrimarySkillSet.objects.create(
-                        candidate=candidate_resume,
-                        skill=skill,
-                        years_of_experience=experience,
+
+                for skill in primary_skills:
+                    print("entered")
+                    skill_metric = CandidateSkillSet.objects.create(
+                        candidate = candidate_resume,
+                        skill_name = skill[0],
+                        skill_metric = skill[1],
+                        is_primary = True
                     )
 
-                # Add Secondary Skills
-                for skill, experience in secondary_skills:
-                    SecondarySkillSet.objects.create(
-                        candidate=candidate_resume,
-                        skill=skill,
-                        years_of_experience=experience,
+                    if skill[1] == 'experience':
+                        skill_metric.metric_value = skill[4]
+                    elif skill[1] == 'rating':
+                        skill_metric.metric_value = skill[2]
+                    
+                    skill_metric.save()
+
+                for skill in secondary_skills:
+                    print("entered")
+                    skill_metric = CandidateSkillSet.objects.create(
+                        candidate = candidate_resume,
+                        skill_name = skill[0],
+                        skill_metric = skill[1],
+                        is_primary = False
                     )
+
+                    if skill[1] == 'experience':
+                        skill_metric.metric_value = skill[4]
+                    elif skill[1] == 'rating':
+                        skill_metric.metric_value = skill[2]
+                    
+                    skill_metric.save()
 
                 # Create Job Application
                 JobApplication.objects.create(
