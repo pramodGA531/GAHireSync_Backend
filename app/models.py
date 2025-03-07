@@ -355,6 +355,8 @@ class CandidateResume(models.Model):
     expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     notice_period = models.IntegerField(default=0)
     job_status = models.CharField(max_length=30, choices=JOB_STATUS)
+    highest_qualification = models.CharField(max_length=50,blank=True, default='B Tech')
+    joining_days_required = models.IntegerField(default="7")
 
     def __str__(self):
         return self.candidate_name

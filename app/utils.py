@@ -17,6 +17,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import six
 from django.core.mail import send_mail
+from rest_framework.pagination import PageNumberPagination
 from .models import *
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -315,3 +316,9 @@ def calculate_profile_percentage(candidate):
         profile_completion = base_profile_completion + document_completion + education_completion
         
         return round(profile_completion, 2)
+
+
+class TenResultsPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 10

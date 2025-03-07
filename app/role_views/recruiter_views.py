@@ -6,23 +6,17 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from rest_framework.permissions import IsAuthenticated
-from django.conf import settings 
 from django.core.mail import send_mail
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
-from django.http import HttpResponse
-from django.template.loader import render_to_string
-from django.shortcuts import render
 from app.utils import generate_invoice
 from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from ..utils import *
+from django.http import JsonResponse
 
 
 # Recruiter Profile
@@ -472,3 +466,86 @@ class RejectReconfirmResumes(APIView):
             return Response({"message":"Feedback sent to client successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
+
+class RecJobDetails(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request, job_id):
+        try:
+            user = request.user
+            org = Organization.objects.filter(recruiters__id=user.id).first()
+            job = JobPostings.objects.get(id=job_id, organization=org)
+            serializer = JobPostingsSerializer(job)
+
+            resume_count = JobApplication.objects.filter(job_id = job_id, sender = user).count()
+
+            try:
+                summary = summarize_jd(job)
+            except:
+                summary = ''
+            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count}, status=status.HTTP_200_OK)
+        except:
+            return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+class OrganizationApplications(APIView):
+    permission_classes = [IsRecruiter]
+    pagination_class = TenResultsPagination
+    def get(self, request):
+            try:
+                if request.GET.get('application_id'):
+                    try:
+                        application_id = request.GET.get('application_id')
+                        application = JobApplication.objects.get(id=application_id)
+                        resume = application.resume
+                        application_json = {
+                            "candidate_name": resume.candidate_name,
+                            "candidate_email": resume.candidate_email,
+                            "date_of_birth": str(resume.date_of_birth),  # Convert date to string
+                            "contact_number": resume.contact_number,
+                            "alternate_contact_number": resume.alternate_contact_number,
+                            "job_status": resume.job_status,
+                            "experience": float(resume.experience) if resume.experience else None,  # Convert Decimal to float
+                            "other_details": resume.other_details,
+                            "current_ctc": float(resume.current_ctc) if resume.current_ctc else None,  # Convert Decimal to float
+                            "expected_ctc": float(resume.expected_ctc) if resume.expected_ctc else None,  # Convert Decimal to float
+                            "notice_period": resume.notice_period,
+                            "highest_qualification": resume.highest_qualification,
+                            "current_organization": resume.current_organisation,
+                            "current_job_location": resume.current_job_location,
+                            "current_job_type": resume.current_job_type,
+                            "joining_days_required": resume.joining_days_required,
+                            "resume": resume.resume.url if resume.resume else None,  # Get URL of the file
+                        }   
+                        print(application_json)
+                        return JsonResponse(application_json, json_dumps_params={'ensure_ascii': False}, safe=False)  # Ensure encoding is handled properly
+                    except JobApplication.DoesNotExist:
+                        return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
+                    except Exception as e:
+                        print(str)
+                        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                else:
+                    recruiter_id = request.user.id
+                    organization = Organization.objects.filter(recruiters__id = recruiter_id).first()
+                    # print(organization)
+                    job_postings = JobPostings.objects.filter(organization = organization )
+                    organization_applications = JobApplication.objects.filter(job_id__in = job_postings)
+                    # print(organization_applications.count())
+
+                    application_list = []
+                    paginator = self.pagination_class()
+                    paginated_applications = paginator.paginate_queryset(organization_applications,request)
+                    for application in paginated_applications:
+                        print(application)
+                        application_json = {
+                            "candidate_name":application.resume.candidate_name,
+                            "job_department": application.job_id.job_department,
+                            "status": application.status,
+                            "application_id":application.id,
+                        }
+                        application_list.append(application_json)
+                    
+                    return paginator.get_paginated_response(application_list)
+        
+            except Exception as e:
+                print(str(e))
+                return Response({"error":str(e)}, status=status.HTTP_200_OK)
