@@ -15,6 +15,7 @@ def invoice_generated():
 
 @shared_task
 def daily_tasks_runner():
+    print("invoice view is called here ")
     invoice_validate()
     
 

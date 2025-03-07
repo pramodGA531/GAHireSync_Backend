@@ -1,115 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agency Invoice</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        .invoice-container {
-            width: 700px;
-            background: #fff;
-            padding: 30px;
-            border-radius: 10px;
-            {% comment %} box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); {% endcomment %}
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 90vh;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .header h2 {
-            margin: 0;
-            color: #007bff;
-        }
-        .invoice-details, .terms {
-            margin-bottom: 20px;
-        }
-        .invoice-details div, .terms div {
-            margin-bottom: 10px;
-        }
-        .invoice-items {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .invoice-items th, .invoice-items td {
-            padding: 12px;
-            border: 1px solid #ddd;
-        }
-        .invoice-items th {
-            background-color: #007bff;
-            color: #fff;
-            text-align: left;
-        }
-        .terms {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        .highlight {
-            font-size: 20px;
-            font-weight: bold;
-            color: #d9534f;
-            text-align: right;
-        }
-        .footer {
-            text-align: center;
-            font-size: 14px;
-            color: #555;
-            margin-top: auto;
-            padding-top: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="invoice-container">
-        <div class="header">
-            <h2>{{agency_name}} Invoice</h2>
-            <p>Invoice {{invoice_id}} | Date: {{date}}</p>
-        </div>
-        <div class="invoice-details">
-            <div><strong>Agency Name:</strong> {{agency_name}}</div>
-            <div><strong>Client Name:</strong> {{client_name}}</div>
-            <div><strong>Email:</strong> {{client_email}}</div>
-            <div><strong>Job Title:</strong> {{job_title}}</div>
-            <div><strong>Job CTC:</strong> {{ctc}}</div>
-        </div>
-        <div class="terms">
-            <strong>Agreed Terms</strong>
-            <div><strong>Service Fee:</strong> {{service_fee}}%</div>
-            <div><strong>Invoice After:</strong> {{invoice_after}} days</div>
-            <div><strong>Payment within:</strong> {{payment_within}} days</div>
-            <div><strong>Replacement Clause:</strong> {{replacement_clause}}</div>
-            <div><strong>Interest Percentage:</strong> {{interest_percentage}}</div>
-        </div>
-        <div class="highlight"> <strong>Total Fee:</strong> {{total}}</div>
-        <div class="footer">
-            <p>Thank you for your business!</p>
-        </div>
-    </div>
-</body>
-</html>
-
-
-
-
-
-{% comment %} static data is in the below  {% endcomment %}
-
 {% comment %} 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -120,48 +10,61 @@
         body {
             font-family: Arial, sans-serif;
         }
-        .invoice-container {
-            width: 50%;
-            background-color: lightcyan;
 
+        /* Invoice Container */
+        .invoice-container {
+            width: 50%; /* Adjust the width to 80% of the screen */
+            background-color: lightcyan;
             margin: auto;
             border: 1px solid #000;
             padding: 20px;
         }
+
+        /* Header Section */
         .header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin:50px 0px 0px 0px ;
+          
         }
+
         .header img {
             height: 100px;
         }
+
+        /* Section for Buyer and Service Provider Information */
         .section-container {
             display: flex;
             justify-content: space-between;
-           
+            gap: 20px;
         }
+
         .section {
             border: 1px solid #000;
             padding: 10px;
-            width: 48%; /* Adjust width to ensure they fit side by side */
+            width: 48%; /* Adjust width to fit side by side */
         }
+
         .bold {
             font-weight: bold;
         }
+
+        /* Table Styling */
         table {
-            width: 100%;
+            width: 60%;
             border-collapse: collapse;
             margin-top: 10px;
         }
+
         table, th, td {
             border: 1px solid black;
         }
+
         th, td {
             padding: 8px;
             text-align: left;
         }
+
+        /* Total Section */
         .total-section {
             text-align: right;
             margin-top: 10px;
@@ -171,26 +74,231 @@
 <body>
     <div class="invoice-container">
         <div class="header">
-            <img src="../Pictures/ALL SCREEN SHOTS/Ameer passport pic.jpg" alt="Company Logo">
+            <img src="" alt="Company Logo">
+            
             <div>
-                <p><strong>Invoice:</strong> INV12345</p>
-                <p><strong>Dated:</strong> 2025-02-26</p>
+                <p><strong>Invoice:</strong> {{ invoice_id }}</p>
+                <p><strong>Dated:</strong> {{ date }}</p>
             </div>
         </div>
         
         <div class="section-container">
             <div class="section">
                 <p class="bold">Buyer/ Service Provided to</p>
-                <p><strong>John Doe</strong><br>ABC Corporation<br>Address: 123, Elm Street, City, Country</p>
-                <p><strong>GST NO:</strong> ABCD1234GST</p>
-                <p>Contact person: Jane Smith</p>
+                <p><strong>{{ client_name }}</strong><br>{{ agency_name }}<br>Address: {{ buyer_address }}</p>
+                <p><strong>GST NO:</strong> {{ buyer_gst_no }}</p>
+                <p>Contact person: {{ buyer_contact_person }}</p>
             </div>
 
             <div class="section">
                 <p class="bold">Service Provider</p>
-                <p><strong>XYZ Ltd.</strong><br>(XYZ Unit)<br>Address: 456, Oak Avenue, City, Country</p>
-                <p><strong>GSTIN:</strong> XYZ5678GST</p>
-                <p>Contact Person: Robert Brown<br>Email: <a href="mailto:robert.brown@xyz.com">robert.brown@xyz.com</a><br>Mobile No: +1234567890</p>
+                <p><strong>{{ service_provider_name }}</strong><br>({{ service_provider_name }})<br>Address: {{ service_provider_address }}</p>
+                <p><strong>GST NO:</strong> {{ service_provider_gstin }}</p>
+                <p>Contact Person: {{ service_provider_contact_person }}<br>Email: <a href="mailto:{{ service_provider_email }}">{{ service_provider_email }}</a><br>Mobile No: {{ service_provider_mobile }}</p>
+            </div>
+        </div>
+
+        <!-- Invoice Table -->
+        <table>
+            <tr>
+                <th>SL No</th>
+                <th>Service Description with HSN Code</th>
+                <th>Candidate Name</th>
+                <th>Job Title</th>
+                <th>Date of Joining</th>
+                <th>CTC</th>
+                <th>Recruitment Service Fee (% of CTC)</th>
+                <th>Recruitment Service Fee</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>{{ service_description }}</td>
+                <td>{{ candidate_name }}</td>
+                <td>{{ job_title }}</td>
+                <td>{{ date_of_joining }}</td>
+                <td>{{ ctc }}</td>
+                <td>{{ service_fee_percentage }}</td>
+                <td>{{ service_fee }}</td>
+            </tr>
+        </table>
+        
+        <!-- Total Section -->
+        <div class="total-section">
+            <p>Sub-Total: {{ sub_total }}</p>
+
+            {% if igst == 0 %}
+                <!-- If IGST is 0, show SGST and CGST -->
+                <p>SGST @9%: {{ sgst }}</p>
+                <p>CGST @9%: {{ cgst }}</p>
+            {% else %}
+                <!-- If IGST is not 0, show IGST -->
+                <p>IGST @18%: {{ igst }}</p>
+            {% endif %}
+            
+            <p><strong>Total: {{ total_amount }}</strong></p>
+        </div>
+    </div>
+</body>
+</html>
+
+
+ {% endcomment %}
+
+
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+        }
+
+        /* Invoice Container */
+        .invoice-container {
+            width: 80%; /* Adjust the width for mobile responsiveness */
+            max-width: 1000px; /* Limit the max-width for large screens */
+            margin: auto;
+            border: 1px solid #000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Header Section */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header img {
+            height: 80px; /* Adjust the size of the logo */
+        }
+
+        /* Section for Buyer and Service Provider Information */
+        .section-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .section {
+            border: 1px solid #000;
+            padding: 15px;
+            width: 48%;
+            box-sizing: border-box;
+        }
+
+        .bold {
+            font-weight: bold;
+        }
+
+        /* Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table, th, td {
+            border: 1px solid black;
+        }
+
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        /* Total Section */
+        .total-section {
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        /* Media Queries for responsiveness */
+        @media (max-width: 768px) {
+            .invoice-container {
+                width: 95%;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .section-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .section {
+                width: 100%; /* Full width for smaller screens */
+            }
+
+            table {
+                width: 100%;
+                margin-top: 15px;
+            }
+
+            .total-section {
+                text-align: left;
+                margin-top: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header img {
+                height: 60px; /* Smaller logo size for very small screens */
+            }
+
+            .invoice-container {
+                padding: 10px;
+            }
+
+            .total-section p {
+                font-size: 14px; /* Adjust font size for small screens */
+            }
+
+            th, td {
+                padding: 6px; /* Reduce padding for better fit */
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="header">
+            <img src="{{ url }}/../Pictures/ALL SCREEN SHOTS/Ameer passport pic.jpg" alt="Company Logo">
+            <div>
+                <p><strong>Invoice:</strong> {{ invoice_id }}</p>
+                <p><strong>Generated Date:</strong> {{ date }}</p>
+            </div>
+        </div>
+        
+        <div class="section-container">
+            <div class="section">
+                <p class="bold">Buyer/ Service Provided to</p>
+                <p><strong>{{ client_name }}</strong><br>{{ agency_name }}<br>Address: {{ buyer_address }}</p>
+                <p><strong>GST NO:</strong> {{ buyer_gst_no }}</p>
+                <p>Contact Person: {{ client_name }}<br>Email: <a href="mailto:{{ client_email }}">{{ client_email }}</a><br>Mobile No: {{ buyer_contact_number }}</p>
+            </div>
+
+            <div class="section">
+                <p class="bold">Service Provider</p>
+                <p><strong>{{ service_provider_name }}</strong><br><br>Address: {{ service_provider_address }}</p>
+                <p><strong>GST NO:</strong> {{ service_provider_gstin }}</p>
+                <p>Contact Person: {{ service_provider_contact_person }}<br>Email: <a href="mailto:{{ service_provider_email }}">{{ service_provider_email }}</a><br>Mobile No: {{ service_provider_mobile }}</p>
             </div>
         </div>
 
@@ -207,33 +315,32 @@
             </tr>
             <tr>
                 <td>1</td>
-                <td>Software Development Services (HSN 9983)</td>
-                <td>Sarah Johnson</td>
-                <td>Software Engineer</td>
-                <td>2025-02-01</td>
-                <td>₹ 12,00,000</td>
-                <td>10%</td>
-                <td>₹ 1,20,000</td>
-            </tr>
-            <tr>
-                <td>2</td>
-                <td>Recruitment for IT Sector (HSN 9983)</td>
-                <td>Michael Lee</td>
-                <td>Data Scientist</td>
-                <td>2025-02-15</td>
-                <td>₹ 14,00,000</td>
-                <td>10%</td>
-                <td>₹ 1,40,000</td>
+                <td>{{ service_description }}</td>
+                <td>{{ candidate_name }}</td>
+                <td>{{ job_title }}</td>
+                <td>{{ date_of_joining }}</td>
+                <td>{{ ctc }}</td>
+                <td>{{ service_fee_percentage }}</td>
+                <td>{{ service_fee }}</td>
             </tr>
         </table>
         
         <div class="total-section">
-            <p>Sub-Total: ₹ 2,60,000</p>
-            <p>SGST @9%: ₹ 23,400</p>
-            <p>CGST @9%: ₹ 23,400</p>
-            <p><strong>Total: ₹ 2,86,800</strong></p>
+            <p>Sub-Total: {{ sub_total }}</p>
+
+            {% if igst == 0 %}
+                <!-- If IGST is 0, show SGST and CGST -->
+                <p>SGST @9%: {{ sgst }}</p>
+                <p>CGST @9%: {{ cgst }}</p>
+            {% else %}
+                <!-- If IGST is not 0, show IGST -->
+                <p>IGST @18%: {{ igst }}</p>
+            {% endif %}
+            
+            <p><strong>Total: {{ total_amount }}</strong></p>
         </div>
     </div>
 </body>
 </html>
- {% endcomment %}
+
+

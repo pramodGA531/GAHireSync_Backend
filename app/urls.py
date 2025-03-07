@@ -96,8 +96,12 @@ urlpatterns = [
     path('recruiter/organization-applications/', OrganizationApplications.as_view(), name='organization-all-applications'),
     
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
+    path('client/get_invoices/',Invoices.as_view()),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
+    path('manager/create_accountant/', CreateAccountant.as_view() , name='create-acountant' ),
+    
+    
     path('manager/job-posts/',AgencyJobPosts.as_view(),name='agency-job-posts' ),
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),

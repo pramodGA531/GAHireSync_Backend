@@ -21,6 +21,7 @@ from .models import (
     RecruiterProfile,
     SelectedCandidates,
     JobPostTerms,
+    InvoiceGenerated,
     SkillMetricsModel,
     SkillMetricsModelEdited,
     CandidateSkillSet
@@ -137,6 +138,15 @@ class JobPostTermsAdmin(admin.ModelAdmin):
     list_display = ('job_id',)
     search_fields = ('job_id__job_title',)
     ordering = ('-created_at',)
+    
+@admin.register(InvoiceGenerated)
+class InvoiceGeneratedAdmin(admin.ModelAdmin):
+    list_display = ('application_id','organization_id','organization_email','client_id','client_email','terms_id','status','created_at')
+    
+
+
+
+    
 
 @admin.register(SkillMetricsModel)
 class SkillMetricsModelAdmin(admin.ModelAdmin):

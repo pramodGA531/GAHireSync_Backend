@@ -556,3 +556,60 @@ Interviewers are waiting to check your profile
         except Exception as e:
             print(str(e))
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .models import InvoiceGenerated
+from rest_framework import status
+
+# Assuming you have these utility functions
+from .utils import create_invoice_context, generate_invoice
+
+
+class Invoices(APIView):
+    def get(self, request):
+        # Print the user's role and user object for debugging
+        print(f"User Role: {request.user.role}")
+        print(f"User: {request.user}")
+
+        invoices = []
+        html_list = []
+
+        if request.user.role == "client":
+            # Clients can only see their own invoices based on their email
+            invoices = InvoiceGenerated.objects.filter(client_email=request.user.email)
+            for invoice in invoices:
+                context = create_invoice_context(invoice)
+                html = generate_invoice(context)
+                html_list.append({"invoice": invoice, "html": html})
+
+        elif request.user.role == "manager":
+            # Managers can see all invoices related to their organization
+            invoices = InvoiceGenerated.objects.filter(organization_email=request.user.email)
+            for invoice in invoices:
+                context = create_invoice_context(invoice)
+                html = generate_invoice(context)
+                html_list.append({"invoice": invoice, "html": html})
+
+        elif request.user.role == "accountant":
+            # Accountants can also see all invoices related to their organization
+            invoices = InvoiceGenerated.objects.filter(organization_id=request.user.organization.id)
+            for invoice in invoices:
+                context = create_invoice_context(invoice)
+                html = generate_invoice(context)
+                html_list.append({"invoice": invoice, "html": html})
+
+        else:
+            # If the user's role is not recognized, deny access
+            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
+
+        # If invoices exist, return them along with the generated HTML
+        if invoices:
+            # Prepare the invoice data for the response, along with the generated HTML for each invoice
+            invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"]} 
+                            for invoice, html in zip(invoices, html_list)]
+            return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
+
+        # If no invoices found, return a not found message
+        return Response({"message": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
