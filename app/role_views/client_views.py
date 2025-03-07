@@ -97,6 +97,7 @@ class JobPostingView(APIView):
             try:
                 organization_terms = OrganizationTerms.objects.get(organization=organization)
             except OrganizationTerms.DoesNotExist:
+
                 return Response({"error": "Organization terms not found"}, status=status.HTTP_404_NOT_FOUND)
         
         
@@ -109,9 +110,11 @@ class JobPostingView(APIView):
                 invoice_after=organization_terms.invoice_after,
                 payment_within=organization_terms.payment_within,
                 interest_percentage=organization_terms.interest_percentage,
-                # valid_until=timezone.now() + timedelta(days=organization_terms.replacement_clause)  # Set expiry
+                # valid_until=timezone.now() + timedelta(days=organization_terms.replacement_clause) 
             )
-        except Exception as e:  # Catch any exception and return an error response
+            print(job_post_terms)
+        except Exception as e:
+            print(str(e))
             return Response({"error": f"Failed to create job post terms: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
             
         return Response({"message": "Job post terms added successfully", "terms_id": job_post_terms.id}, status=status.HTTP_201_CREATED)
@@ -144,8 +147,6 @@ class JobPostingView(APIView):
                     job_title=data.get('job_title', ''),
                     job_department=data.get('job_department'),
                     job_description=data.get('job_description'),
-                    primary_skills=data.get('primary_skills'),
-                    secondary_skills=data.get('secondary_skills'),
                     years_of_experience=data.get('years_of_experience','Not Specified'),
                     ctc=data.get('ctc',"Not Specified"),
                     rounds_of_interview = len(interview_rounds),
@@ -179,6 +180,37 @@ class JobPostingView(APIView):
                     created_at=None
                 )
 
+                primary_skills = data.get('primarySkills')
+                secondary_skills = data.get('secondarySkills')
+
+                for skill in primary_skills:
+                    skill_metric = SkillMetricsModel.objects.create(
+                        job_id = job_posting,
+                        is_primary = True,
+                        skill_name = skill.get('skill_name'),
+                        metric_type = skill.get('skill_metric'),
+                        metric_value = skill.get('metric_value'),
+                    )
+                    
+                    if skill.get('skill_metric') == 'custom':
+                        skill_metric.metric_type = skill.get('custom_metric')
+                        
+                    skill_metric.save()
+
+                for skill in secondary_skills:
+                    skill_metric = SkillMetricsModel.objects.create(
+                        job_id = job_posting,
+                        is_primary = False,
+                        skill_name = skill.get('skill_name'),
+                        metric_type = skill.get('skill_metric'),
+                        metric_value = skill.get('metric_value'),
+                    )
+
+                    if skill.get('skill_metric') == 'custom':
+                        skill_metric.metric_type = skill.get('custom_metric')
+                        
+                    skill_metric.save()
+
                 if interview_rounds:
                     for round_data in interview_rounds:
                         interviewer = CustomUser.objects.get(username = round_data.get('name'))
@@ -201,9 +233,6 @@ class JobPostingView(APIView):
     **Job Location:** {job_posting.job_locations}
     **CTC:** {job_posting.ctc}
     **Years of Experience Required:** {job_posting.years_of_experience}
-    **Primary Skills:** {(job_posting.primary_skills or [])}
-    **Secondary Skills:** {(job_posting.secondary_skills or [])}
-
   
 
     Thank you for using our platform.
@@ -316,7 +345,7 @@ class getClientJobposts(APIView):
             if request.GET.get('id'):
                 id = request.GET.get('id')
                 jobpost = JobPostings.objects.get(id=id)
-                serializer = ClientJobPostingsSerializer(jobpost)
+                serializer = JobPostingsSerializer(jobpost)
                 return Response(serializer.data , status=status.HTTP_200_OK)
             else:
                 jobposts = JobPostings.objects.filter(username = request.user)
@@ -615,6 +644,8 @@ class GetResumeView(APIView):
                 job_postings = JobPostings.objects.filter(username = user )
                 job_applications_json = []
                 for job_post in job_postings:
+                    if job_post.status == 'closed':
+                        continue
                     job_id = job_post.id
                     num_of_postings = job_post.num_of_positions
                     last_date = job_post.job_close_duration
@@ -624,7 +655,6 @@ class GetResumeView(APIView):
                     pending_count = JobApplication.objects.filter(job_id=job_id, status="pending").count()
                     rejected_count = JobApplication.objects.filter(job_id=job_id, status="rejected").count()
 
-                    # Append data to the response list
                     job_applications_json.append({
                         "job_id": job_id,
                         "num_of_postings": num_of_postings,
@@ -848,7 +878,8 @@ HireSync Team
             except JobApplication.DoesNotExist:
                 return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
             
-            num_of_postings_completed = JobApplication.objects.filter(job_id = job_application.job_id, status = 'selected', ).count()
+            applications = JobApplication.objects.filter(job_id = job_application.job_id)
+            num_of_postings_completed = SelectedCandidates.objects.filter(application__in = applications,joining_status = 'joined' ).count()
             req_postings = JobPostings.objects.get(id= job_application.job_id.id).num_of_positions
 
             if(num_of_postings_completed >= req_postings):
@@ -956,6 +987,18 @@ class CandidatesOnHold(APIView):
     permission_classes = [IsClient]
     def get(self, request):
         try:
+            if request.GET.get('job_id'):
+                job_id = request.GET.get('job_id')
+                applications_on_hold = JobApplication.objects.filter(job_id = job_id, status = 'hold')
+                application_list = []
+                for application in applications_on_hold:
+                    application_json = {
+                        "candidate_name": application.resume.candidate_name,
+                        "candidate_email": application.resume.candidate_email,
+                        "application_id": application.id
+                    }
+                    application_list.append(application_json)
+                return Response(application_list, status= status.HTTP_200_OK)
             user = request.user
             job_posts = JobPostings.objects.filter(username = user)
             candidates_on_hold = JobApplication.objects.filter(job_id__in = job_posts, status = 'hold')
@@ -1508,42 +1551,7 @@ class AllSelectedCandidates(APIView):
 
         except Exception as e:
             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-        
-# class AllJoinedCandidates(APIView):
-#     permission_classes = [IsClient]
-#     def get(self, request):
-#         try:
-#             applications = JobApplication.objects.filter(
-#                 job_id__username=request.user
-#             ).select_related("selected_candidates")  # Use select_related for OneToOneField
-
-#             candidates_list = []
-
-#             for application in applications:
-#                 candidate = application.selected_candidates  # Directly get the related object
-
-#                 if candidate and candidate.joining_status == 'joined':
-#                     job_details_json = {
-#                         "job_title": application.job_id.job_title,
-#                         "created_at": application.job_id.created_at,
-#                         "candidates": [
-#                             {
-#                                 "candidate_name": candidate.candidate.name.username,
-#                                 "joining_status": candidate.joining_status,
-#                                 "candidate_id": candidate.id,
-#                             }
-#                         ],
-#                     }
-#                     candidates_list.append(job_details_json)
-
-#             return Response(candidates_list, status=status.HTTP_200_OK)
-
-#         except JobApplication.DoesNotExist:
-#             return Response({"error": "No job applications found"}, status=status.HTTP_404_NOT_FOUND)
-
-#         except Exception as e:
-#             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
+       
 class AllJoinedCandidates(APIView):
     permission_classes = [IsClient]
 
@@ -1568,6 +1576,7 @@ class AllJoinedCandidates(APIView):
                                 "joining_status": candidate.joining_status,
                                 "candidate_id": candidate.id,
                                 "is_replacement_eligible": candidate.is_replacement_eligible,
+                                "replacement_status": candidate.replacement_status,
                             }
                         ],
                     }
@@ -1587,7 +1596,6 @@ class AllJoinedCandidates(APIView):
 class CandidateLeftView(APIView):
     def post(self, request):
         try:
-            print('entered here')
             reason = request.data.get('reason')
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
@@ -1597,46 +1605,136 @@ class CandidateLeftView(APIView):
                 candidate.is_replacement_eligible = False
             else:
                 candidate.is_replacement_eligible = True
-            candidate.left_reason = request.data.get('reason')
+            candidate.left_reason = reason
             candidate.save()
-            application = candidate.application
-            application.status = 'left'
-            application.save()
+
             print(candidate.joining_status)
             return Response({"message":"Candidate status updated successfully"},status = status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-class ApplyReplacementView(APIView):
+
+class CandidateJoined(APIView):
     permission_classes = [IsClient]
     def post(self, request):
         try:
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
-            job_post = candidate.application.job_id
-            try:
-                job_post_terms = JobPostTerms.objects.get(job_id= job_post)
-            except JobPostTerms.DoesNotExist:
-                return Response({"error":"Terms for this job post doesnot exist"}, status= status.HTTP_200_OK)
+            candidate.joining_status = "joined"
+            candidate.save()
+
+            job_openings = candidate.application.job_id.num_of_positions
+            jobs_filled_applications = JobApplication.objects.filter(job_id = candidate.application.job_id)
+            jobs_filled = SelectedCandidates.objects.filter(application__in = jobs_filled_applications, joining_status = 'joined').count()
+
+            if job_openings>jobs_filled:
+                return Response({"message":"Status updated successfully"}, status=status.HTTP_200_OK)
             
-            replacement_clause = job_post_terms.replacement_clause
-            joining_date = candidate.joining_date
-            today = datetime.today().date()
+            # send_mass_email here that all the postings are filled here and best of luck for next time
 
-            if isinstance(joining_date, str):
-                joining_date = datetime.strptime(joining_date, "%Y-%m-%d").date()
-
-            if joining_date-today < replacement_clause:
-                return Response({"error":"Date is expired to replace"},status=status.HTTP_400_BAD_REQUEST)
-
-            job_post.status= 'opened'
+            job_post = candidate.application.job_id
+            job_post.status = 'closed'
             job_post.save()
-            return Response({"message":"Replacement request sent to organization successfully"}, status=status.HTTP_200_OK)
-        
+
+            return Response({"message":"All Job openings are filled, job post is closed successfully"}, status=status.HTTP_200_OK)
+            
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+class ReplacementsView(APIView):
+    permission_classes = [IsClient]
+
+    def get(self, request):
+        try:
+            user = request.user
+            replacements = ReplacementCandidates.objects.filter(replacement_with__job_id__username = user, status = 'pending')
+            replacements_list = []
+            for replacement in replacements:
+                replacement_json = {
+                    "job_title":replacement.replacement_with.job_id.job_title,
+                    "candidate_name": replacement.replacement_with.resume.candidate_name,
+                    "agreed_ctc": SelectedCandidates.objects.get(application = replacement.replacement_with).ctc,
+                    "job_id":replacement.replacement_with.job_id.id,
+                    "replacement_id":replacement.id,
+                }
+                replacements_list.append(replacement_json)
+            
+            return Response(replacements_list,status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        try:
+            selected_candidate_id = request.GET.get("candidate_id")
+            selected_candidate = SelectedCandidates.objects.select_related("application__job_id").get(id=selected_candidate_id)
+
+            with transaction.atomic():
+                selected_candidate.joining_status = "left"
+                selected_candidate.replacement_status = 'pending'
+                selected_candidate.save()
+
+                ReplacementCandidates.objects.create(
+                    replacement_with=selected_candidate.application
+                )
+
+                job_post = selected_candidate.application.job_id
+                job_post.status = "opened"
+                job_post.save()  
+
+            return Response({"message": "Candidate status updated successfully"}, status=status.HTTP_200_OK)
+
+        except SelectedCandidates.DoesNotExist:
+            return Response({"error": "Selected candidate not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            
+
+class ReplaceCandidate(APIView):
+    permission_classes = [IsClient]
+    def post(self, request):
+        try:
+            replacement_id = request.GET.get('replacement_id')
+            replacement_instance = ReplacementCandidates.objects.get(id = replacement_id)
+            data = request.data
+            new_application = JobApplication.objects.get(id=data.get('new_application_id'))
+            replacement_instance.replaced_by = new_application
+            replacement_instance.status = 'completed'
+            replacement_instance.save()
+            
+            # handling old candidate status
+            old_candidate = SelectedCandidates.objects.get(application = replacement_instance.replacement_with)
+            old_candidate.replacement_status = "completed"
+            old_candidate.save()
+
+            # creating instance for new candidate with agreed CTC and joining date
+            new_candidate_profile = CandidateProfile.objects.get(email = new_application.resume.candidate_email)
+            SelectedCandidates.objects.create(
+                application = new_application,
+                ctc = data.get('accepted_ctc'),
+                joining_date = data.get('joining_date'),
+                other_benefits = data.get('other_benefits'),
+                joining_status = 'pending',
+                candidate = new_candidate_profile
+            )
+
+            new_application.status = 'selected'
+            new_application.save()
+
+            return Response({"message":"Candidate Replaced Successfully"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
 
     
+# handle replacement trigger
+# fetch the replacement_with and replacement_by and update the database for the request
+# update the frontend page
+

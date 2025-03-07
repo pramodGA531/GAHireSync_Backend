@@ -58,6 +58,10 @@ urlpatterns = [
     path('client/joined-candidates/', AllJoinedCandidates.as_view(), name='all-joined-candidates'),
     path('client/update-joining-status/', UpdateJoiningStatus.as_view(), name='update-joining-status-of-candidate'),
     path('client/candidate-left/', CandidateLeftView.as_view(), name='updating-joining-status-of-candidate-as-left'),
+    path('client/candidate-joined/', CandidateJoined.as_view(), name='updating-joining-status-of-candidate-as-joined'),
+    path('client/replacements/', ReplacementsView.as_view(), name='apply-replacement-and-get-all-replacements'),
+    path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
+
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
@@ -100,6 +104,7 @@ urlpatterns = [
     path('manager/job-posts/',AgencyJobPosts.as_view(),name='agency-job-posts' ),
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
+    path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
 
 
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),

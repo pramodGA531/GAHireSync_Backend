@@ -133,8 +133,6 @@ class JobPostings(models.Model):
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
     job_description = models.TextField()
-    primary_skills = models.TextField()
-    secondary_skills = models.TextField(blank=True, null=True)
     years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
@@ -168,12 +166,6 @@ class JobPostings(models.Model):
     num_of_positions = models.IntegerField(default=1)
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
-
-    def get_primary_skills_list(self):
-        return self.primary_skills.split(",") if self.primary_skills else []
-
-    def get_secondary_skills_list(self):
-        return self.secondary_skills.split(",") if self.secondary_skills else []
     
     def get_locations(self):
         return self.job_locations.split(",") if self.job_locations else []
@@ -203,8 +195,6 @@ class JobPostingsEditedVersion(models.Model):
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
     job_description = models.TextField()
-    primary_skills = models.TextField()
-    secondary_skills = models.TextField(blank=True, null=True)
     years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
@@ -252,7 +242,32 @@ class JobPostingsEditedVersion(models.Model):
         return self.job_title
 
 
-# Interviewer Details Model
+class SkillMetricsModel(models.Model):
+
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE, related_name="skills")
+    skill_name = models.CharField(max_length=50,)
+    is_primary = models.BooleanField(default=False)
+    metric_type = models.CharField(max_length=15, )
+    metric_value = models.CharField(max_length=15, blank=True)
+
+    def __str__(self):
+        return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
+    
+class SkillMetricsModelEdited(models.Model):
+    METRIC_CHOICES = [
+        ('rating', 'rating'),
+        ('experience', 'experience'),
+    ]
+    job_id = models.ForeignKey(JobPostingsEditedVersion, on_delete=models.CASCADE, related_name="skills")
+    skill_name = models.CharField(max_length=50,)
+    is_primary = models.BooleanField(default=False)
+    rating = models.CharField(max_length=20, blank=True)    
+    experience = models.CharField(max_length=30, blank=True)
+    metric_type = models.CharField(max_length=15, choices=METRIC_CHOICES)
+
+    def __str__(self):
+        return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
+
 class InterviewerDetails(models.Model):
     FACE = 'face_to_face'
     ONLINE = 'online'
@@ -347,26 +362,17 @@ class CandidateResume(models.Model):
     def __str__(self):
         return self.candidate_name
 # Primary skills and secondary skills along with experience of the candidate w.r.t job post
-class PrimarySkillSet(models.Model):
-    id = models.AutoField(primary_key=True)
-    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE, related_name='primary_skills')
-    skill = models.CharField(max_length=30)
-    years_of_experience = models.CharField(max_length=20)
+
+class CandidateSkillSet(models.Model):
+    candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, related_name='skills')
+    is_primary = models.BooleanField(default=False)
+    skill_name = models.CharField(max_length=100)
+    skill_metric = models.CharField(max_length=50)
+    metric_value = models.CharField(max_length=100)
 
     def __str__(self):
-        return f"{self.candidate.candidate_name} skill {self.skill}"
+        return f"{self.candidate.candidate_name}'s skill {self.skill_name}"
     
-
-class SecondarySkillSet(models.Model):
-    id = models.AutoField(primary_key=True)
-    candidate = models.ForeignKey(CandidateResume,on_delete=models.CASCADE, related_name='secondary_skills')
-    skill = models.CharField(max_length=30)
-    years_of_experience = models.CharField(max_length=20)
-
-    def __str__(self):
-        return f"{self.candidate.candidate_name} skill {self.skill}"
-
-
 class JobPostTerms(models.Model):
     job_id = models.OneToOneField(JobPostings, on_delete=models.CASCADE)
     description = models.TextField(default ='')
@@ -419,6 +425,8 @@ class JobApplication(models.Model):
     PROCESSING = 'processing'
     ACCEPTED = 'accepted'
     APPLIED = 'applied'
+    JOBCLOSED = 'job_closed'
+    
 
     STATUS = [
         (SELECTED, 'selected'),
@@ -426,6 +434,7 @@ class JobApplication(models.Model):
         (HOLD, 'hold'),
         (PENDING, 'pending'),
         (PROCESSING, 'processing'),
+        (JOBCLOSED, 'job_closed'),
     ]
 
     id = models.AutoField(primary_key=True)
@@ -446,8 +455,6 @@ class JobApplication(models.Model):
 
     def __str__(self):
         return f"{self.resume.candidate_name} applied for {self.job_id.job_title}"
-
-
 
 # Candidate Evaluation Model
 class CandidateEvaluation(models.Model):
@@ -631,9 +638,16 @@ class SelectedCandidates(models.Model):
         ('rejected', 'rejected'),
     ]
 
+    REPLACEMENT_STATUS_CHOICES = [
+        ('no', 'no'),
+        ('pending', 'pending'),
+        ('completed','completed'),
+        ('incomplete','incomplete')
+    ]
+
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
     application = models.OneToOneField(JobApplication, on_delete=models.CASCADE, related_name= 'selected_candidates')
-    ctc = models.IntegerField()
+    ctc = models.DecimalField(max_digits=10, decimal_places=2)
     joining_date = models.DateField()
     resigned_date = models.DateField(null=True, blank=True)
     other_benefits = models.CharField(max_length=250, blank=True)
@@ -643,6 +657,8 @@ class SelectedCandidates(models.Model):
     feedback  = models.CharField(max_length=250, blank=True)
     left_reason = models.CharField(max_length=200, blank=True)
     is_replacement_eligible = models.BooleanField(default= False)
+    replacement_status = models.CharField(max_length=50, default='no', choices=REPLACEMENT_STATUS_CHOICES)
+    is_replaced = models.BooleanField(default=False)
 
     def __str__(self):
         return self.application.resume.candidate_name
@@ -683,3 +699,12 @@ class Accountant(models.Model):
 
     def __str__(self):
         return self.username
+
+class ReplacementCandidates(models.Model):
+    replacement_with = models.OneToOneField(JobApplication, on_delete=models.CASCADE, related_name='replacement_with', limit_choices_to={"status":"left"})
+    replaced_by = models.OneToOneField(JobApplication,on_delete= models.CASCADE, related_name='replaced_by', null=True, blank=True)
+    replacement_within = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=15, default='pending', choices=SelectedCandidates.REPLACEMENT_STATUS_CHOICES)
+
+    def __str__(self):
+        return f"{self.replacement_with.resume.candidate_name}'s resume replaced"
