@@ -181,7 +181,7 @@ SIMPLE_JWT = {
 } 
 
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
@@ -222,12 +222,17 @@ CELERY_BEAT_SCHEDULE = {
     #     'task': 'app.tasks.my_function',
     #     'schedule': timedelta(seconds=10),  
     # },
-    'invoice-generation-task':{
-        'task': 'app.tasks.invoice_generated',
-        'schedule': crontab(minute=38, hour=16), # here need to add the data not only the time 
-    },
+    # 'invoice-generation-task':{
+    #     'task': 'app.tasks.invoice_generated',
+    #     'schedule': crontab(minute=38, hour=16), # here need to add the data not only the time 
+    # },
     'daily_tasks':{
         'task': 'app.tasks.daily_tasks_runner',
-        'schedule':timedelta(seconds=10),
+        # 'schedule':timedelta(seconds=30),
+        'schedule':crontab(minute=25, hour=17),
     }
 }
+
+
+
+

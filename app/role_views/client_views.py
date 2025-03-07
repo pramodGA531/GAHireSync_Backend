@@ -109,7 +109,7 @@ class JobPostingView(APIView):
                 invoice_after=organization_terms.invoice_after,
                 payment_within=organization_terms.payment_within,
                 interest_percentage=organization_terms.interest_percentage,
-                valid_until=timezone.now() + timedelta(days=organization_terms.replacement_clause)  # Set expiry
+                # valid_until=timezone.now() + timedelta(days=organization_terms.replacement_clause)  # Set expiry
             )
         except Exception as e:  # Catch any exception and return an error response
             return Response({"error": f"Failed to create job post terms: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)

@@ -3,6 +3,8 @@ import string
 import json
 import google.generativeai as genai
 from django.conf import settings
+from django.utils.html import strip_tags
+from django.core.mail import EmailMultiAlternatives
 import fitz
 from django.template.loader import render_to_string
 from docx import Document
@@ -18,6 +20,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import six
 from django.core.mail import send_mail
 from .models import *
+from decimal import Decimal
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
@@ -315,3 +318,140 @@ def calculate_profile_percentage(candidate):
         profile_completion = base_profile_completion + document_completion + education_completion
         
         return round(profile_completion, 2)
+    
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.conf import settings
+import logging
+
+# Set up logging (you can also configure this in your Django settings)
+logger = logging.getLogger(__name__)
+
+def sendemailTemplate(subject, template_name, context, recipient_list):
+    """
+    Sends an HTML email with a text alternative.
+
+    :param subject: The subject of the email
+    :param template_name: The name of the template for the email content
+    :param context: The context to render the template
+    :param recipient_list: List of recipients to send the email to
+    :return: True if email is sent, False otherwise
+    """
+    try:
+        # Render the HTML content using the template and context
+        html_content = render_to_string(template_name, context)
+
+        # Generate plain text version of the email (for email clients that don't support HTML)
+        text_content = strip_tags(html_content)
+
+        # Create the email message
+        email = EmailMultiAlternatives(
+            subject, 
+            text_content, 
+            settings.DEFAULT_FROM_EMAIL,  # Use the default sender email from settings
+            recipient_list
+        )
+
+        # Attach the HTML content as an alternative
+        email.attach_alternative(html_content, "text/html")
+
+        # Send the email
+        email.send()
+
+        # Log the success
+        logger.info(f"Email sent successfully to: {', '.join(recipient_list)}")
+
+        return True
+
+    except Exception as e:
+        # Log the error with details for debugging
+        logger.error(f"Failed to send email to {', '.join(recipient_list)}. Error: {e}")
+
+        return False
+    
+def calculate_invoice_amounts(selected_candidate, terms, client_gst, org_gst):
+    ctc_in_lakhs = Decimal(str(selected_candidate.ctc))  
+    ctc_in_actual = ctc_in_lakhs * Decimal('100000') 
+    
+    service_fee = (Decimal(str(terms.service_fee)) / Decimal('100')) * ctc_in_actual 
+    
+    def get_state_from_gst(gst_number):
+        state_code = gst_number[:2]
+        return state_code
+
+    client_state = get_state_from_gst(client_gst)
+    org_state = get_state_from_gst(org_gst)
+
+    if client_state == org_state:
+        sgst = (Decimal('9') / Decimal('100')) * service_fee
+        cgst = (Decimal('9') / Decimal('100')) * service_fee
+        igst = Decimal('0')  # No IGST if same state
+    else:
+        sgst = Decimal('0')
+        cgst = Decimal('0')
+        igst = (Decimal('18') / Decimal('100')) * service_fee  
+        
+    total_amount = service_fee + sgst + cgst + igst
+    
+    
+    # Prepare the dictionary to return the values
+    result = {
+        "ctc": round(selected_candidate.ctc,2), 
+        "service_fee": round(service_fee,2),  
+        "sub_total": round(service_fee,2), 
+        "sgst": round(sgst,2), 
+        "cgst": round(cgst,2), 
+        "igst": round(igst,2), 
+        "total_amount": round(total_amount,2) 
+    }
+    
+    return result
+
+def create_invoice_context(invoice):
+      # create_invoice_context(invoice)
+    organization=invoice.organization
+    job=invoice.application.job_id
+    client_details = ClientDetails.objects.get(user = invoice.client)
+    selected_candidate=SelectedCandidates.objects.get(application=invoice.application)
+    terms=JobPostTerms.objects.get(job_id=invoice.application.job_id)
+    result=calculate_invoice_amounts(selected_candidate,terms,client_details.gst_number,organization.gst_number)
+
+    # Prepare invoice context
+    context = {
+        "url":"backend.hirsync",# make this dynamic 
+        "invoice_id": f"{invoice.organization_id}/{invoice.client_id}/{invoice.id}/{invoice.created_at.date()}",  
+        "date":invoice.created_at.date(),
+        "service_provider_name": job.organization.name,
+        "candidate_name":selected_candidate.candidate.name,
+        "client_name": job.username.username,
+        "client_email": job.username.email,
+        "job_title": job.job_title,
+        "buyer_address":client_details.company_address,
+        "buyer_gst_no":client_details.gst_number,
+        "buyer_contact_number":client_details.contact_number,
+        "service_provider_address":job.organization.company_address,
+        "service_provider_gstin":job.organization.gst_number,
+        "service_provider_contact_person":job.organization.manager, #make this dynamic
+        "service_provider_email":job.organization.manager.email,
+        "service_provider_mobile":job.organization.contact_number,
+        "service_description":"HSNCODE:9983",
+        "date_of_joining":selected_candidate.joining_date,
+        "ctc": selected_candidate.ctc, 
+        "service_fee_percentage":terms.service_fee,
+        "service_fee":result["service_fee"],
+        "sub_total":result["sub_total"],
+        "cgst":result["cgst"],
+        "sgst":result["sgst"],
+        "igst":result["igst"],
+        # "date": now().date(), 
+        "total_amount":result["total_amount"],
+        # "payment_within": 32,
+        # "service_fee_percentage":terms.interest_percentage,
+        # "invoice_after": 12,
+        # "replacement_clause": 23,
+        # "email": job.username.email
+    }
+    return context
+  
+

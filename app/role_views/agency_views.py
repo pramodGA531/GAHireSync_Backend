@@ -776,3 +776,38 @@ class ViewSelectedCandidates(APIView):
             return Response(selected_candidates_list, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+
+class CreateAccountant(APIView):
+    permission_classes = [IsManager]  # Only managers can create accountants
+
+    def post(self, request):
+        # Validate the incoming data
+        email = request.data.get("email")
+        username = request.data.get("username")
+        role='accountant'
+
+        if not email or not username:
+            return Response({"error": "Email and Username are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if user already exists with this email
+        if CustomUser.objects.filter(email=email).exists():
+            return Response({"error": "Email is already taken"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create the user (accountant)
+        try:
+            user = CustomUser.objects.create_user(
+                username=username,
+                email=email,
+                password=None,
+                role=role# Accountants might not need a password if the system uses email-based authentication
+            )
+            
+            # Create the Accountant object and associate with the user
+            accountant = Accountant.objects.create(user=user, email=email, username=username)
+
+            return Response({"success": f"Accountant {username} created successfully."}, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response({"error": f"Failed to create accountant. {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

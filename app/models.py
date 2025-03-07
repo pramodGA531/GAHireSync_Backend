@@ -30,6 +30,7 @@ class CustomUser(AbstractUser):
     CLIENT = "client"
     MANAGER = "manager"
     INTERVIEWER = 'interviewer'
+    ACCOUNTANT='accountant'
 
     ROLE_CHOICES = [
         (ADMIN, "admin"),
@@ -38,6 +39,8 @@ class CustomUser(AbstractUser):
         (CLIENT, "client"),
         (MANAGER, "manager"),
         (INTERVIEWER, "interviewer"),
+        (ACCOUNTANT,"accountant"),
+        
     ]
 
     email = models.EmailField(unique=True)
@@ -481,7 +484,7 @@ class CandidateEvaluation(models.Model):
 
 # Terms Acceptance Model
 class ClientTermsAcceptance(models.Model):
-    
+
     client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="client_terms")
     description = models.TextField(default ='')
@@ -644,3 +647,39 @@ class SelectedCandidates(models.Model):
     def __str__(self):
         return self.application.resume.candidate_name
     
+
+
+class InvoiceGenerated(models.Model):
+    PENDING = 'pending'
+    PAID = 'paid'
+
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (PAID, 'Paid'),
+    ]
+
+    application = models.ForeignKey('JobApplication', on_delete=models.CASCADE,null=True,blank=True)
+    organization = models.ForeignKey('Organization', on_delete=models.CASCADE,null=True,blank=True)
+    client =models.ForeignKey('CustomUser', on_delete=models.CASCADE,null=True,blank=True)
+    organization_email = models.EmailField()
+    client_email = models.EmailField()
+    terms_id = models.IntegerField()
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default=PENDING  # Default status is "Pending"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp of when the invoice is generated
+
+    def __str__(self):
+        return f"Invoice for Application {self.application_id} - {self.client_email} ({self.status})"
+
+
+class Accountant(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="accountant")
+    email = models.EmailField(unique=True)
+    username = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.username
