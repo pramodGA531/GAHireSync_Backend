@@ -666,8 +666,8 @@ class SelectedCandidates(models.Model):
 
 
 class InvoiceGenerated(models.Model):
-    PENDING = 'pending'
-    PAID = 'paid'
+    PENDING = 'Pending'
+    PAID = 'Paid'
 
     STATUS_CHOICES = [
         (PENDING, 'Pending'),
@@ -678,6 +678,7 @@ class InvoiceGenerated(models.Model):
     organization = models.ForeignKey('Organization', on_delete=models.CASCADE,null=True,blank=True)
     client =models.ForeignKey('CustomUser', on_delete=models.CASCADE,null=True,blank=True)
     organization_email = models.EmailField()
+    payment_transaction_id=models.CharField(null=True,blank=True,default="null",max_length=20)
     client_email = models.EmailField()
     terms_id = models.IntegerField()
     status = models.CharField(
@@ -691,7 +692,9 @@ class InvoiceGenerated(models.Model):
         return f"Invoice for Application {self.application_id} - {self.client_email} ({self.status})"
 
 
-class Accountant(models.Model):
+class Accountants(models.Model):
+    # manager=models.ForeignKey(CustomUser,)
+    organization=models.OneToOneField(Organization,on_delete=models.CASCADE,null=True,blank=True)
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="accountant")
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=255)
@@ -708,3 +711,5 @@ class ReplacementCandidates(models.Model):
 
     def __str__(self):
         return f"{self.replacement_with.resume.candidate_name}'s resume replaced"
+    
+    

@@ -803,35 +803,63 @@ class ViewSelectedCandidates(APIView):
         
         
 
-class CreateAccountant(APIView):
-    permission_classes = [IsManager]  # Only managers can create accountants
 
+class AccountantsView(APIView):
+    permission_classes = [IsManager]  # Only managers can access this view
+
+    def get(self, request):
+        try:
+            # Fetch the organization associated with the logged-in manager
+            organization = Organization.objects.get(manager=request.user)
+
+            # Get all accountants associated with this organization
+            accountants = Accountants.objects.filter(organization=organization)
+
+            # Check if accountants exist in the organization
+            if not accountants.exists():
+                return Response({"message": "No accountants found for this organization"}, status=status.HTTP_404_NOT_FOUND)
+
+            # Serialize the list of accountants
+            serializer = AccountantsSerializer(accountants, many=True)
+
+            # Return the serialized data
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Organization.DoesNotExist:
+            return Response({"error": "Manager does not belong to any organization"}, status=status.HTTP_404_NOT_FOUND)
     def post(self, request):
-        # Validate the incoming data
         email = request.data.get("email")
         username = request.data.get("username")
-        role='accountant'
 
         if not email or not username:
             return Response({"error": "Email and Username are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if user already exists with this email
         if CustomUser.objects.filter(email=email).exists():
             return Response({"error": "Email is already taken"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create the user (accountant)
+        try:
+            print("request.user",request.user)
+            organization=Organization.objects.get(manager=request.user)
+            # organization = request.user.manager__organization
+        except Organization.DoesNotExist:
+            return Response({"error": "Manager does not belong to an organization"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             user = CustomUser.objects.create_user(
                 username=username,
                 email=email,
-                password=None,
-                role=role# Accountants might not need a password if the system uses email-based authentication
+                password=None, 
+                role='accountant' 
             )
             
-            # Create the Accountant object and associate with the user
-            accountant = Accountant.objects.create(user=user, email=email, username=username)
+            accountant = Accountants.objects.create(
+                user=user,
+                email=email,
+                username=username,
+                organization=organization  
+            )
 
             return Response({"success": f"Accountant {username} created successfully."}, status=status.HTTP_201_CREATED)
-        
+
         except Exception as e:
             return Response({"error": f"Failed to create accountant. {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

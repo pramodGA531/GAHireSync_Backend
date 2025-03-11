@@ -357,5 +357,9 @@ class SelectedCandidateSerialzier(serializers.ModelSerializer):
     class Meta:
         model = SelectedCandidates
         fields = '__all__'
+class AccountantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Accountants
+        fields = ['id', 'email', 'username', 'created_at', 'organization'] 
 
     

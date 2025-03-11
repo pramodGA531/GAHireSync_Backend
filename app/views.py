@@ -600,7 +600,7 @@ class Invoices(APIView):
 
         if request.user.role == "client":
             # Clients can only see their own invoices based on their email
-            invoices = InvoiceGenerated.objects.filter(client_email=request.user.email)
+            invoices = InvoiceGenerated.objects.filter(client=request.user)
             for invoice in invoices:
                 context = create_invoice_context(invoice)
                 html = generate_invoice(context)
@@ -616,11 +616,14 @@ class Invoices(APIView):
 
         elif request.user.role == "accountant":
             # Accountants can also see all invoices related to their organization
-            invoices = InvoiceGenerated.objects.filter(organization_id=request.user.organization.id)
-            for invoice in invoices:
-                context = create_invoice_context(invoice)
-                html = generate_invoice(context)
-                html_list.append({"invoice": invoice, "html": html})
+            accountant=Accountants.objects.get(user=request.user)
+            print(accountant.organization)
+            if accountant:
+                invoices = InvoiceGenerated.objects.filter(organization=accountant.organization)
+                for invoice in invoices:
+                    context = create_invoice_context(invoice)
+                    html = generate_invoice(context)
+                    html_list.append({"invoice": invoice, "html": html})
 
         else:
             # If the user's role is not recognized, deny access
@@ -635,3 +638,31 @@ class Invoices(APIView):
 
         # If no invoices found, return a not found message
         return Response({"message": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
+    def put(self, request):
+        # Print the user's role and user object for debugging
+        print(f"User Role: {request.user.role}")
+        print(f"User: {request.user}")
+        if not request.user.role=="accountant":
+            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
+        invoice_id = request.data.get('invoice_id')
+        payment_transaction_id = request.data.get('payment_transaction_id')
+
+        # Ensure that both the invoice ID and payment transaction ID are provided
+        if not invoice_id or not payment_transaction_id:
+            return Response({"error": "Both invoice_id and payment_transaction_id are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            invoice = InvoiceGenerated.objects.get(id=invoice_id)
+            invoice.status="Paid"
+            invoice.payment_transaction_id = payment_transaction_id
+            invoice.save()
+
+            # Return a success response
+            return Response({"message": "Invoice updated successfully."}, status=status.HTTP_200_OK)
+
+        except InvoiceGenerated.DoesNotExist:
+            # If invoice is not found, return an error response
+            return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    
+
