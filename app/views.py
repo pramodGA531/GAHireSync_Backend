@@ -350,28 +350,6 @@ class RecJobPostings(APIView):
             print(str(e))
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-
-class RecJobDetails(APIView):
-    def get(self, request, job_id):
-        try:
-            user = request.user
-            org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
-            serializer = JobPostingsSerializer(job)
-
-            resume_count = JobApplication.objects.filter(job_id = job_id, sender = user).count()
-
-            try:
-                summary = summarize_jd(job)
-            except:
-                summary = ''
-            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count}, status=status.HTTP_200_OK)
-        except:
-            return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
-     
-
-       
-
 class GetResumeByApplicationId(APIView):
 
     def get(self, request, application_id, *args, **kwargs):

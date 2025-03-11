@@ -151,6 +151,7 @@ class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
 
 class JobApplicationSerializer(serializers.ModelSerializer):
     job_id = JobPostingsSerializer()
+    resume = CandidateResumeSerializer()
     # cand_id=CandidateResumeWithoutContactSerializer()
     
     class Meta:

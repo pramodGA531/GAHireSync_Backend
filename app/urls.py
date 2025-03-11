@@ -93,6 +93,7 @@ urlpatterns = [
     path('recruiter/candidate-selected-jobs/', ReConfirmResumes.as_view(), name = 'list-of-cadidate-selected-jobs'),
     path('recruiter/reconfirmation-accept/', AcceptReconfirmResumes.as_view(), name='handle-select'),
     path('recruiter/reconfirmation-reject/', RejectReconfirmResumes.as_view(), name='handle-reject'),
+    path('recruiter/organization-applications/', OrganizationApplications.as_view(), name='organization-all-applications'),
     
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('get_invoices/',Invoices.as_view()),
