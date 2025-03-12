@@ -15,7 +15,8 @@ from django.template.loader import render_to_string
 from django.shortcuts import render
 from .permissions import *
 from .authentication_views import *
-
+from .models import InvoiceGenerated
+from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .utils import *
 
@@ -557,14 +558,6 @@ Interviewers are waiting to check your profile
             print(str(e))
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from .models import InvoiceGenerated
-from rest_framework import status
-
-# Assuming you have these utility functions
-from .utils import create_invoice_context, generate_invoice
 
 
 class Invoices(APIView):

@@ -38,6 +38,7 @@ urlpatterns = [
     path('organization-terms/', OrganizationTermsView.as_view(), name='organization-terms'),
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
+    path('client/dashboard/',ClientDashboard.as_view(), name='client-dashboard-details'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
     path('client/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),

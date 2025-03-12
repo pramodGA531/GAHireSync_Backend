@@ -11,10 +11,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from rest_framework.permissions import IsAuthenticated
-from django.conf import settings 
 from django.core.mail import send_mail
-from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
 from django.http import HttpResponse
 from django.template.loader import render_to_string
@@ -23,6 +20,9 @@ from datetime import date
 from django.db.utils import IntegrityError
 from django.shortcuts import get_object_or_404
 from ..utils import *
+from django.db.models import Count, Sum
+from collections import defaultdict
+from django.utils.timesince import timesince
 
 
 
@@ -31,7 +31,116 @@ def generate_random_password(length=8):
     password = ''.join(random.choice(characters) for _ in range(length))
     return password
 
+# Dashboard
+class ClientDashboard(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
 
+        try:
+            now  = timezone.now()
+            seven_days_ago = now - timedelta(days = 7)
+
+            all_jobs = JobPostings.objects.filter(username = request.user)
+            job_posts = all_jobs.order_by("-created_at")[:5]
+
+            all_applications = JobApplication.objects.filter(job_id__in=all_jobs)
+            application_counts = all_applications.values('job_id').annotate(total=Count('id'))
+            application_counts_dict = {item['job_id']: item['total'] for item in application_counts}
+
+            recent_applications = all_applications.filter(created_at__gte=seven_days_ago).values('job_id').annotate(total=Count('id'))
+            recent_applications_dict = {item['job_id']: item['total'] for item in recent_applications}
+
+            jobs_list = []
+            for post in job_posts:
+                jobs_list.append({
+                    "job_title": post.job_title,
+                    "posted": timesince(post.created_at) + " ago",
+                    "id": post.id,
+                    "location": post.job_locations.split(",")[0].strip() if post.job_locations else "",
+                    "applications": application_counts_dict.get(post.id, 0),
+                    "applications_last_week": recent_applications_dict.get(post.id, 0),
+                    "years_of_experience": post.years_of_experience,
+                })
+            
+            total_vacancies = all_jobs.aggregate(total=Sum('num_of_positions'))['total'] or 0
+            resumes_received = all_applications.count()
+            on_process = all_applications.filter(status='processing').count()
+            no_of_roles = all_jobs.count()
+            closed = SelectedCandidates.objects.filter(
+                application__in=all_applications, joining_status="joined"
+            ).count()
+
+            data_json = {
+                "resumes_received": resumes_received,
+                "on_process": on_process,
+                "no_of_roles": no_of_roles,
+                "closed": closed,
+                "vacancies": total_vacancies,
+            }
+
+            # interviewer name, interviewer email, num_of_jobs_alloted, num_of_round_alloted, rounds_completed, rounds_pending
+            interviewers = ClientDetails.objects.get(user=request.user).interviewers.all() 
+
+            interviewer_ids = [interviewer.id for interviewer in interviewers]
+            interviewer_usernames = {interviewer.id: interviewer.username for interviewer in interviewers}
+            interviewer_emails = {interviewer.id: interviewer.email for interviewer in interviewers}
+
+            jobs = InterviewerDetails.objects.filter(
+                name=request.user,
+                job_id__in=all_jobs
+            ).values('id', 'job_id')
+
+            jobs_alloted_dict = defaultdict(set)
+            for job in jobs:
+                jobs_alloted_dict[job['interviewer_id']].add(job['job_id'])
+
+            rounds_alloted_dict = defaultdict(int)
+            for job in jobs:
+                rounds_alloted_dict[job['interviewer_id']] += 1
+
+            # Fetch all interview schedules for these interviewers in bulk
+            rounds_status = InterviewSchedule.objects.filter(interviewer__in=interviewer_ids).values('interviewer_id', 'status')
+
+            # Count of pending and completed rounds
+            rounds_status_count = defaultdict(lambda: {'pending': 0, 'completed': 0})
+            for round_status in rounds_status:
+                if round_status['status'] == 'pending':
+                    rounds_status_count[round_status['interviewer_id']]['pending'] += 1
+                elif round_status['status'] == 'completed':
+                    rounds_status_count[round_status['interviewer_id']]['completed'] += 1
+
+            # Now, build the final data
+            interviewers_data = []
+            for interviewer in interviewers:
+                interviewer_id = interviewer.id
+                interviewer_json = {
+                    "interviewer_name": interviewer_usernames[interviewer_id],
+                    "interviewer_email": interviewer_emails[interviewer_id],
+                    "rounds_alloted": rounds_alloted_dict[interviewer_id],
+                    "jobs_alloted": len(jobs_alloted_dict[interviewer_id]),
+                    "pending": rounds_status_count[interviewer_id]['pending'],
+                    "completed": rounds_status_count[interviewer_id]['completed'],
+                }
+                interviewers_data.append(interviewer_json)
+
+            today_interviews_list = []
+            today_interviews = InterviewSchedule.objects.filter(job_id__in = all_jobs,scheduled_date = now.date() ).select_related('interviewer__name', 'candidate', 'job_id')
+            today_interviews_list = []
+            for interview in today_interviews:
+                today_interviews_list.append({
+                    "interviewer_name": interview.interviewer.name.username,
+                    "candidate_name": interview.candidate.candidate_name,
+                    "from_time": interview.from_time,
+                    "round": interview.round_num,
+                    "job_title": interview.job_id.job_title
+                })
+
+            return Response({"data":data_json, "interviewers_data":interviewers_data, "today_interviews": today_interviews_list, "job_posts": jobs_list},status = status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": f"Failed to create job post terms: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        
 
 # Job Postings
 
@@ -339,9 +448,20 @@ The Recruitment Team
     
 # View All Job posts by client
 class getClientJobposts(APIView):
+    pagination_class = TenResultsPagination
     def get(self,request):
         try:
-            print("entered")
+            if request.GET.get('only_titles'):
+                jobs = JobPostings.objects.filter(username = request.user)
+                jobs_list = []
+                for job in jobs:
+                    job_json = {
+                        "job_id": job.id,
+                        "job_title": job.job_title,
+                        "created_at": job.created_at
+                    }
+                    jobs_list.append(job_json)
+                return Response(jobs_list, status=status.HTTP_200_OK)
             if request.GET.get('id'):
                 id = request.GET.get('id')
                 jobpost = JobPostings.objects.get(id=id)
@@ -351,16 +471,25 @@ class getClientJobposts(APIView):
                 jobposts = JobPostings.objects.filter(username = request.user)
                 jobs = []
                 for job in jobposts:
+                    applications = JobApplication.objects.filter(job_id = job)
+                    applications_count = applications.count()
+                    closed = SelectedCandidates.objects.filter(application__in = applications, joining_status = 'joined').count()
                     job_details = {
                         "id": job.id,
                         "job_title": job.job_title,
-                        "ctc":job.ctc,
+                        "total_candidates": applications_count,
+                        "company": job.organization.name,
                         "status": job.status,
+                        "positions_closed": f"{closed}/{job.num_of_positions}",
+                        "ctc":job.ctc,
                         "job_close_duration": job.job_close_duration,
-                        "approval_status": job.approval_status,
                     }
                     jobs.append(job_details)
-            return Response(jobs, status=status.HTTP_200_OK)
+
+                paginator = self.pagination_class()
+                paginated_jobs = paginator.paginate_queryset(jobs, request)
+
+                return paginator.get_paginated_response(paginated_jobs)
         
         except Exception as e:
             print(str(e))
@@ -530,9 +659,24 @@ class InterviewersView(APIView):
         try:
             user = request.user
             client = ClientDetails.objects.get(user = user)
-            serializer = ClientDetailsInterviewersSerializer(client)
-            return Response(serializer.data["interviewers"], status=status.HTTP_200_OK)
+            interviewers = client.interviewers.all()
+            interviewers_list = []
+            for interviewer in interviewers:
+                rounds_alloted = InterviewerDetails.objects.filter(name = interviewer)
+                rounds_alloted_count = rounds_alloted.count()
+                rounds_completed = InterviewSchedule.objects.filter(status = 'completed',interviewer__in = rounds_alloted ).count()
+                interviewer_json = {
+                    "interviewer_name": interviewer.username,
+                    "interviewer_email": interviewer.email,
+                    "joining_date": interviewer.date_joined,
+                    "rounds_alloted": rounds_alloted_count,
+                    "rounds_completed": rounds_completed,
+                }
+                interviewers_list.append(interviewer_json)
+            print(interviewers_list)
+            return Response(interviewers_list, status=status.HTTP_200_OK)
         except Exception as e:
+            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     def post(self, request):
         try:
@@ -611,6 +755,7 @@ HireSync Team
 
 # Get all the applicaitons
 class GetResumeView(APIView):
+    pagination_class = TenResultsPagination
     def get(self,request):
         try:
             user = request.user
@@ -638,34 +783,32 @@ class GetResumeView(APIView):
                     "ctc": job.ctc, 
                     "num_of_rounds": job.rounds_of_interview
                 }
+
                 return Response({"data":candidates_serializer.data, "job_data": job_data},   status=status.HTTP_200_OK)
             
             else:
-                job_postings = JobPostings.objects.filter(username = user )
-                job_applications_json = []
+                job_postings = JobPostings.objects.filter(username=user).exclude(status='closed')
+                job_applications_list = []
+
                 for job_post in job_postings:
-                    if job_post.status == 'closed':
-                        continue
                     job_id = job_post.id
                     num_of_postings = job_post.num_of_positions
                     last_date = job_post.job_close_duration
                     total_applications = JobApplication.objects.filter(job_id=job_id).count()
-                    processing_count = JobApplication.objects.filter(job_id =job_id,status = 'processing').count()
-                    selected_count = JobApplication.objects.filter(job_id=job_id, status="selected").count()
-                    pending_count = JobApplication.objects.filter(job_id=job_id, status="pending").count()
-                    rejected_count = JobApplication.objects.filter(job_id=job_id, status="rejected").count()
 
-                    job_applications_json.append({
-                        "job_id": job_id,
+                    job_applications_list.append({
+                        "job_id": job_id,  # ensure job_id is included for frontend
+                        "job_title": job_post.job_title,
                         "num_of_postings": num_of_postings,
                         "last_date": last_date,
                         "applications_sent": total_applications,
-                        "processing": processing_count,
-                        "selected": selected_count,
-                        "pending": pending_count,
-                        "rejected": rejected_count,
+                        "organization":job_post.organization.name,
                     })
-                return Response(job_applications_json, status=status.HTTP_200_OK)
+
+                paginator = self.pagination_class()
+                paginated_data = paginator.paginate_queryset(job_applications_list, request)
+
+                return paginator.get_paginated_response(paginated_data)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
@@ -1385,40 +1528,6 @@ class AllSelectedCandidates(APIView):
         except Exception as e:
             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
         
-# class AllJoinedCandidates(APIView):
-#     permission_classes = [IsClient]
-#     def get(self, request):
-#         try:
-#             applications = JobApplication.objects.filter(
-#                 job_id__username=request.user
-#             ).select_related("selected_candidates")  # Use select_related for OneToOneField
-
-#             candidates_list = []
-
-#             for application in applications:
-#                 candidate = application.selected_candidates  # Directly get the related object
-
-#                 if candidate and candidate.joining_status == 'joined':
-#                     job_details_json = {
-#                         "job_title": application.job_id.job_title,
-#                         "created_at": application.job_id.created_at,
-#                         "candidates": [
-#                             {
-#                                 "candidate_name": candidate.candidate.name.username,
-#                                 "joining_status": candidate.joining_status,
-#                                 "candidate_id": candidate.id,
-#                             }
-#                         ],
-#                     }
-#                     candidates_list.append(job_details_json)
-
-#             return Response(candidates_list, status=status.HTTP_200_OK)
-
-#         except JobApplication.DoesNotExist:
-#             return Response({"error": "No job applications found"}, status=status.HTTP_404_NOT_FOUND)
-
-#         except Exception as e:
-#             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 class AllJoinedCandidates(APIView):
     permission_classes = [IsClient]
@@ -1732,9 +1841,3 @@ class ReplaceCandidate(APIView):
             print(str(e))  
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-
-    
-# handle replacement trigger
-# fetch the replacement_with and replacement_by and update the database for the request
-# update the frontend page
-

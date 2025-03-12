@@ -709,4 +709,7 @@ class ReplacementCandidates(models.Model):
     status = models.CharField(max_length=15, default='pending', choices=SelectedCandidates.REPLACEMENT_STATUS_CHOICES)
 
     def __str__(self):
-        return f"{self.replacement_with.resume.candidate_name}'s resume replaced"
+        return f"{self.replacement_with.resume.candidate_name}'s resume replace"
+
+
+    

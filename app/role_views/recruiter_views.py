@@ -114,6 +114,8 @@ class CandidateResumeView(APIView):
                     expected_ctc=data.get('expected_ctc', ''),
                     notice_period=data.get('notice_period', ''),
                     job_status=data.get('job_status', ''),
+                    joining_days_required = data.get('joining_days_required',''),
+                    highest_qualification = data.get('highest_qualification'),
                 )
 
 
