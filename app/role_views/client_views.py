@@ -6,16 +6,10 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from django.contrib.auth import authenticate
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.db import transaction
 from django.core.mail import send_mail
 from datetime import datetime
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-from django.shortcuts import render
 from datetime import date
 from django.db.utils import IntegrityError
 from django.shortcuts import get_object_or_404
@@ -655,8 +649,46 @@ class RejectJobEditRequestView(APIView):
 
 # Adding and Vieweing Clients Interviewers
 class InterviewersView(APIView):
+    permission_classes= [IsClient]
     def get(self, request,*args, **kwargs):
         try:
+            if request.GET.get('interviewer_id'):
+                interviewer_id = request.GET.get('interviewer_id')
+                interviews = InterviewerDetails.objects.filter(name__id=interviewer_id)
+                interviews_list = []
+                user = CustomUser.objects.get(id = interview)
+                count = 0
+                
+
+                for interview in interviews:
+                    try:
+                        scheduled = InterviewSchedule.objects.get(name=interview)
+                        if scheduled.status == 'completed':
+                            count+=1
+                        interviews_list.append({
+                            "interviewer_id": interviewer_id,
+                            "candidate_name": scheduled.candidate.candidate_name,
+                            "scheduled_date": scheduled.scheduled_date,
+                            "interview_status": scheduled.status,
+                            "round_num": interview.round_num,
+                            "type_of_interview": interview.type_of_interview,
+                            "mode_of_interview": interview.mode_of_interview,
+                            "job_title": interview.job_id.job_title,
+                            "agency_name": interview.job_id.organization.name
+                        })
+                    except InterviewSchedule.DoesNotExist:
+                        continue  
+
+                interviewer_details = {
+                    "interviewer_name": user.username,
+                    "interviewer_email": user.email,
+                    "role":"Interviewer",
+                    "alloted":interviewers_list.length,
+                    "completed": count
+                }
+                return Response({"data":interviewers_list, "interviewer_details": interviewer_details},status=status.HTTP_200_OK)
+            
+
             user = request.user
             client = ClientDetails.objects.get(user = user)
             interviewers = client.interviewers.all()
@@ -664,13 +696,17 @@ class InterviewersView(APIView):
             for interviewer in interviewers:
                 rounds_alloted = InterviewerDetails.objects.filter(name = interviewer)
                 rounds_alloted_count = rounds_alloted.count()
-                rounds_completed = InterviewSchedule.objects.filter(status = 'completed',interviewer__in = rounds_alloted ).count()
+                scheduled_interviews = InterviewSchedule.objects.filter(interviewer__in = rounds_alloted )
+                scheduled_count = scheduled_interviews.count()
+                rounds_completed = scheduled_interviews.filter(status = 'completed').count()
                 interviewer_json = {
                     "interviewer_name": interviewer.username,
                     "interviewer_email": interviewer.email,
                     "joining_date": interviewer.date_joined,
                     "rounds_alloted": rounds_alloted_count,
+                    "scheduled_interviews": scheduled_count,
                     "rounds_completed": rounds_completed,
+                    "id":interviewer.id
                 }
                 interviewers_list.append(interviewer_json)
             print(interviewers_list)
