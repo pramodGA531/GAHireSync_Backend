@@ -656,13 +656,12 @@ class InterviewersView(APIView):
                 interviewer_id = request.GET.get('interviewer_id')
                 interviews = InterviewerDetails.objects.filter(name__id=interviewer_id)
                 interviews_list = []
-                user = CustomUser.objects.get(id = interview)
+                user = CustomUser.objects.get(id = interviewer_id)
                 count = 0
-                
-
                 for interview in interviews:
                     try:
-                        scheduled = InterviewSchedule.objects.get(name=interview)
+                        scheduled = InterviewSchedule.objects.get(interviewer=interview)
+                        print("enterd")
                         if scheduled.status == 'completed':
                             count+=1
                         interviews_list.append({
@@ -683,11 +682,11 @@ class InterviewersView(APIView):
                     "interviewer_name": user.username,
                     "interviewer_email": user.email,
                     "role":"Interviewer",
-                    "alloted":interviewers_list.length,
-                    "completed": count
+                    "alloted":InterviewerDetails.objects.filter(name = user).count(),
+                    "completed": count,
+                    "scheduled":len(interviews_list)
                 }
-                return Response({"data":interviewers_list, "interviewer_details": interviewer_details},status=status.HTTP_200_OK)
-            
+                return Response({"data":interviews_list, "interviewer_details": interviewer_details},status=status.HTTP_200_OK)
 
             user = request.user
             client = ClientDetails.objects.get(user = user)
