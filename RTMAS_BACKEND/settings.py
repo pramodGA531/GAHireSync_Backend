@@ -181,7 +181,7 @@ SIMPLE_JWT = {
 } 
 
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
@@ -229,7 +229,7 @@ CELERY_BEAT_SCHEDULE = {
     'daily_tasks':{
         'task': 'app.tasks.daily_tasks_runner',
         # 'schedule':timedelta(seconds=30),
-        'schedule':crontab(minute=25, hour=17),
+        'schedule':crontab(minute=2, hour=10), # set up celery cmds in the production 
     }
 }
 
