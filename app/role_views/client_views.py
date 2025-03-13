@@ -1128,33 +1128,37 @@ class ScheduledInterviewsForJobId(APIView):
 
 
 # Get all interview details
-class AllInterviewsView(APIView):
+class ClientInterviewsView(APIView):
+    permission_classes = [IsClient]
     def get(self, request):
         try:
-            if request.user.is_authenticated:
-                if request.user.role != 'client':
-                    return Response({"error":"Sorry, You are not allowed"},status=status.HTTP_400_BAD_REQUEST)                
+            if request.GET.get('job_id'):
+                job_id = request.GET.get('job_id')
+                interviewer_details = InterviewerDetails.objects.filter(job_id = job_id)
+                rounds_list = []
+                for round in interviewer_details:
+                    rounds_list.append({
+                        "interviewer_name": round.name.username,
+                        "interviewer_email": round.name.email,
+                        "round_num": round.round_num,
+                        "mode_of_interview": round.mode_of_interview,
+                        "type_of_interview": round.type_of_interview,
+                    })
+                scheduled_interviews = InterviewSchedule.objects.filter(job_id = job_id)
+                interviews_list = []
+                for interview in scheduled_interviews:
+                    interviews_list.append({
+                        "interviewer_name": interview.interviewer.name.username,
+                        "round_num": interview.round_num,
+                        "status": interview.status,
+                        "candidate_name": interview.candidate.candidate_name,
+                        "scheduled_date": interview.scheduled_date,
+                        "scheduled_time": f"{interview.from_time} - {interview.to_time}",
+                        "mode_of_interview": interview.interviewer.mode_of_interview,
+                        "type_of_interview": interview.interviewer.type_of_interview,
+                    })
 
-                # requiredfields-->   job_title, interviewer_name, candidate_name, scheduled_interview, application_status, job_postings_deadline, job_post_status, round_num
-                response_json = []
-                all_interviews = InterviewSchedule.objects.filter(job_id__in = JobPostings.objects.filter(username = request.user).values_list('id', flat=True))
-                for interview in all_interviews:
-                    job_post = JobPostings.objects.get(id = interview.job_id)
-                    job_title = job_post.job_title
-                    interviewer_name = interview.interviewer.name.username
-                    candidate_name = interview.candidate.candidate_name
-                    scheduled_interview = interview.scheduled_date
-                    interview_status = interview.status
-                    if JobApplication.objects.get(next_interview = interview):
-                        candidate_status = JobApplication.objects.get(next_interview = interview).status
-                    else:
-                        candidate_staus = "cleared"
-                    job_post_status = job_post.status
-                    job_submission_date = job_post.job_close_duration
-
-                    json_fromat = {
-                        "job"
-                    }
+                return Response({"scheduled_interviews": interviews_list,"interviewers": rounds_list }, status=status.HTTP_200_OK)
 
         except Exception as e:
             print(str(e))

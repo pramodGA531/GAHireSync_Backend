@@ -49,6 +49,7 @@ urlpatterns = [
     path('client/select-candidate/',HandleSelect.as_view(), name ='selects-application'),
     path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
     path('client/add-interviewers/', InterviewersView.as_view(), name='add-interviewers'),
+    path('client/job-post/interviews/', ClientInterviewsView.as_view(), name='client-interviewes'),
     path('client/get-interviewers/', InterviewersView.as_view(), name='get-interviewers'),
     path('client/closed-jobslist/',ClosedJobsClient.as_view(), name='list-of-closed-jobs' ),
     path('client/reopen-job/', ReopenJob.as_view(), name='reopen-new-job'),
