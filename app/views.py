@@ -634,6 +634,33 @@ class Invoices(APIView):
         except InvoiceGenerated.DoesNotExist:
             # If invoice is not found, return an error response
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
-    
-    
+        
+class BasicApplicationDetails(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request, application_id):
+        try:
+            try:
+                application = JobApplication.objects.get(id=application_id)
+            except JobApplication.DoesNotExist:
+                return Response({"error": "Job Application not found"}, status=status.HTTP_404_NOT_FOUND)
 
+            resume_details = application.resume
+            if not resume_details:
+                return Response({"error": "No resume details associated with this application"}, status=status.HTTP_404_NOT_FOUND)
+
+            application_json = {
+                "candidate_name": resume_details.candidate_name,
+                "expected_ctc": resume_details.expected_ctc,
+                "current_ctc": resume_details.current_ctc,
+                "experience": resume_details.experience,
+                "job_status": resume_details.job_status,
+                "job_type": resume_details.current_job_type,
+                "notice_period": resume_details.notice_period,
+                "resume": resume_details.resume.url if resume_details.resume else None,
+            }
+
+            return Response(application_json, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

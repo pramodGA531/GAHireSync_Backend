@@ -65,9 +65,12 @@ urlpatterns = [
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
+    path('interviewer/interviewer-dashboard/',InterviewerDashboardView.as_view(),name='dashboard-of-interviewer'),
     path('interviewer/get-next-interviewer-details/',NextRoundInterviewDetails.as_view(),name='get-interviewer-details'),
     path('interviewer/prev-interview-remarks/', PrevInterviewRemarksView.as_view(), name="previous-interview-remarks" ),
     path('interviewer/scheduled-interviews/',ScheduledInterviewsView.as_view(), name='schedule-interviews'),
+    path('interviewer/completed-interviews/',CompletedInterviewsView.as_view(), name='completed-interviews'),
+    path('interviewer/missed-interviews/',MissedInterviewsView.as_view(), name='missed-interviews'),
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/select-candidate/', SelectCandidate.as_view(), name= 'shortlist-candidate'),
     path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
@@ -99,6 +102,7 @@ urlpatterns = [
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('get_invoices/',Invoices.as_view()),
     path('update_invoices/',Invoices.as_view()),
+    path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),

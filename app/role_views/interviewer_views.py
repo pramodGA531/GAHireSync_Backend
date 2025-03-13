@@ -25,8 +25,91 @@ from ..utils import *
 
 
 # View all the scheduled interviews
+
+class InterviewerDashboardView(APIView):
+    permission_classes = [IsInterviewer]
+
+    def get(self, request):
+        try:
+            user = request.user
+            today = timezone.localdate()
+            interviewer_details = InterviewerDetails.objects.filter(name = user)
+            todays_interviews = InterviewSchedule.objects.filter(
+                interviewer__in=interviewer_details,
+                scheduled_date=today
+            ).select_related('candidate', 'job_id')
+
+            todays_interviews_list = []
+            today_events = []
+            for interview in todays_interviews:
+                # Today's Interview List
+                todays_interviews_list.append({
+                    "candidate_name": interview.candidate.candidate_name,
+                    "job_title": interview.job_id.job_title,
+                    "round_num": interview.round_num,
+                    "from_time": interview.from_time.strftime("%I:%M %p"),  # Formatting time like '09:30 AM'
+                    "to_time": interview.to_time.strftime("%I:%M %p"),
+                    "interview_id": interview.id,
+                    "status":interview.status,
+                })
+
+                # Events list for Calendar view
+                today_events.append({
+                    "id": interview.id,
+                    "title": f"Interview with {interview.candidate.candidate_name}",
+                    "startTime": interview.from_time.strftime("%I:%M %p"),
+                    "endTime": interview.to_time.strftime("%I:%M %p"),
+                    "type": "processing" if interview.status == 'pending' else 'success'
+                })
+
+            # Fetch missed interviews (pending status and scheduled before today)
+            missed_interviews = InterviewSchedule.objects.filter(
+                interviewer__in=interviewer_details,
+                scheduled_date__lt=today,
+                status='pending'
+            ).select_related('candidate', 'job_id')
+
+            missed_interviews_list = []
+            for interview in missed_interviews:
+                missed_interviews_list.append({
+                    "candidate_name": interview.candidate.candidate_name,
+                    "job_title": interview.job_id.job_title,
+                    "round_num": interview.round_num,
+                    "from_time": interview.from_time.strftime("%I:%M %p"),
+                    "to_time": interview.to_time.strftime("%I:%M %p"),
+                    "interview_id": interview.id,
+                })
+
+            # Total assigned and completed interviews
+            assigned_interviews = InterviewSchedule.objects.filter(interviewer__in = interviewer_details)
+            total_assigned = assigned_interviews.count()
+            total_completed = assigned_interviews.filter(status='completed').count()
+
+            data = {
+                "assigned": total_assigned,
+                "completed": total_completed
+            }
+
+            # Final response
+            return Response({
+                "data": data,
+                "missed_interviews": missed_interviews_list,
+                "today_interviews": todays_interviews_list,
+                "events": today_events
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            # Log the error for debugging
+            print(f"Error in InterviewerDashboardView: {str(e)}")
+            return Response(
+                {"error": "Something went wrong. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+   
+
 class ScheduledInterviewsView(APIView):
     permission_classes = [IsInterviewer]
+    pagination_class = TenResultsPagination
     
     def get(self, request):
         try:
@@ -57,52 +140,122 @@ class ScheduledInterviewsView(APIView):
                     print(str(e))
                     return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
             else:
-                if not request.user.is_authenticated:
-                    return Response({"error": "You are not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
-                if not request.user.role == 'interviewer':
-                    return Response({"error":"You are not allowed to run this view"},status=status.HTTP_400_BAD_REQUEST)
-                try:
-                    interviews = InterviewSchedule.objects.filter(interviewer__name = request.user )
+               
+                interviews = InterviewSchedule.objects.filter(interviewer__name = request.user )
 
-                except CustomUser.DoesNotExist:
-                    return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
-
-                scheduled_json = []
+                scheduled_list = []
                 for interview in interviews:
-                    application_id = JobApplication.objects.get(resume = interview.candidate)
+                    application_by_resume = JobApplication.objects.filter(resume=interview.candidate).first()
+
+                    application_by_interview = JobApplication.objects.filter(next_interview=interview).first()
+
                     id = interview.id
                     scheduled_date = interview.scheduled_date
                     round_of_interview = interview.round_num
-                    interviewer_name = interview.interviewer.name.username
+                    timings = f"{interview.from_time} - {interview.to_time}"
                     job_id = interview.job_id.id
                     job_title = interview.job_id.job_title
-                    try:
-                        application = JobApplication.objects.get(next_interview = interview)
-                        candidate_name = application.resume.candidate_name
-                        statuss = application.status
-                    except JobApplication.DoesNotExist:
+
+                    if application_by_interview:
+                        candidate_name = application_by_interview.resume.candidate_name
+                        statuss = application_by_interview.status
+                        application_id = application_by_interview.id
+                    elif application_by_resume:
+                        candidate_name = application_by_resume.resume.candidate_name
+                        statuss = "completed"  
+                        application_id = application_by_resume.id
+                    else:
+                        # Fallback if no application found
                         candidate_name = interview.candidate.candidate_name
                         statuss = "completed"
+                        application_id = None  
 
-                    scheduled_json.append({
+                    scheduled_list.append({
                         "interview_id": id,
-                        "job_id":job_id,
-                        "job_title":job_title,
-                        "candidate_name":candidate_name,
-                        "interviewer_name":interviewer_name,
-                        "round_of_interview":round_of_interview,
-                        "schedule_date":scheduled_date,
-                        "status":statuss,
-                        "application_id":application_id.id,
-                        
+                        "job_id": job_id,
+                        "job_title": job_title,
+                        "candidate_name": candidate_name,
+                        "round_of_interview": round_of_interview,
+                        "scheduled_date": scheduled_date,
+                        "timings": timings,
+                        "status": statuss,
+                        "application_id": application_id,
                     })
 
-                return Response(scheduled_json, status =status.HTTP_200_OK)
+                paginator = self.pagination_class()
+                paginated_data = paginator.paginate_queryset(scheduled_list,request)
+
+                return paginator.get_paginated_response(paginated_data)
 
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
-   
+
+class CompletedInterviewsView(APIView):
+    permission_classes = [IsInterviewer]
+    pagination_class = TenResultsPagination
+
+    def get(self, request):
+        try:
+            user = request.user
+            interviews = InterviewerDetails.objects.filter(name = user)
+            scheduled_interviews = InterviewSchedule.objects.filter(interviewer__in = interviews, status = 'completed')
+            evaluations = CandidateEvaluation.objects.filter(interview_schedule__in = scheduled_interviews)
+            evaluation_list = []
+            for evaluation in evaluations:
+                evaluation_list.append({
+                    "job_title": evaluation.job_id.job_title,
+                    "round_num": evaluation.interview_schedule.round_num,
+                    "mode_of_interview": evaluation.interview_schedule.interviewer.mode_of_interview,
+                    "candidate_name": evaluation.job_application.resume.candidate_name,
+                    "scheduled_date": evaluation.interview_schedule.scheduled_date,
+                    "primary_skills_rating":evaluation.primary_skills_rating,
+                    "secondary_skills_rating": evaluation.secondary_skills_ratings,
+                    "remarks": evaluation.remarks,
+                    "evaluation_id": evaluation.id
+                })
+            
+            paginator = self.pagination_class()
+            paginated_data = paginator.paginate_queryset( evaluation_list, request)
+            return paginator.get_paginated_response(paginated_data)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+
+class MissedInterviewsView(APIView):
+    permission_classes = [IsInterviewer]
+    pagination_class = TenResultsPagination
+
+    def get(self, request):
+        try:
+            today = timezone.localdate()
+            time = timezone.localtime()
+            user = request.user
+            interviews = InterviewerDetails.objects.filter(name = user)
+            scheduled_interviews = InterviewSchedule.objects.filter(interviewer__in = interviews, status = 'pending', scheduled_date__lte = today, to_time__lte = time )
+            interviews_list = []
+            for interview in scheduled_interviews:
+                interviews_list.append({
+                    "job_title": interview.job_id.job_title,
+                    "round_num": interview.round_num,
+                    "mode_of_interview": interview.interviewer.mode_of_interview,
+                    "candidate_name": interview.candidate.candidate_name,
+                    "scheduled_date": interview.scheduled_date,
+                    "scheduled_timings": f"{interview.from_time} - {interview.to_time}",
+                    "interview_id": interview.id
+                })
+            
+            paginator = self.pagination_class()
+            paginated_data = paginator.paginate_queryset( interviews_list, request)
+            return paginator.get_paginated_response(paginated_data)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+        
+
+        
 # Get all the primary skills, secondary skills of the job post , to give the rating
 
 class JobPostSkillsView(APIView):
