@@ -106,6 +106,7 @@ urlpatterns = [
     path('manager/accountants/', AccountantsView.as_view() , name='create-acountant' ),
     
     path('manger/applications/',AgencyJobApplications.as_view()),
+    path('cand/reconfirmation/', CandidateReConfirmation.as_view()),
     
     
     
