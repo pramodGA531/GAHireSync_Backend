@@ -177,7 +177,8 @@ class GetOrganizationTermsView(APIView):
 
 # Create Job Post
 class JobPostingView(APIView):
-    permission_classes = [IsClient]  
+    permission_classes = [IsClient] 
+    print("called this function") 
 
     def addTermsAndConditions(self, job_post):
         try:
@@ -225,8 +226,10 @@ class JobPostingView(APIView):
 
     def post(self, request):
         print("role",request.user)
+        print("function is called ")
         data = request.data
         username = request.user
+        print("username",username)
         organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
         if not username or username.role != 'client':
             return Response({"error": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
@@ -316,7 +319,9 @@ class JobPostingView(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
-                        interviewer = CustomUser.objects.get(username = round_data.get('name'))
+                        print("round_data",round_data)
+                        #here there is error mail and name are in reverse
+                        interviewer = CustomUser.objects.get(username = round_data.get('email'))
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
@@ -691,8 +696,12 @@ class InterviewersView(APIView):
             user = request.user
             client = ClientDetails.objects.get(user = user)
             interviewers = client.interviewers.all()
+            print("interviewers",interviewers)
             interviewers_list = []
             for interviewer in interviewers:
+                print("interviewer",interviewer.username)
+                print("interviewer",interviewer.email)
+                
                 rounds_alloted = InterviewerDetails.objects.filter(name = interviewer)
                 rounds_alloted_count = rounds_alloted.count()
                 scheduled_interviews = InterviewSchedule.objects.filter(interviewer__in = rounds_alloted )
@@ -707,8 +716,9 @@ class InterviewersView(APIView):
                     "rounds_completed": rounds_completed,
                     "id":interviewer.id
                 }
+                print("interviewer_json",interviewer_json)
                 interviewers_list.append(interviewer_json)
-            print(interviewers_list)
+                print("list",interviewers_list)
             return Response(interviewers_list, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))

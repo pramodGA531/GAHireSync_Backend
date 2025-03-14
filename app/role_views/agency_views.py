@@ -17,6 +17,47 @@ from django.utils import timezone
 from django.utils.timezone import now,is_aware, make_naive
 
 
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+
+class AgencyJobApplications(APIView):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Step 1: Get the current user and fetch their associated organization.
+            user = request.user
+            org = Organization.objects.get(manager=user)
+            
+            # Step 2: Fetch all job postings for the given organization.
+            job_postings = JobPostings.objects.filter(organization=org)
+            
+            # Step 3: Prepare a list of job postings with their respective applications.
+            job_postings_with_applications = []
+            
+            for job_posting in job_postings:
+                # Step 4: Fetch applications for each job posting
+                applications = JobApplication.objects.filter(job_id=job_posting)
+                
+                # Step 5: Serialize the job posting and applications.
+                job_posting_data = JobPostingsSerializer(job_posting).data
+                
+                # Serialize job applications
+                job_applications_data = JobApplicationSerializer(applications, many=True).data
+                
+                # Append the job posting with the applications to the response list.
+                job_postings_with_applications.append({
+                    'job_posting': job_posting_data,
+                    'applications': job_applications_data
+                })
+            
+            # Step 6: Return the response with the job postings and applications.
+            return Response({'job_postings_with_applications': job_postings_with_applications}, status=200)
+        
+        except Organization.DoesNotExist:
+            return Response({'detail': 'Organization not found.'}, status=404)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=500)
+
 
 class AgencyDashboardAPI(APIView):
     permission_classes = [IsManager]

@@ -153,7 +153,8 @@ class JobApplicationSerializer(serializers.ModelSerializer):
     job_id = JobPostingsSerializer()
     resume = CandidateResumeSerializer()
     # cand_id=CandidateResumeWithoutContactSerializer()
-    
+    sender=CustomUserSerializer()
+    receiver=CustomUserSerializer()
     class Meta:
         model = JobApplication
         fields = '__all__'  
@@ -304,7 +305,7 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
     candidate=CandidateResumeSerializer()
     class Meta:
         model = InterviewSchedule
-        fields = ['interviewer', 'scheduled_date',"candidate","from_time","to_time"]
+        fields = "__all__"
 
 class CandidateCertificateSerializer(serializers.ModelSerializer):
     class Meta:

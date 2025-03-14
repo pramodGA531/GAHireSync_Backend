@@ -481,6 +481,7 @@ class SelectedJobsCandidate(APIView):
 class CandidateAcceptJob(APIView):
     permission_classes = [IsCandidate]
     def get(self, request):
+        print("calling the candidate")
         try:
             id = request.GET.get('selected_candidate_id')
             user = request.user
@@ -502,7 +503,7 @@ class CandidateAcceptJob(APIView):
 
 class CandidateRejectJob(APIView):
     permission_classes = [IsCandidate]
-    def get(self, request):
+    def post(self, request):
         try:
             id = request.GET.get('selected_candidate_id')
             user = request.user
@@ -519,3 +520,57 @@ class CandidateRejectJob(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   
+        
+        
+
+class CandidateReConfirmation(APIView):
+    print("CALLING THIS FUNCTION")
+    permission_classes = [IsAuthenticated, IsCandidate]  # Ensure authentication
+
+    def get(self, request):
+        print("CALLING THIS function")
+        try:
+            user = request.user  
+            if not user.is_authenticated:
+                return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+          
+            # Fetch CandidateProfile linked to the user
+            candidate_profile = CandidateProfile.objects.get(name=user)
+
+            # Get selected candidates excluding accepted ones
+            selected_candidates = SelectedCandidates.objects.filter(
+                candidate=candidate_profile
+            ).exclude(candidate_acceptance=True)
+
+            if not selected_candidates.exists():
+                return Response({
+                    "message": "No pending candidate selections found.",
+                    "job_details": []
+                }, status=status.HTTP_200_OK)
+
+            # Serialize data (returns a list of dictionaries)
+            serialized_data = SelectedCandidateSerialzier(selected_candidates, many=True).data  
+
+            # Fetch related job details
+            job_details = [
+                {
+                    "job_title": sc.application.job_id.job_title if sc.application and sc.application.job_id else None,
+                    "job_location": sc.application.job_id.job_locations if sc.application and sc.application.job_id else None,
+                    "company_name": sc.application.job_id.username.username if sc.application and sc.application.job_id and sc.application.job_id.username else None,
+                    "selected_candidate_id": item.get("id"),
+                    "selected_candidate_ctc": item.get("ctc"),
+                    "selected_candidate_joiningDate": item.get("joining_date"),
+                    "status":item.get("candidate_acceptance"),
+                }
+                for sc, item in zip(selected_candidates, serialized_data)
+            ]
+
+            return Response({
+                "job_details": job_details
+            }, status=status.HTTP_200_OK)
+            
+        except CandidateProfile.DoesNotExist:
+            return Response({"error": "Candidate profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
