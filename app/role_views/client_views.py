@@ -974,7 +974,7 @@ HireSync Team
                 resume = CandidateResume.objects.get(id = resume_id)
                 job_application = JobApplication.objects.get(resume = resume)
             except JobApplication.DoesNotExist:
-                return Response({"error":"There is no job with that id"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error":"There is no application with that id"}, status=status.HTTP_400_BAD_REQUEST)
             
             with transaction.atomic():
                 job_application.status = 'processing'
@@ -1880,3 +1880,82 @@ class ReplaceCandidate(APIView):
             print(str(e))  
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+
+class CompareListView(APIView):
+    permission_classes = [IsClient]
+    def post(self, request):
+        try:
+            job_id = request.data.get('jobid')
+            application_ids = request.data.get('application_ids')
+
+            if not job_id or not application_ids:
+                return Response({"error": "Both jobid and application_ids are required."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch the job details
+            job = JobPostings.objects.filter(id=job_id).first()
+            if not job:
+                return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            interviews = InterviewerDetails.objects.filter(job_id = job)
+            job_data = {
+                "job_id": job.id,
+                "job_title": job.job_title,
+                "job_description": job.job_description,
+                "ctc": job.ctc,
+                "interviews": interviews.count()
+            }
+
+            # Query applications based on IDs and job_id
+            applications = JobApplication.objects.filter(id__in=application_ids, job_id=job_id)
+            application_list = []
+
+            for application in applications:
+                resume = application.resume
+
+                primary_skills_qs = CandidateSkillSet.objects.filter(candidate=resume, is_primary=True)
+                secondary_skills_qs = CandidateSkillSet.objects.filter(candidate=resume, is_primary=False)
+
+                primary_skills = [
+                    {
+                        "skill_name": skill.skill_name,
+                        "skill_metric": skill.skill_metric,
+                        "metric_value": skill.metric_value
+                    }
+                    for skill in primary_skills_qs
+                ]
+                secondary_skills = [
+                    {
+                        "skill_name": skill.skill_name,
+                        "skill_metric": skill.skill_metric,
+                        "metric_value": skill.metric_value
+                    }
+                    for skill in secondary_skills_qs
+                ]
+
+                application_list.append({
+                    "id":application.id,
+                    "resume_id": resume.id,
+                    "candidate_name": resume.candidate_name,
+                    "sender": application.sender.username,
+                    "other_details": resume.other_details,
+                    "notice_period": resume.notice_period,
+                    "expected_ctc": resume.expected_ctc,
+                    "current_ctc": resume.current_ctc,
+                    "job_status": resume.job_status,
+                    "current_job_location": resume.current_job_location,
+                    "current_job_type": resume.current_job_type,
+                    "current_organization": resume.current_organisation,
+                    "date_of_birth": resume.date_of_birth,
+                    "experience": resume.experience,
+                    "resume": resume.resume.url if resume.resume else None,
+                    "status": application.status,
+                    "primary_skills": primary_skills,  
+                    "secondary_skills": secondary_skills,  
+                })
+
+            return Response({"data": application_list, "job_data": job_data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)

@@ -63,6 +63,7 @@ urlpatterns = [
     path('client/candidate-joined/', CandidateJoined.as_view(), name='updating-joining-status-of-candidate-as-joined'),
     path('client/replacements/', ReplacementsView.as_view(), name='apply-replacement-and-get-all-replacements'),
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
+    path('client/compare-list-view/', CompareListView.as_view(), name='candidate-replacing'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
