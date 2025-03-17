@@ -1969,3 +1969,74 @@ class CompareListView(APIView):
         except Exception as e:
             print(str(e))  
             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ViewCompleteResume(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            id = request.GET.get('id')
+            if not id:
+                return Response({"error":"Id is required"}, status=status.HTTP_200_OK)
+            try:
+                application = JobApplication.objects.get(id = id)
+                interviews = InterviewerDetails.objects.filter(job_id = application.job_id).count()
+
+            except JobApplication.DoesNotExist:
+                return Response({"error":"Job application with that id does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            resume = application.resume
+
+            primary_skills_qs = CandidateSkillSet.objects.filter(candidate=resume, is_primary=True)
+            secondary_skills_qs = CandidateSkillSet.objects.filter(candidate=resume, is_primary=False)
+
+            primary_skills = [
+                    {
+                        "skill_name": skill.skill_name,
+                        "skill_metric": skill.skill_metric,
+                        "metric_value": skill.metric_value
+                    }
+                    for skill in primary_skills_qs
+                ]
+            secondary_skills = [
+                    {
+                        "skill_name": skill.skill_name,
+                        "skill_metric": skill.skill_metric,
+                        "metric_value": skill.metric_value
+                    }
+                    for skill in secondary_skills_qs
+                ]
+            
+            if(interviews == 0):
+                next_interview = False
+            else:
+                next_interview = True
+
+            application_json = ({
+                    "id":application.id,
+                    "resume_id": resume.id,
+                    "candidate_name": resume.candidate_name,
+                    "sender": application.sender.username,
+                    "other_details": resume.other_details,
+                    "notice_period": resume.notice_period,
+                    "expected_ctc": resume.expected_ctc,
+                    "current_ctc": resume.current_ctc,
+                    "job_status": resume.job_status,
+                    "current_job_location": resume.current_job_location,
+                    "current_job_type": resume.current_job_type,
+                    "current_organization": resume.current_organisation,
+                    "date_of_birth": resume.date_of_birth,
+                    "experience": resume.experience,
+                    "resume": resume.resume.url if resume.resume else None,
+                    "status": application.status,
+                    "primary_skills": primary_skills,  
+                    "secondary_skills": secondary_skills,  
+                    "next_interview": next_interview,
+                })
+            
+            
+            return Response(application_json, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)

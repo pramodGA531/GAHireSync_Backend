@@ -47,6 +47,7 @@ urlpatterns = [
     path('client/accept-application/',AcceptApplicationView.as_view(), name ='accept-application'),
     path('client/select-application/',SelectApplicationView.as_view(), name ='holds-application'),
     path('client/select-candidate/',HandleSelect.as_view(), name ='selects-application'),
+    path('client/applications/complete-resume/',ViewCompleteResume.as_view(), name ='view-complete-application'),
     path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
     path('client/add-interviewers/', InterviewersView.as_view(), name='add-interviewers'),
     path('client/job-post/interviews/', ClientInterviewsView.as_view(), name='client-interviewes'),
