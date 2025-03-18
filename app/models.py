@@ -595,6 +595,8 @@ class CandidateExperiences(models.Model):
     ]
 
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE, related_name='candidate_experience')
+    role = models.CharField(max_length=50)
+    job_type = models.CharField(max_length=50)
     company_name = models.CharField(max_length=100)
     from_date = models.DateField()
     is_working = models.BooleanField(default=False)

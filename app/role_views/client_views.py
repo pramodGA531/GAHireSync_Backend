@@ -1202,6 +1202,7 @@ class CandidatesOnHold(APIView):
                     "job_title": candidate.job_id.job_title,
                     "organization_name": candidate.job_id.organization.name,
                     "application_id": candidate.id,
+                    "job_department": candidate.job_id.job_department,
                 }
                 candidate_list.append(candidate_json)
 
@@ -2037,6 +2038,58 @@ class ViewCompleteResume(APIView):
             
             return Response(application_json, status=status.HTTP_200_OK)
         
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+        
+class ViewCandidateDetails(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            application_id = request.GET.get('application_id')
+            application = JobApplication.objects.get(id = application_id)
+            try:
+                candidate_profile = CandidateProfile.objects.get(email = application.resume.candidate_email)
+            except CandidateProfile.DoesNotExist:
+                return Response({"error":"Candidate with this id doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            candidate_experiences_qs = CandidateExperiences.objects.filter(candidate = candidate_profile.id)
+            candidate_education_qs = CandidateEducation.objects.filter(candidate = candidate_profile.id, )
+
+            candidate_experiences = [
+                {
+                    "company_name": experience.company_name,
+                    "from_time": experience.from_date,
+                    "to_time": experience.is_working or experience.to_date,
+                    "role": experience.role,
+                    "job_type": experience.job_type,
+                }
+                for experience in candidate_experiences_qs
+            ]
+
+            candidate_education = [
+                {
+                    "institution_name": education.institution_name,
+                    "field_of_study": education.field_of_study,
+                    "start_date": education.start_date,
+                    "end_date": education.end_date,
+                    "degree": education.degree
+                }
+                for education in candidate_education_qs
+            ]
+
+            candidate_details_json = {
+                "candidate_name": candidate_profile.name.username,
+                "candidate_email": candidate_profile.email,
+                "address": candidate_profile.permanent_address,
+                "phone": candidate_profile.phone_num,
+                "candidate_experiences": candidate_experiences,  
+                "candidate_education": candidate_education,  
+                # "candidate_profile": candidate_profile.profile,
+            }
+
+            return Response(candidate_details_json, status = status.HTTP_200_OK)     
+               
         except Exception as e:
             print(str(e))  
             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)

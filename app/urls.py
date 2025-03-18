@@ -61,6 +61,7 @@ urlpatterns = [
     path('client/joined-candidates/', AllJoinedCandidates.as_view(), name='all-joined-candidates'),
     path('client/update-joining-status/', UpdateJoiningStatus.as_view(), name='update-joining-status-of-candidate'),
     path('client/candidate-left/', CandidateLeftView.as_view(), name='updating-joining-status-of-candidate-as-left'),
+    path('client/candidate/', ViewCandidateDetails.as_view(), name='view-candidate'),
     path('client/candidate-joined/', CandidateJoined.as_view(), name='updating-joining-status-of-candidate-as-joined'),
     path('client/replacements/', ReplacementsView.as_view(), name='apply-replacement-and-get-all-replacements'),
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
