@@ -229,7 +229,7 @@ CELERY_BEAT_SCHEDULE = {
     'daily_tasks':{
         'task': 'app.tasks.daily_tasks_runner',
         # 'schedule':timedelta(seconds=30),
-        'schedule':crontab(minute=2, hour=10), # set up celery cmds in the production 
+        'schedule':crontab(minute=43, hour=10), # set up celery cmds in the production 
     }
 }
 

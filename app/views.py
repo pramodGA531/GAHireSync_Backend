@@ -562,15 +562,11 @@ Interviewers are waiting to check your profile
 
 class Invoices(APIView):
     def get(self, request):
-        # Print the user's role and user object for debugging
-        print(f"User Role: {request.user.role}")
-        print(f"User: {request.user}")
 
         invoices = []
         html_list = []
 
         if request.user.role == "client":
-            # Clients can only see their own invoices based on their email
             invoices = InvoiceGenerated.objects.filter(client=request.user)
             for invoice in invoices:
                 context = create_invoice_context(invoice)
@@ -578,7 +574,6 @@ class Invoices(APIView):
                 html_list.append({"invoice": invoice, "html": html})
 
         elif request.user.role == "manager":
-            # Managers can see all invoices related to their organization
             invoices = InvoiceGenerated.objects.filter(organization_email=request.user.email)
             for invoice in invoices:
                 context = create_invoice_context(invoice)
@@ -586,7 +581,6 @@ class Invoices(APIView):
                 html_list.append({"invoice": invoice, "html": html})
 
         elif request.user.role == "accountant":
-            # Accountants can also see all invoices related to their organization
             accountant=Accountants.objects.get(user=request.user)
             print(accountant.organization)
             if accountant:
@@ -597,28 +591,25 @@ class Invoices(APIView):
                     html_list.append({"invoice": invoice, "html": html})
 
         else:
-            # If the user's role is not recognized, deny access
             return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
 
-        # If invoices exist, return them along with the generated HTML
+
         if invoices:
-            # Prepare the invoice data for the response, along with the generated HTML for each invoice
             invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"]} 
                             for invoice, html in zip(invoices, html_list)]
             return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
 
-        # If no invoices found, return a not found message
-        return Response({"message": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({"message": "No invoices found."}, status=status.HTTP_200_OK)
+    
+
     def put(self, request):
-        # Print the user's role and user object for debugging
-        print(f"User Role: {request.user.role}")
-        print(f"User: {request.user}")
+
         if not request.user.role=="accountant":
             return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
         invoice_id = request.data.get('invoice_id')
         payment_transaction_id = request.data.get('payment_transaction_id')
 
-        # Ensure that both the invoice ID and payment transaction ID are provided
         if not invoice_id or not payment_transaction_id:
             return Response({"error": "Both invoice_id and payment_transaction_id are required."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -628,11 +619,9 @@ class Invoices(APIView):
             invoice.payment_transaction_id = payment_transaction_id
             invoice.save()
 
-            # Return a success response
             return Response({"message": "Invoice updated successfully."}, status=status.HTTP_200_OK)
 
         except InvoiceGenerated.DoesNotExist:
-            # If invoice is not found, return an error response
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
         
 class BasicApplicationDetails(APIView):

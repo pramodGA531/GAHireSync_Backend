@@ -697,7 +697,6 @@ class InvoiceGenerated(models.Model):
 
 
 class Accountants(models.Model):
-    # manager=models.ForeignKey(CustomUser,)
     organization=models.OneToOneField(Organization,on_delete=models.CASCADE,null=True,blank=True)
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="accountant")
     email = models.EmailField(unique=True)
