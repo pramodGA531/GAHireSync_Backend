@@ -19,6 +19,7 @@ from .models import InvoiceGenerated
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .utils import *
+from django.core.files.base import ContentFile
 
 
 class GetUserDetails(APIView):
@@ -30,6 +31,7 @@ class GetUserDetails(APIView):
                 'email' : user.email,
                 'role' : user.role,
                 "is_verified": user.is_verified,
+                "profile":user.profile.url if user.profile else None,
             }
             return Response({'data':data},status=status.HTTP_200_OK)
         except Exception as e:
@@ -653,3 +655,24 @@ class BasicApplicationDetails(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AddProfileView(APIView):
+    def post(self, request):
+        try:
+            user = request.user
+            profile_image = request.FILES.get("profile")
+
+            if not profile_image:
+                return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+            if not profile_image.name.endswith(('.png', '.jpg', '.jpeg')):
+                return Response({"error": "Invalid file format. Use JPG or PNG."}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.profile.save(profile_image.name, ContentFile(profile_image.read()))
+            user.save()
+
+            return Response({"message": "Profile picture updated successfully!", "profile": user.profile.url}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

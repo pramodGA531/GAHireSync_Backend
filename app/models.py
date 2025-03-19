@@ -44,6 +44,7 @@ class CustomUser(AbstractUser):
     ]
 
     email = models.EmailField(unique=True)
+    profile = models.ImageField(upload_to='Users/Profile/', null=True, blank=True)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default="user")
     credit = models.IntegerField(default=0)
     organization = models.ForeignKey("Organization", on_delete=models.CASCADE, null=True, blank=True)

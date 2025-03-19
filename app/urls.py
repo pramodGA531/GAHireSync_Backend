@@ -10,6 +10,7 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('verify-token/',VerifyTokenView.as_view(), name='verify-token'),
     path('get-user-details/', GetUserDetails.as_view(), name='user_details'),
+    path('add-profile/', AddProfileView.as_view(), name='add-profile'),
     path('forgotpassword/', ForgotPasswordAPIView.as_view(),name='forgotpassword'),
     path('resetpassword/<uidb64>/<token>/',ResetPasswordAPIView.as_view(), name='resetpassword'),
     path('verify-email/<uidb64>/<token>/', VerifyEmailView.as_view(), name="verify-email"),
@@ -67,6 +68,7 @@ urlpatterns = [
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
     path('client/compare-list-view/', CompareListView.as_view(), name='candidate-replacing'),
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
+    path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
