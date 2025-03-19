@@ -614,6 +614,7 @@ class CandidateExperiences(models.Model):
 class CandidateEducation(models.Model):
     candidate = models.ForeignKey(CandidateProfile,on_delete=models.CASCADE, related_name='candidate_education')
     institution_name = models.CharField(max_length=150)
+    grade = models.CharField(max_length=30)
     education_proof = models.FileField(upload_to='Candidate/Education')
     field_of_study = models.CharField(max_length=30, )
     start_date = models.DateField()

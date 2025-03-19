@@ -219,11 +219,17 @@ class LoginView(APIView):
             if user.is_verified == False:
                 return Response({"error":"Your email is not verified yet, please verify your email","not_verified":True},status=status.HTTP_400_BAD_REQUEST)
             
+            user_details = {
+                "username": user.username,
+                "role":user.role,
+                "id":user.id,
+            }
+            
             refresh = RefreshToken.for_user(user)
             # print(refresh)
             access_token = str(refresh.access_token)
             message = f"Successfully signed in. If not done by you please change your password."
-            return Response({'access_token': access_token,'role':user.role}, status=status.HTTP_200_OK)
+            return Response({'access_token': access_token,'role':user.role, "user_details": user_details}, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class VerifyTokenView(APIView):

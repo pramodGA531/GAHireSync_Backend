@@ -1182,15 +1182,19 @@ class CandidatesOnHold(APIView):
         try:
             if request.GET.get('job_id'):
                 job_id = request.GET.get('job_id')
-                applications_on_hold = JobApplication.objects.filter(job_id = job_id, status = 'hold')
-                application_list = []
-                for application in applications_on_hold:
-                    application_json = {
-                        "candidate_name": application.resume.candidate_name,
-                        "candidate_email": application.resume.candidate_email,
-                        "application_id": application.id
-                    }
-                    application_list.append(application_json)
+                applications_on_hold = JobApplication.objects.filter(job_id = job_id, status = 'hold').select_related('resume')
+
+                application_list = [
+                {
+                    "candidate_name": application.resume.candidate_name,
+                    "candidate_email": application.resume.candidate_email,
+                    "application_id": application.id,
+                    "expected_ctc": application.resume.expected_ctc,
+                    "experience": application.resume.experience,
+                }
+
+                for application in applications_on_hold
+            ]
                 return Response(application_list, status= status.HTTP_200_OK)
             user = request.user
             job_posts = JobPostings.objects.filter(username = user)
@@ -1865,18 +1869,27 @@ class ReplacementsView(APIView):
     def get(self, request):
         try:
             user = request.user
-            replacements = ReplacementCandidates.objects.filter(replacement_with__job_id__username = user, status = 'pending')
-            replacements_list = []
-            for replacement in replacements:
-                replacement_json = {
-                    "job_title":replacement.replacement_with.job_id.job_title,
+            replacements = ReplacementCandidates.objects.filter(
+                replacement_with__job_id__username=user, status='pending'
+            ).select_related(
+                'replacement_with__job_id__organization', 
+                'replacement_with__resume',
+                'replacement_with__selected_candidates'
+            )
+
+            replacements_list = [
+                {
+                    "job_title": replacement.replacement_with.job_id.job_title,
+                    "organization_name": replacement.replacement_with.job_id.organization.name,
                     "candidate_name": replacement.replacement_with.resume.candidate_name,
-                    "agreed_ctc": SelectedCandidates.objects.get(application = replacement.replacement_with).ctc,
-                    "job_id":replacement.replacement_with.job_id.id,
-                    "replacement_id":replacement.id,
+                    "agreed_ctc": getattr(replacement.replacement_with.selected_candidates, 'ctc', None),  # Direct access
+                    "job_id": replacement.replacement_with.job_id.id,
+                    "joining_date": getattr(replacement.replacement_with.selected_candidates, 'joining_date', None),  # Direct access
+                    "replacement_id": replacement.id,
                 }
-                replacements_list.append(replacement_json)
-            
+                for replacement in replacements
+            ]
+
             return Response(replacements_list,status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -2128,6 +2141,7 @@ class ViewCandidateDetails(APIView):
                 {
                     "institution_name": education.institution_name,
                     "field_of_study": education.field_of_study,
+                    
                     "start_date": education.start_date,
                     "end_date": education.end_date,
                     "degree": education.degree

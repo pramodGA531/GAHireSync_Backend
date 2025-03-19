@@ -154,9 +154,11 @@ class CandidateExperiencesView(APIView):
                     CandidateExperiences.objects.create(
                         candidate = candidate_profile,
                         company_name= experience.get('company_name'),
+                        role= experience.get('job_role'),
+                        job_type = experience.get('job_type'),
                         from_date = experience.get('from_date'),
                         to_date = experience.get('to_date'),
-                        is_working = experience.get('status',False),
+                        is_working = True if experience.get('working') else False,
                         reason_for_resignation = experience.get('reason_for_resignation'),
                         relieving_letter = experience.get('relieving_letter',''),
                         pay_slip1 = experience.get('pay_slip1',''),
@@ -332,7 +334,6 @@ class CandidateEducationView(APIView):
             user = request.user
             try:
                 candidate_profile = CandidateProfile.objects.get(name = user)
-                # print(request.body)
                 education = request.data
                 print(education)
                 if education:
@@ -344,7 +345,8 @@ class CandidateEducationView(APIView):
                             field_of_study = education.get('field_of_study'),
                             start_date = education.get('start_date'),
                             end_date = education.get('end_date'),
-                            degree = education.get('degree')
+                            degree = education.get('degree'),
+                            grade = education.get('grade'),
                         )
 
                         return Response({"error": "Your education details added successfully"}, status = status.HTTP_200_OK)
