@@ -35,7 +35,7 @@ class ClientDashboard(APIView):
             seven_days_ago = now - timedelta(days = 7)
 
             all_jobs = JobPostings.objects.filter(username = request.user)
-            job_posts = all_jobs.order_by("-created_at")[:5]
+            job_posts = all_jobs.order_by("-created_at")[:4]
 
             all_applications = JobApplication.objects.filter(job_id__in=all_jobs)
             application_counts = all_applications.values('job_id').annotate(total=Count('id'))
@@ -2204,3 +2204,5 @@ class DeleteJobPost(APIView):
 #         except Exception as e:
 #             print(str(e))  
 #             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+

@@ -749,3 +749,16 @@ class Tickets(models.Model):
 
     def __str__(self):
         return f"Ticket ({self.category}) - {self.status} - Raised by {self.raised_by.username}"
+    
+
+class BlogPost(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    thumbnail = models.ImageField(upload_to='blog_thumbnails')
+    is_approved = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return self.title

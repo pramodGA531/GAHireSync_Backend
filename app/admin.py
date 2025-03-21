@@ -26,6 +26,7 @@ from .models import (
     SkillMetricsModelEdited,
     CandidateSkillSet,
     Tickets,
+    BlogPost,
 )
 
 @admin.register(CustomUser)
@@ -166,3 +167,8 @@ class CandidateSkillSetAdmin(admin.ModelAdmin):
 @admin.register(Tickets)
 class TicketsAdmin(admin.ModelAdmin):
     list_display = ('raised_by', 'assigned_to', 'category')
+
+@admin.register(BlogPost)
+class BlogPostAdmin(admin.ModelAdmin):
+    list_display = ('user','is_approved','created_at',)
+    ordering = ('-created_at',)

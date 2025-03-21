@@ -828,9 +828,6 @@ class HandleTicketView(APIView):
             data = request.data
             ticket.reply = data.get('reply', ticket.reply)  
             ticket.status = data.get('status', ticket.status) 
-
-            # if data.get('resolved', False):
-            #     ticket.resolved_at = datetime.now()
             ticket.save()
             return Response({"message": "Reply sent successfully"}, status=status.HTTP_200_OK)
         
@@ -838,3 +835,103 @@ class HandleTicketView(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+class BlogPostView(APIView):
+    def get(self, request):
+        if request.GET.get('blog_id'):
+            blog_posts = BlogPost.objects.get(id=request.GET.get('blog_id'))
+            serializer = BlogPostSerializer(blog_posts).data
+            return Response(serializer, status=status.HTTP_200_OK)
+        
+        blog_posts = BlogPost.objects.filter(is_approved = True).order_by('-created_at')
+        serializer = BlogPostSerializer(blog_posts, many=True).data
+        return Response(serializer)
+    
+    def post(self,request):
+        user = request.user
+        is_approved = False
+        if user.role == 'admin':
+            is_approved = True
+        title = request.data.get('title')
+        content = request.data.get('content')
+        thumbnail = request.data.get('thumbnail')
+        BlogPost.objects.create(user=user,title=title,content=content,thumbnail=thumbnail,is_approved=is_approved)
+        return Response({'message':'Blog post created successfully'},status=status.HTTP_201_CREATED)
+    
+class AdminGetBlogs(APIView):
+    def get(self, request):
+        try:
+            user = request.user
+            if not user.role == 'admin':
+                return Response({"error":"Your are not allowed to run this view"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not request.GET.get('blog_id'):
+                all_blogs = BlogPost.objects.all()
+                serialized_data = BlogPostSerializer(all_blogs, many = True)
+
+                return Response(serialized_data.data, status=status.HTTP_200_OK)
+
+            else:
+                blog_id = request.GET.get('blog_id')
+                blog = BlogPost.objects.get(id = blog_id)
+                serialized_data = BlogPostSerializer(blog)
+
+                return Response(serialized_data.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class MyBlogs(APIView):
+    def get(self, request):
+        try:
+            user = request.user
+            if request.GET.get('blog_id'):
+                blog = BlogPost.objects.get(id = request.GET.get('blog_id'))
+                blog_data = BlogPostSerializer(blog)
+                return Response(blog_data.data, status=status.HTTP_200_OK)
+                
+            all_blogs = BlogPost.objects.filter(user = user) 
+            all_blogs_data = BlogPostSerializer(all_blogs, many=True)
+            return Response(all_blogs_data.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class ApproveBlogPost(APIView):
+    def get(self, request):
+        try:
+            if not request.user.role == 'admin':
+                return Response({"error":"You are not allowed to run this view"}, status =status.HTTP_400_BAD_REQUEST)
+            
+            if request.GET.get('blog_id'):
+                blog = BlogPost.objects.get(id = request.GET.get('blog_id'))
+                blog_data = BlogPostSerializer(blog)
+                return Response(blog_data.data, status=status.HTTP_200_OK)
+            
+            blogs = BlogPost.objects.filter(is_approved = False)
+            blog_data = BlogPostSerializer(blogs, many=True)
+            return Response(blog_data.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        try:
+            user = request.user
+            if not user.role == 'admin':
+                return Response({"error":"Your are not allowed to run this view"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            blog_id = request.GET.get('blog_id')
+
+            try:
+                blog = BlogPost.objects.get(id = blog_id)
+    
+            except BlogPost.DoesNotExist:
+                return Response({"error":"Cant process the request, blog post not available"},status=status.HTTP_400_BAD_REQUEST)
+
+            blog.is_approved = True
+            blog.save()
+            return Response({"message":"Blog post approved successfully"}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    

@@ -135,4 +135,8 @@ urlpatterns = [
     path('view-tickets/', RaiseTicketView.as_view(),name='raise-ticket' ),
     path('superadmin/handle-tickets/', HandleTicketView.as_view(),name='handle-tickets-by-admin' ),
 
+    path('user/blogs/', BlogPostView.as_view(), name='view-and-create-blogs'),
+    path('superadmin/approve-blogs/', ApproveBlogPost.as_view(), name='admin-handling-blogs'),
+    path('myblogs/', MyBlogs.as_view(), name='his-blogs'),
+
 ]
