@@ -416,7 +416,7 @@ def calculate_invoice_amounts(selected_candidate, terms, client_gst, org_gst):
     return result
 
 def create_invoice_context(invoice):
-      # create_invoice_context(invoice)
+
     organization=invoice.organization
     job=invoice.application.job_id
     client_details = ClientDetails.objects.get(user = invoice.client)
@@ -439,7 +439,7 @@ def create_invoice_context(invoice):
         "buyer_contact_number":client_details.contact_number,
         "service_provider_address":job.organization.company_address,
         "service_provider_gstin":job.organization.gst_number,
-        "service_provider_contact_person":job.organization.manager, #make this dynamic
+        "service_provider_contact_person":job.organization.manager, 
         "service_provider_email":job.organization.manager.email,
         "service_provider_mobile":job.organization.contact_number,
         "service_description":"HSNCODE:9983",

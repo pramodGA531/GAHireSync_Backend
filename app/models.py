@@ -614,6 +614,7 @@ class CandidateExperiences(models.Model):
 class CandidateEducation(models.Model):
     candidate = models.ForeignKey(CandidateProfile,on_delete=models.CASCADE, related_name='candidate_education')
     institution_name = models.CharField(max_length=150)
+    grade = models.CharField(max_length=30)
     education_proof = models.FileField(upload_to='Candidate/Education')
     field_of_study = models.CharField(max_length=30, )
     start_date = models.DateField()
@@ -699,7 +700,6 @@ class InvoiceGenerated(models.Model):
 
 
 class Accountants(models.Model):
-    # manager=models.ForeignKey(CustomUser,)
     organization=models.OneToOneField(Organization,on_delete=models.CASCADE,null=True,blank=True)
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="accountant")
     email = models.EmailField(unique=True)

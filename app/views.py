@@ -562,15 +562,11 @@ Interviewers are waiting to check your profile
 
 class Invoices(APIView):
     def get(self, request):
-        # Print the user's role and user object for debugging
-        print(f"User Role: {request.user.role}")
-        print(f"User: {request.user}")
 
         invoices = []
         html_list = []
 
         if request.user.role == "client":
-            # Clients can only see their own invoices based on their email
             invoices = InvoiceGenerated.objects.filter(client=request.user)
             print("invoices",invoices)
             for invoice in invoices:
@@ -580,7 +576,6 @@ class Invoices(APIView):
                 html_list.append({"invoice": invoice, "html": html})
 
         elif request.user.role == "manager":
-            # Managers can see all invoices related to their organization
             invoices = InvoiceGenerated.objects.filter(organization_email=request.user.email)
             for invoice in invoices:
                 context = create_invoice_context(invoice)
@@ -588,7 +583,6 @@ class Invoices(APIView):
                 html_list.append({"invoice": invoice, "html": html})
 
         elif request.user.role == "accountant":
-            # Accountants can also see all invoices related to their organization
             accountant=Accountants.objects.get(user=request.user)
             print(accountant.organization)
             if accountant:
