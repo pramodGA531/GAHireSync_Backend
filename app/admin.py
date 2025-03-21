@@ -141,12 +141,9 @@ class JobPostTermsAdmin(admin.ModelAdmin):
     
 @admin.register(InvoiceGenerated)
 class InvoiceGeneratedAdmin(admin.ModelAdmin):
-    list_display = ('application_id','organization_id','organization_email','client_id','client_email','terms_id','status','created_at')
+    list_display = ('application_id','organization_id','organization_email','client_id','client_email','terms_id','status','created_at','payment_method','payment_transaction_id','payment_verification')
     
 
-
-
-    
 
 @admin.register(SkillMetricsModel)
 class SkillMetricsModelAdmin(admin.ModelAdmin):

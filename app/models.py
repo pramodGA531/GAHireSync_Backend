@@ -685,12 +685,14 @@ class InvoiceGenerated(models.Model):
     payment_transaction_id=models.CharField(null=True,blank=True,default="null",max_length=20)
     client_email = models.EmailField()
     terms_id = models.IntegerField()
+    payment_method=models.CharField(null=True,blank=True,default="null",max_length=20)
+    payment_verification = models.BooleanField("Payment Verified", default=False)
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
-        default=PENDING  # Default status is "Pending"
+        default=PENDING 
     )
-    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp of when the invoice is generated
+    created_at = models.DateTimeField(auto_now_add=True)  
 
     def __str__(self):
         return f"Invoice for Application {self.application_id} - {self.client_email} ({self.status})"

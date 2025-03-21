@@ -572,7 +572,9 @@ class Invoices(APIView):
         if request.user.role == "client":
             # Clients can only see their own invoices based on their email
             invoices = InvoiceGenerated.objects.filter(client=request.user)
+            print("invoices",invoices)
             for invoice in invoices:
+                print("veri",invoice.payment_verification)
                 context = create_invoice_context(invoice)
                 html = generate_invoice(context)
                 html_list.append({"invoice": invoice, "html": html})
@@ -597,43 +599,53 @@ class Invoices(APIView):
                     html_list.append({"invoice": invoice, "html": html})
 
         else:
-            # If the user's role is not recognized, deny access
             return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
 
-        # If invoices exist, return them along with the generated HTML
         if invoices:
-            # Prepare the invoice data for the response, along with the generated HTML for each invoice
-            invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"]} 
+            invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"],"payment_verification":invoice.payment_verification} 
                             for invoice, html in zip(invoices, html_list)]
             return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
 
-        # If no invoices found, return a not found message
         return Response({"message": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
+    
     def put(self, request):
-        # Print the user's role and user object for debugging
-        print(f"User Role: {request.user.role}")
-        print(f"User: {request.user}")
-        if not request.user.role=="accountant":
-            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
         invoice_id = request.data.get('invoice_id')
-        payment_transaction_id = request.data.get('payment_transaction_id')
-
-        # Ensure that both the invoice ID and payment transaction ID are provided
-        if not invoice_id or not payment_transaction_id:
-            return Response({"error": "Both invoice_id and payment_transaction_id are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
+    
+        if not invoice_id:
+            return Response({"error": "invoice_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+    
         try:
             invoice = InvoiceGenerated.objects.get(id=invoice_id)
-            invoice.status="Paid"
-            invoice.payment_transaction_id = payment_transaction_id
-            invoice.save()
-
-            # Return a success response
-            return Response({"message": "Invoice updated successfully."}, status=status.HTTP_200_OK)
-
         except InvoiceGenerated.DoesNotExist:
-            # If invoice is not found, return an error response
             return Response({"error": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+        if request.user.role == "client":
+            payment_transaction_id = request.data.get('payment_transaction_id')
+            payment_method = request.data.get('payment_method')
+    
+            if not payment_transaction_id or not payment_method:
+                return Response({"error": "Both payment_transaction_id and payment_method are required."},
+                                status=status.HTTP_400_BAD_REQUEST)
+    
+            invoice.status = "Paid"
+            invoice.payment_transaction_id = payment_transaction_id
+            invoice.payment_method = payment_method
+            invoice.save()
+            return Response({"message": "Invoice marked as paid by client."}, status=status.HTTP_200_OK)
+    
+        elif request.user.role == "accountant":
+            # Accountant verifies payment
+            payment_verification = request.data.get('payment_verification')
+            if payment_verification is None:
+                return Response({"error": "payment_verification field is required."},
+                                status=status.HTTP_400_BAD_REQUEST)
+    
+            invoice.payment_verification = payment_verification
+            invoice.save()
+            return Response({"message": "Invoice payment verified by accountant."}, status=status.HTTP_200_OK)
+    
+        else:
+            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
         
 class BasicApplicationDetails(APIView):
     permission_classes = [IsAuthenticated]

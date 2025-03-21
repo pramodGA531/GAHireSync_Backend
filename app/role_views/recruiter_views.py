@@ -22,7 +22,7 @@ from django.http import JsonResponse
 # Recruiter Profile
 
 
-print("generate_invoice",generate_invoice)
+# print("generate_invoice",generate_invoice)
 
 class RecruiterProfileView(APIView):
 
@@ -120,7 +120,7 @@ class CandidateResumeView(APIView):
 
 
                 for skill in primary_skills:
-                    print("entered")
+                    # print("entered")
                     skill_metric = CandidateSkillSet.objects.create(
                         candidate = candidate_resume,
                         skill_name = skill[0],
@@ -136,7 +136,7 @@ class CandidateResumeView(APIView):
                     skill_metric.save()
 
                 for skill in secondary_skills:
-                    print("entered")
+                    # print("entered")
                     skill_metric = CandidateSkillSet.objects.create(
                         candidate = candidate_resume,
                         skill_name = skill[0],
@@ -543,6 +543,8 @@ class OrganizationApplications(APIView):
                             "job_department": application.job_id.job_department,
                             "status": application.status,
                             "application_id":application.id,
+                            "cand_number":application.resume.contact_number,
+                            "job_title":application.job_id.job_title
                         }
                         application_list.append(application_json)
                     
