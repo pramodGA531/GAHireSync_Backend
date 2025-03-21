@@ -676,3 +676,25 @@ class AddProfileView(APIView):
             return Response({"message": "Profile picture updated successfully!", "profile": user.profile.url}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class RaiseTicketView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        try:
+
+            user = request.user
+            data = request.data
+
+            new_ticket = Tickets.objects.create(
+                raised_by = user,
+                category = data.get('category'),
+                description = data.get('description'),
+                status = 'pending',
+                priority = 'medium',
+                assigned_to = CustomUser.objects.get(role='admin')                
+            )
+            return Response({"message":"Ticket Raised successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        

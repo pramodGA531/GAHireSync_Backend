@@ -718,4 +718,31 @@ class ReplacementCandidates(models.Model):
         return f"{self.replacement_with.resume.candidate_name}'s resume replace"
 
 
-    
+class Tickets(models.Model):
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('urgent', 'Urgent'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+        ('closed', 'Closed'),
+    ]
+
+    raised_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_raised")
+    category = models.CharField(max_length=50)  # Renamed from 'type' for clarity
+    description = models.TextField()
+    assigned_to = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_assigned", null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    attachments = models.FileField(upload_to='ticket_attachments/', null=True, blank=True)   #present only one file
+
+    def __str__(self):
+        return f"Ticket ({self.category}) - {self.status} - Raised by {self.raised_by.username}"
