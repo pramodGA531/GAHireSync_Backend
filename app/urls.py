@@ -131,5 +131,8 @@ urlpatterns = [
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
     path('candidate_status_for_job/',CandidateStatusForJobView.as_view(), name='candidate-status-for-particular-job'),
     path('notification_to_update_profile/', NotificationToUpdateProfileView.as_view(), name='notification-to-update-profile'),
-    
+
+    path('view-tickets/', RaiseTicketView.as_view(),name='raise-ticket' ),
+    path('superadmin/handle-tickets/', HandleTicketView.as_view(),name='handle-tickets-by-admin' ),
+
 ]

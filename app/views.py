@@ -697,11 +697,56 @@ class AddProfileView(APIView):
 
 class RaiseTicketView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            user = request.user
+            ticket_id = request.GET.get('ticket_id')
+
+            if ticket_id:
+                try:
+                    ticket = Tickets.objects.get(id=ticket_id, raised_by=user)
+                    return Response({
+                        "id":ticket.id,
+                        "category": ticket.category,
+                        "description": ticket.description,
+                        "reply": ticket.reply,
+                        "assigned_to": ticket.assigned_to.username if ticket.assigned_to else None,
+                        "status": ticket.status,
+                        "created_at": ticket.created_at,
+                        "attachments": ticket.attachments.url if ticket.attachments else None,
+                    }, status=status.HTTP_200_OK)
+                except Tickets.DoesNotExist:
+                    return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+            all_tickets = Tickets.objects.filter(raised_by=user)
+            ticket_list = []
+
+            for ticket in all_tickets:
+                ticket_list.append({
+                    "id": ticket.id,
+                    "category": ticket.category,
+                    "description": ticket.description,
+                    "reply": ticket.reply,
+                    "assigned_to": ticket.assigned_to.username if ticket.assigned_to else None,
+                    "status": ticket.status,
+                    "created_at": ticket.created_at,
+                    "id":ticket.id,
+                })
+
+            return Response(ticket_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
     def post(self, request):
         try:
 
             user = request.user
-            data = request.data
+            data = request.POST
+            attachment = request.FILES.get('attachment')
 
             new_ticket = Tickets.objects.create(
                 raised_by = user,
@@ -711,7 +756,85 @@ class RaiseTicketView(APIView):
                 priority = 'medium',
                 assigned_to = CustomUser.objects.get(role='admin')                
             )
+
+            if attachment:
+                new_ticket.attachments = attachment
+                new_ticket.save()
+
             return Response({"message":"Ticket Raised successfully"}, status=status.HTTP_200_OK)
+        
+
         except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class HandleTicketView(APIView):
+    def get(self, request):
+        print("entered here")
+        try:
+            user = request.user
+            ticket_id = request.GET.get('ticket_id')
+
+            if ticket_id:
+                try:
+                    ticket = Tickets.objects.get(id=ticket_id, assigned_to=user)
+                    return Response({
+                        "id":ticket.id,
+                        "category": ticket.category,
+                        "description": ticket.description,
+                        "reply": ticket.reply,
+                        "raised_by": ticket.raised_by.username,
+                        "status": ticket.status,
+                        "created_at": ticket.created_at,
+                        "updated_at": ticket.updated_at,
+                        "resolved_at" : ticket.resolved_at,
+                        "attachments": ticket.attachments.url if ticket.attachments else None
+                    }, status=status.HTTP_200_OK)
+                except Tickets.DoesNotExist:
+                    return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+            all_tickets = Tickets.objects.filter(assigned_to=user)
+            ticket_list = []
+
+            for ticket in all_tickets:
+                ticket_list.append({
+                    "id": ticket.id,
+                    "category": ticket.category,
+                    "description": ticket.description,
+                    "raised_by": ticket.raised_by.username,
+                    "reply": ticket.reply,
+                    "status": ticket.status,
+                    "created_at": ticket.created_at,
+                    "attachments": ticket.attachments.url if ticket.attachments else None
+                })
+
+            return Response(ticket_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    
+    def post(self, request):
+        try:
+            ticket_id = request.GET.get('ticket_id')
+            if not ticket_id:
+                return Response({"error": "Ticket ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                ticket = Tickets.objects.get(id=ticket_id)
+            except Tickets.DoesNotExist:
+                return Response({"error": "Ticket does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+            data = request.data
+            ticket.reply = data.get('reply', ticket.reply)  
+            ticket.status = data.get('status', ticket.status) 
+
+            # if data.get('resolved', False):
+            #     ticket.resolved_at = datetime.now()
+            ticket.save()
+            return Response({"message": "Reply sent successfully"}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         

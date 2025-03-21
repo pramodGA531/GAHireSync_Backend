@@ -738,6 +738,7 @@ class Tickets(models.Model):
     raised_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_raised")
     category = models.CharField(max_length=50)  # Renamed from 'type' for clarity
     description = models.TextField()
+    reply = models.TextField(null = True, blank = True)
     assigned_to = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_assigned", null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')

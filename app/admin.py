@@ -24,7 +24,8 @@ from .models import (
     InvoiceGenerated,
     SkillMetricsModel,
     SkillMetricsModelEdited,
-    CandidateSkillSet
+    CandidateSkillSet,
+    Tickets,
 )
 
 @admin.register(CustomUser)
@@ -160,3 +161,8 @@ class SkillMetricsModelEditedAdmin(admin.ModelAdmin):
 @admin.register(CandidateSkillSet)
 class CandidateSkillSetAdmin(admin.ModelAdmin):
     list_display = ('candidate',)
+
+
+@admin.register(Tickets)
+class TicketsAdmin(admin.ModelAdmin):
+    list_display = ('raised_by', 'assigned_to', 'category')
