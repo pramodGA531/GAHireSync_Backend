@@ -526,11 +526,11 @@ class CandidateRejectJob(APIView):
         
 
 class CandidateReConfirmation(APIView):
-    print("CALLING THIS FUNCTION")
+    # print("CALLING THIS FUNCTION")
     permission_classes = [IsAuthenticated, IsCandidate]  # Ensure authentication
 
     def get(self, request):
-        print("CALLING THIS function")
+        # print("CALLING THIS function")
         try:
             user = request.user  
             if not user.is_authenticated:

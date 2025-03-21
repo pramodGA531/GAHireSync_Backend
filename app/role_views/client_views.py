@@ -178,7 +178,7 @@ class GetOrganizationTermsView(APIView):
 # Create Job Post
 class JobPostingView(APIView):
     permission_classes = [IsClient] 
-    print("called this function") 
+    # print("called this function") 
 
     def addTermsAndConditions(self, job_post):
         try:
