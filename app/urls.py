@@ -10,6 +10,7 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('verify-token/',VerifyTokenView.as_view(), name='verify-token'),
     path('get-user-details/', GetUserDetails.as_view(), name='user_details'),
+    path('add-profile/', AddProfileView.as_view(), name='add-profile'),
     path('forgotpassword/', ForgotPasswordAPIView.as_view(),name='forgotpassword'),
     path('resetpassword/<uidb64>/<token>/',ResetPasswordAPIView.as_view(), name='resetpassword'),
     path('verify-email/<uidb64>/<token>/', VerifyEmailView.as_view(), name="verify-email"),
@@ -67,6 +68,7 @@ urlpatterns = [
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
     path('client/compare-list-view/', CompareListView.as_view(), name='candidate-replacing'),
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
+    path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
@@ -129,5 +131,12 @@ urlpatterns = [
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
     path('candidate_status_for_job/',CandidateStatusForJobView.as_view(), name='candidate-status-for-particular-job'),
     path('notification_to_update_profile/', NotificationToUpdateProfileView.as_view(), name='notification-to-update-profile'),
-    
+
+    path('view-tickets/', RaiseTicketView.as_view(),name='raise-ticket' ),
+    path('superadmin/handle-tickets/', HandleTicketView.as_view(),name='handle-tickets-by-admin' ),
+
+    path('user/blogs/', BlogPostView.as_view(), name='view-and-create-blogs'),
+    path('superadmin/approve-blogs/', ApproveBlogPost.as_view(), name='admin-handling-blogs'),
+    path('myblogs/', MyBlogs.as_view(), name='his-blogs'),
+
 ]

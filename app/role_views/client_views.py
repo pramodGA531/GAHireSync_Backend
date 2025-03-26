@@ -35,7 +35,7 @@ class ClientDashboard(APIView):
             seven_days_ago = now - timedelta(days = 7)
 
             all_jobs = JobPostings.objects.filter(username = request.user)
-            job_posts = all_jobs.order_by("-created_at")[:5]
+            job_posts = all_jobs.order_by("-created_at")[:4]
 
             all_applications = JobApplication.objects.filter(job_id__in=all_jobs)
             application_counts = all_applications.values('job_id').annotate(total=Count('id'))
@@ -2165,6 +2165,24 @@ class ViewCandidateDetails(APIView):
             print(str(e))  
             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
 
+
+class DeleteJobPost(APIView):
+    permission_classes = [IsClient]
+    def delete(self, request):
+        try:
+            job_id = request.GET.get('job_id')
+            job_post = JobPostings.objects.get(id = job_id)
+            if job_post.username != request.user:
+                return Response({"error":"You are not authorized to delete this job"}, status = status.HTTP_200_OK)
+            if job_post.is_approved:
+                return Response({"error":"Job is approved by manager, unable to delete this job"}, status = status.HTTP_400_BAD_REQUEST)
+            
+            job_post.delete()
+            return Response({"message":"Job post deleted succesfully"})
+        
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
 # class AllJobPosts(APIView):
 #     permission_classes = [IsClient]
 #     def get(self, request):
@@ -2186,3 +2204,5 @@ class ViewCandidateDetails(APIView):
 #         except Exception as e:
 #             print(str(e))  
 #             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+

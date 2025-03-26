@@ -19,6 +19,7 @@ from .models import InvoiceGenerated
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .utils import *
+from django.core.files.base import ContentFile
 
 
 class GetUserDetails(APIView):
@@ -30,6 +31,7 @@ class GetUserDetails(APIView):
                 'email' : user.email,
                 'role' : user.role,
                 "is_verified": user.is_verified,
+                "profile":user.profile.url if user.profile else None,
             }
             return Response({'data':data},status=status.HTTP_200_OK)
         except Exception as e:
@@ -670,3 +672,266 @@ class BasicApplicationDetails(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AddProfileView(APIView):
+    def post(self, request):
+        try:
+            user = request.user
+            profile_image = request.FILES.get("profile")
+
+            if not profile_image:
+                return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+            if not profile_image.name.endswith(('.png', '.jpg', '.jpeg')):
+                return Response({"error": "Invalid file format. Use JPG or PNG."}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.profile.save(profile_image.name, ContentFile(profile_image.read()))
+            user.save()
+
+            return Response({"message": "Profile picture updated successfully!", "profile": user.profile.url}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class RaiseTicketView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            user = request.user
+            ticket_id = request.GET.get('ticket_id')
+
+            if ticket_id:
+                try:
+                    ticket = Tickets.objects.get(id=ticket_id, raised_by=user)
+                    return Response({
+                        "id":ticket.id,
+                        "category": ticket.category,
+                        "description": ticket.description,
+                        "reply": ticket.reply,
+                        "assigned_to": ticket.assigned_to.username if ticket.assigned_to else None,
+                        "status": ticket.status,
+                        "created_at": ticket.created_at,
+                        "attachments": ticket.attachments.url if ticket.attachments else None,
+                    }, status=status.HTTP_200_OK)
+                except Tickets.DoesNotExist:
+                    return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+            all_tickets = Tickets.objects.filter(raised_by=user)
+            ticket_list = []
+
+            for ticket in all_tickets:
+                ticket_list.append({
+                    "id": ticket.id,
+                    "category": ticket.category,
+                    "description": ticket.description,
+                    "reply": ticket.reply,
+                    "assigned_to": ticket.assigned_to.username if ticket.assigned_to else None,
+                    "status": ticket.status,
+                    "created_at": ticket.created_at,
+                    "id":ticket.id,
+                })
+
+            return Response(ticket_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+    def post(self, request):
+        try:
+
+            user = request.user
+            data = request.POST
+            attachment = request.FILES.get('attachment')
+
+            new_ticket = Tickets.objects.create(
+                raised_by = user,
+                category = data.get('category'),
+                description = data.get('description'),
+                status = 'pending',
+                priority = 'medium',
+                assigned_to = CustomUser.objects.get(role='admin')                
+            )
+
+            if attachment:
+                new_ticket.attachments = attachment
+                new_ticket.save()
+
+            return Response({"message":"Ticket Raised successfully"}, status=status.HTTP_200_OK)
+        
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class HandleTicketView(APIView):
+    def get(self, request):
+        print("entered here")
+        try:
+            user = request.user
+            ticket_id = request.GET.get('ticket_id')
+
+            if ticket_id:
+                try:
+                    ticket = Tickets.objects.get(id=ticket_id, assigned_to=user)
+                    return Response({
+                        "id":ticket.id,
+                        "category": ticket.category,
+                        "description": ticket.description,
+                        "reply": ticket.reply,
+                        "raised_by": ticket.raised_by.username,
+                        "status": ticket.status,
+                        "created_at": ticket.created_at,
+                        "updated_at": ticket.updated_at,
+                        "resolved_at" : ticket.resolved_at,
+                        "attachments": ticket.attachments.url if ticket.attachments else None
+                    }, status=status.HTTP_200_OK)
+                except Tickets.DoesNotExist:
+                    return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+            all_tickets = Tickets.objects.filter(assigned_to=user)
+            ticket_list = []
+
+            for ticket in all_tickets:
+                ticket_list.append({
+                    "id": ticket.id,
+                    "category": ticket.category,
+                    "description": ticket.description,
+                    "raised_by": ticket.raised_by.username,
+                    "reply": ticket.reply,
+                    "status": ticket.status,
+                    "created_at": ticket.created_at,
+                    "attachments": ticket.attachments.url if ticket.attachments else None
+                })
+
+            return Response(ticket_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    
+    def post(self, request):
+        try:
+            ticket_id = request.GET.get('ticket_id')
+            if not ticket_id:
+                return Response({"error": "Ticket ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                ticket = Tickets.objects.get(id=ticket_id)
+            except Tickets.DoesNotExist:
+                return Response({"error": "Ticket does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+            data = request.data
+            ticket.reply = data.get('reply', ticket.reply)  
+            ticket.status = data.get('status', ticket.status) 
+            ticket.save()
+            return Response({"message": "Reply sent successfully"}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class BlogPostView(APIView):
+    def get(self, request):
+        if request.GET.get('blog_id'):
+            blog_posts = BlogPost.objects.get(id=request.GET.get('blog_id'))
+            serializer = BlogPostSerializer(blog_posts).data
+            return Response(serializer, status=status.HTTP_200_OK)
+        
+        blog_posts = BlogPost.objects.filter(is_approved = True).order_by('-created_at')
+        serializer = BlogPostSerializer(blog_posts, many=True).data
+        return Response(serializer)
+    
+    def post(self,request):
+        user = request.user
+        is_approved = False
+        if user.role == 'admin':
+            is_approved = True
+        title = request.data.get('title')
+        content = request.data.get('content')
+        thumbnail = request.data.get('thumbnail')
+        BlogPost.objects.create(user=user,title=title,content=content,thumbnail=thumbnail,is_approved=is_approved)
+        return Response({'message':'Blog post created successfully'},status=status.HTTP_201_CREATED)
+    
+class AdminGetBlogs(APIView):
+    def get(self, request):
+        try:
+            user = request.user
+            if not user.role == 'admin':
+                return Response({"error":"Your are not allowed to run this view"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not request.GET.get('blog_id'):
+                all_blogs = BlogPost.objects.all()
+                serialized_data = BlogPostSerializer(all_blogs, many = True)
+
+                return Response(serialized_data.data, status=status.HTTP_200_OK)
+
+            else:
+                blog_id = request.GET.get('blog_id')
+                blog = BlogPost.objects.get(id = blog_id)
+                serialized_data = BlogPostSerializer(blog)
+
+                return Response(serialized_data.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class MyBlogs(APIView):
+    def get(self, request):
+        try:
+            user = request.user
+            if request.GET.get('blog_id'):
+                blog = BlogPost.objects.get(id = request.GET.get('blog_id'))
+                blog_data = BlogPostSerializer(blog)
+                return Response(blog_data.data, status=status.HTTP_200_OK)
+                
+            all_blogs = BlogPost.objects.filter(user = user) 
+            all_blogs_data = BlogPostSerializer(all_blogs, many=True)
+            return Response(all_blogs_data.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class ApproveBlogPost(APIView):
+    def get(self, request):
+        try:
+            if not request.user.role == 'admin':
+                return Response({"error":"You are not allowed to run this view"}, status =status.HTTP_400_BAD_REQUEST)
+            
+            if request.GET.get('blog_id'):
+                blog = BlogPost.objects.get(id = request.GET.get('blog_id'))
+                blog_data = BlogPostSerializer(blog)
+                return Response(blog_data.data, status=status.HTTP_200_OK)
+            
+            blogs = BlogPost.objects.filter(is_approved = False)
+            blog_data = BlogPostSerializer(blogs, many=True)
+            return Response(blog_data.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        try:
+            user = request.user
+            if not user.role == 'admin':
+                return Response({"error":"Your are not allowed to run this view"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            blog_id = request.GET.get('blog_id')
+
+            try:
+                blog = BlogPost.objects.get(id = blog_id)
+    
+            except BlogPost.DoesNotExist:
+                return Response({"error":"Cant process the request, blog post not available"},status=status.HTTP_400_BAD_REQUEST)
+
+            blog.is_approved = True
+            blog.save()
+            return Response({"message":"Blog post approved successfully"}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    

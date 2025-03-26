@@ -187,8 +187,7 @@ class ScheduleInterview(APIView):
                         "from_time":application.next_interview.from_time if application.next_interview else None,
                         "to_time":application.next_interview.to_time if application.next_interview else None,
                         "status":application.next_interview.status if application.next_interview else None,
-                         "scheduled_date":application.next_interview.scheduled_date if application.next_interview else None,
-                        
+                        "scheduled_date":application.next_interview.scheduled_date if application.next_interview else None,
                     })
                 
                 return Response(pending_arr, status=status.HTTP_200_OK)

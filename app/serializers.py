@@ -364,4 +364,10 @@ class AccountantsSerializer(serializers.ModelSerializer):
         model = Accountants
         fields = ['id', 'email', 'username', 'created_at', 'organization'] 
 
+
+class BlogPostSerializer(serializers.ModelSerializer):
+    user = CustomUserSerializer()
+    class Meta:
+        model = BlogPost
+        fields = '__all__'
     
