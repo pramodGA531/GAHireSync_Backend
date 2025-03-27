@@ -704,15 +704,33 @@ class RaiseTicketView(APIView):
             ticket_id = request.GET.get('ticket_id')
 
             if ticket_id:
+                print("entered here also")
                 try:
-                    ticket = Tickets.objects.get(id=ticket_id, raised_by=user)
+                    ticket = Tickets.objects.get(id=ticket_id)
+                    replies = Messages.objects.filter(ticket_id = ticket.id)
+                    replies_list = []
+                    for reply in replies:
+                        replies_list.append(
+                            
+                            {
+                                "is_raised_by":reply.is_user_raised_by,
+                                "name": reply.ticket_id.raised_by.username if reply.is_user_raised_by else reply.ticket_id.assigned_to.username,
+                                "message": reply.message,
+                                "attachment": reply.attachment.url if reply.attachment else None,
+                                "created_at": reply.created_at,
+                            }
+                        )
+                    if ticket.attachments is not None:
+                        print(ticket.attachments)
+
                     return Response({
                         "id":ticket.id,
                         "category": ticket.category,
+                        "raised_by": ticket.raised_by.username,
                         "description": ticket.description,
-                        "reply": ticket.reply,
                         "assigned_to": ticket.assigned_to.username if ticket.assigned_to else None,
                         "status": ticket.status,
+                        "replies_list": replies_list,
                         "created_at": ticket.created_at,
                         "attachments": ticket.attachments.url if ticket.attachments else None,
                     }, status=status.HTTP_200_OK)
@@ -720,19 +738,26 @@ class RaiseTicketView(APIView):
                     return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
-            all_tickets = Tickets.objects.filter(raised_by=user)
+            is_sent = request.GET.get('isSent')
+            if is_sent == "true":
+                print("Not entered")
+                all_tickets = Tickets.objects.filter(raised_by=user)
+            else:
+                print("Ntered")
+                all_tickets = Tickets.objects.filter(assigned_to=user)
             ticket_list = []
+
+            print(all_tickets.count)
 
             for ticket in all_tickets:
                 ticket_list.append({
                     "id": ticket.id,
+                    "raised_by": ticket.raised_by.username,
                     "category": ticket.category,
                     "description": ticket.description,
-                    "reply": ticket.reply,
                     "assigned_to": ticket.assigned_to.username if ticket.assigned_to else None,
                     "status": ticket.status,
                     "created_at": ticket.created_at,
-                    "id":ticket.id,
                 })
 
             return Response(ticket_list, status=status.HTTP_200_OK)
@@ -766,6 +791,46 @@ class RaiseTicketView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+class UpdateStatus(APIView):
+    def put(self, request):
+        try:
+            ticket_id = request.GET.get('ticket_id')
+            if not ticket_id:
+                return Response({"error":"Ticket ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            ticket = Tickets.objects.get(id = ticket_id)
+            ticket.status = "completed"
+            ticket.save()
+            return Response({"message":"Ticket status updated successfully"}, status = status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class HandleReplies(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        try:
+            user = request.user
+            ticket_id = request.GET.get('ticket_id')
+            data = request.data
+            print(data, " is the reply data")
+
+            ticket = Tickets.objects.get(id = ticket_id)
+
+            reply = Messages.objects.create(
+                ticket_id = ticket,
+                message = data.get('message',''),
+                is_user_raised_by  = True if ticket.raised_by == user else False,
+                attachment = data.get('attachment','')
+            )
+
+            return Response({"message":"Response saved successfully"}, status = status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
 class HandleTicketView(APIView):
@@ -782,7 +847,6 @@ class HandleTicketView(APIView):
                         "id":ticket.id,
                         "category": ticket.category,
                         "description": ticket.description,
-                        "reply": ticket.reply,
                         "raised_by": ticket.raised_by.username,
                         "status": ticket.status,
                         "created_at": ticket.created_at,
@@ -803,7 +867,6 @@ class HandleTicketView(APIView):
                     "category": ticket.category,
                     "description": ticket.description,
                     "raised_by": ticket.raised_by.username,
-                    "reply": ticket.reply,
                     "status": ticket.status,
                     "created_at": ticket.created_at,
                     "attachments": ticket.attachments.url if ticket.attachments else None
@@ -826,7 +889,6 @@ class HandleTicketView(APIView):
                 return Response({"error": "Ticket does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
             data = request.data
-            ticket.reply = data.get('reply', ticket.reply)  
             ticket.status = data.get('status', ticket.status) 
             ticket.save()
             return Response({"message": "Reply sent successfully"}, status=status.HTTP_200_OK)

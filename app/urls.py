@@ -133,6 +133,9 @@ urlpatterns = [
     path('notification_to_update_profile/', NotificationToUpdateProfileView.as_view(), name='notification-to-update-profile'),
 
     path('view-tickets/', RaiseTicketView.as_view(),name='raise-ticket' ),
+    path('ticket/send-reply/', HandleReplies.as_view(),name='handle-replies' ),
+    path('ticket/update-status/', UpdateStatus.as_view(),name='handle-replies' ),
+
     path('superadmin/handle-tickets/', HandleTicketView.as_view(),name='handle-tickets-by-admin' ),
 
     path('user/blogs/', BlogPostView.as_view(), name='view-and-create-blogs'),
