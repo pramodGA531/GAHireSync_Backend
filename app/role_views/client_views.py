@@ -666,33 +666,38 @@ class InterviewersView(APIView):
                 count = 0
                 for interview in interviews:
                     try:
-                        scheduled = InterviewSchedule.objects.get(interviewer=interview)
-                        print("enterd")
-                        if scheduled.status == 'completed':
-                            count+=1
-                        interviews_list.append({
-                            "interviewer_id": interviewer_id,
-                            "candidate_name": scheduled.candidate.candidate_name,
-                            "scheduled_date": scheduled.scheduled_date,
-                            "interview_status": scheduled.status,
-                            "round_num": interview.round_num,
-                            "type_of_interview": interview.type_of_interview,
-                            "mode_of_interview": interview.mode_of_interview,
-                            "job_title": interview.job_id.job_title,
-                            "agency_name": interview.job_id.organization.name
-                        })
-                    except InterviewSchedule.DoesNotExist:
-                        continue  
+                        scheduled_interviews = InterviewSchedule.objects.filter(interviewer=interview)
 
-                interviewer_details = {
-                    "interviewer_name": user.username,
-                    "interviewer_email": user.email,
-                    "role":"Interviewer",
-                    "alloted":InterviewerDetails.objects.filter(name = user).count(),
-                    "completed": count,
-                    "scheduled":len(interviews_list)
-                }
-                return Response({"data":interviews_list, "interviewer_details": interviewer_details},status=status.HTTP_200_OK)
+                        for scheduled in scheduled_interviews:
+                            if scheduled.status == 'completed':
+                                count += 1
+
+                            interviews_list.append({
+                                "interviewer_id": interviewer_id,
+                                "candidate_name": scheduled.candidate.candidate_name,
+                                "scheduled_date": scheduled.scheduled_date,
+                                "interview_status": scheduled.status,
+                                "round_num": interview.round_num,
+                                "type_of_interview": interview.type_of_interview,
+                                "mode_of_interview": interview.mode_of_interview,
+                                "job_title": interview.job_id.job_title,
+                                "agency_name": interview.job_id.organization.name
+                            })
+
+                        return Response({
+                            "interviewer_name": user.username,
+                            "interviewer_email": user.email,
+                            "alloted":interviews.count(),
+                            "scheduled": scheduled_interviews.count(),
+                            "completed": count,
+                            "interviews": interviews_list
+                        }, status=200)
+
+                    except CustomUser.DoesNotExist:
+                        return Response({"error": "Interviewer not found"}, status=404)
+
+                    except Exception as e:
+                        return Response({"error": str(e)}, status=500)
 
             user = request.user
             client = ClientDetails.objects.get(user = user)
@@ -1739,7 +1744,30 @@ class SelectedCandidatesView(APIView):
         except Exception as e:
             print(str(e))  
             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
-       
+        
+class ShortlistedCandidatesView(APIView):
+    permission_classes = [IsClient]
+    def get(self,request):
+        try:
+            applications = JobApplication.objects.filter(job_id__username = request.user, status = 'processing')
+            applications_list = []
+            for application in applications:
+                applications_list.append(
+                    {
+                        "application_id": application.id,
+                        "job_title":application.job_id.job_title,
+                        "candidate_name": application.resume.candidate_name,
+                        "current_status": application.round_num,
+                        "agency": application.job_id.organization.name,
+                        "next_interview": application.next_interview.scheduled_date if application.next_interview else "No Interviews",
+                    }
+                )
+            return Response(applications_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+        
 class AllJoinedCandidates(APIView):
     permission_classes = [IsClient]
 

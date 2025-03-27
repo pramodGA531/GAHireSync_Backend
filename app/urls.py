@@ -68,6 +68,7 @@ urlpatterns = [
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
     path('client/compare-list-view/', CompareListView.as_view(), name='candidate-replacing'),
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
+    path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
