@@ -68,6 +68,7 @@ urlpatterns = [
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
     path('client/compare-list-view/', CompareListView.as_view(), name='candidate-replacing'),
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
+    path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
@@ -140,6 +141,9 @@ urlpatterns = [
     path('notification_to_update_profile/', NotificationToUpdateProfileView.as_view(), name='notification-to-update-profile'),
 
     path('view-tickets/', RaiseTicketView.as_view(),name='raise-ticket' ),
+    path('ticket/send-reply/', HandleReplies.as_view(),name='handle-replies' ),
+    path('ticket/update-status/', UpdateStatus.as_view(),name='handle-replies' ),
+
     path('superadmin/handle-tickets/', HandleTicketView.as_view(),name='handle-tickets-by-admin' ),
 
     path('user/blogs/', BlogPostView.as_view(), name='view-and-create-blogs'),

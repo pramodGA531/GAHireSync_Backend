@@ -737,21 +737,30 @@ class Tickets(models.Model):
     ]
 
     raised_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_raised")
-    category = models.CharField(max_length=50)  # Renamed from 'type' for clarity
+    category = models.CharField(max_length=50)  
     description = models.TextField()
-    reply = models.TextField(null = True, blank = True)
     assigned_to = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_assigned", null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
-    attachments = models.FileField(upload_to='ticket_attachments/', null=True, blank=True)   #present only one file
+    attachments = models.FileField(upload_to='ticket_attachments/', null=True, blank=True)   
 
     def __str__(self):
         return f"Ticket ({self.category}) - {self.status} - Raised by {self.raised_by.username}"
     
 
+class Messages(models.Model):
+    ticket_id = models.ForeignKey(Tickets, on_delete=models.CASCADE)
+    is_user_raised_by = models.BooleanField(default=False)
+    message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now=True)
+    attachment= models.FileField(upload_to="ticket_attachements/", null=True, blank=True)
+
+    def __str__(self):
+        return f"Ticket {self.ticket_id}"
+    
 class BlogPost(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
