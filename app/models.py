@@ -406,6 +406,7 @@ class InterviewSchedule(models.Model):
     ]
     id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)
+    rctr = models.ManyToManyField(CustomUser, blank=True)
     interviewer = models.ForeignKey(InterviewerDetails, on_delete=models.CASCADE,)
     scheduled_date = models.DateField(null= True, blank=True, )
     from_time = models.TimeField(null=True, blank=True,default="00:00:00" )

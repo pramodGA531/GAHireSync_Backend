@@ -232,7 +232,7 @@ class ScheduleInterview(APIView):
         try:
             if not request.GET.get('application_id'):
                 return Response({"error": "Application ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
+            rctr=request.user
             application_id = request.GET.get('application_id')
             application = JobApplication.objects.get(id = application_id)
             interviewer = InterviewerDetails.objects.get(job_id = application.job_id, round_num = application.round_num)
@@ -272,6 +272,7 @@ class ScheduleInterview(APIView):
             with transaction.atomic():
 
                 next_scheduled_interview = InterviewSchedule.objects.create(
+                    # rctr=rctr,
                     candidate = application.resume,
                     interviewer = interviewer,
                     scheduled_date = scheduled_date,
@@ -282,7 +283,7 @@ class ScheduleInterview(APIView):
                     round_num = application.round_num,
                     status = 'scheduled'
                 )
-
+                next_scheduled_interview.rctr.set([rctr]) 
                 application.next_interview = next_scheduled_interview
                 application.save()
                 start_datetime = f"{scheduled_date}T{from_time}Z"
@@ -557,3 +558,98 @@ class OrganizationApplications(APIView):
             except Exception as e:
                 print(str(e))
                 return Response({"error":str(e)}, status=status.HTTP_200_OK)
+            
+            
+
+class ResumesSent(APIView):
+    permission_classes = [IsRecruiter]  # Ensure only authenticated users can access
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        job_id = request.GET.get("job_id")  # Fixed request parameter retrieval
+
+        # Get the Organization where the user is a recruiter
+        org = Organization.objects.filter(recruiters__id=user.id).first()
+        if not org:
+            return Response({"error": "Organization not found"}, status=404)
+
+        # Get job posting assigned to the user
+        job_posting = JobPostings.objects.filter(organization=org, assigned_to=user, id=job_id).first()
+        if not job_posting:
+            return Response({"error": "Job posting not found or not assigned to you"}, status=404)
+
+        # Get applications for this job posting where the sender is the current user
+        applications = JobApplication.objects.filter(job_id=job_posting, sender=user)
+
+        # Serialize response data
+        applications_data = [
+            {
+                "candidate_name": app.resume.candidate_name,
+                "email": app.resume.candidate_email,
+                "contact_number": app.resume.contact_number,
+                "status": app.status,
+                "app_sent_date":app.created_at,
+            }
+            for app in applications
+        ]
+
+        return Response({"applications": applications_data}, status=200)
+    
+from django.core.exceptions import ObjectDoesNotExist
+
+class GetInterviews(APIView):
+    def get(self, request, *args, **kwargs):
+        rctr_id = request.GET.get("rctr_id")
+
+        try:
+            rctr_obj = CustomUser.objects.get(id=rctr_id)  # Fetch recruiter
+        except ObjectDoesNotExist:
+            return Response({"error": "Recruiter not found"}, status=404)
+
+        # Fetch interviews related to the recruiter
+        interviews = InterviewSchedule.objects.filter(rctr=rctr_obj)
+
+        # Serialize all interviews
+        interview_data = InterviewScheduleSerializer(interviews, many=True).data
+
+        return Response({"interviews": interview_data}, status=200)
+    
+
+
+class RecSummaryMetrics(APIView):
+    def get(self, request, *args, **kwargs):
+        print("calling this function")
+        rctr_id = request.GET.get("rctr_id")
+        try:
+            rctr_obj = CustomUser.objects.get(id=rctr_id)  # Fetch recruiter
+        except ObjectDoesNotExist:
+            return Response({"error": "Recruiter not found"}, status=404)
+
+        # Count of applications sent by recruiter
+        applications_count = JobApplication.objects.filter(sender=rctr_obj).count()
+
+        # Count of interviews scheduled by recruiter
+        interviews_count = InterviewSchedule.objects.filter(rctr=rctr_obj).count()
+
+        # Count of job postings assigned to recruiter
+        job_postings_count = JobPostings.objects.filter(assigned_to=rctr_obj).count()
+
+        # Count of selected candidates with 'pending' and 'joined' statuses
+        pending_candidates_count = SelectedCandidates.objects.filter(
+            application__sender=rctr_obj, joining_status="pending"
+        ).count()
+
+        joined_candidates_count = SelectedCandidates.objects.filter(
+            application__sender=rctr_obj, joining_status="joined"
+        ).count()
+
+        return Response({
+            "applications_count": applications_count,
+            "interviews_count": interviews_count,
+            "job_postings_count": job_postings_count,
+            "pending_candidates_count": pending_candidates_count,
+            "joined_candidates_count": joined_candidates_count
+        })
+
+        
+        

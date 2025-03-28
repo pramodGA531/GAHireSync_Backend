@@ -342,16 +342,90 @@ class JobEditStatusAPIView(APIView):
             return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
         
 class RecJobPostings(APIView):
-    def get(self, request,*args, **kwargs): 
+    def get(self, request, *args, **kwargs): 
         try:
-            user = request.user
-            org = Organization.objects.filter(recruiters__id=user.id).first()
-            job_postings = JobPostings.objects.filter(organization=org, assigned_to = user)
-            serializer = JobPostingsSerializer(job_postings,many=True)
+            user = request.user if request.user.is_authenticated else None
+            recruiter_id = request.GET.get("rctr_id")
+
+            if not user and not recruiter_id:
+                return Response({"detail": "User or recruiter ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if recruiter_id:
+                org = Organization.objects.filter(recruiters__id=recruiter_id).first()
+                assigned_user = CustomUser.objects.filter(id=recruiter_id).first()
+            else:
+                org = Organization.objects.filter(recruiters__id=user.id).first()
+                assigned_user = user
+
+            if not org:
+                return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            job_postings = JobPostings.objects.filter(organization=org, assigned_to=assigned_user)
+            serializer = JobPostingsSerializer(job_postings, many=True)
+          
+
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+from django.db.models import Count, Prefetch
+
+from django.db.models import Count, Prefetch
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+class RecSummery(APIView):
+    def get(self, request, *args, **kwargs):
+        try:
+            recruiter_id = request.GET.get("rctr_id")
+            recruiter_obj = CustomUser.objects.get(id=recruiter_id)
+
+            # Get total jobs posted by the recruiter (if `username` stores recruiters)
+            jobs_assigned = JobPostings.objects.filter(assigned_to=recruiter_obj)
+
+            total_jobs = jobs_assigned.count()
+
+            # Fetch applications for each job
+            jobs_with_applications = jobs_assigned.prefetch_related(
+                Prefetch(
+                    "jobapplication_set", 
+                    queryset=JobApplication.objects.all()
+                )
+            ).annotate(application_count=Count("jobapplication"))
+            print("jobapplication_set",jobs_with_applications)
+
+            # Format the response data
+            job_data = [
+                {
+                    "job_id": job.id,
+                    "job_title": job.job_title,
+                    "application_count": job.application_count,
+                    "vacancies":job.num_of_positions,
+                    "dead_line":job.job_close_duration,
+                    "applications": [
+                        {
+                            "application_id": app.id,
+                            "status": app.status,
+                        }
+                        for app in job.jobapplication_set.all()
+                    ]
+                }
+                for job in jobs_with_applications
+            ]
+
+            return Response({
+                "recruiter_id": recruiter_id,
+                "total_jobs_assigned": total_jobs,
+                "job_details": job_data
+            })
+        
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Recruiter not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+    
 
 class GetResumeByApplicationId(APIView):
 
