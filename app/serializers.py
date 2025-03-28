@@ -77,16 +77,36 @@ class SkillMetricSerializer(serializers.ModelSerializer):
         model = SkillMetricsModel
         fields = '__all__'
 
+
 class JobPostingsSerializer(serializers.ModelSerializer):
     assigned_to = CustomUserSerializer(many=True)
     username = CustomUserSerializer()
     organization = OrganizationSerializer()
+    selectedCandidatesCount = serializers.SerializerMethodField()  
+    onHoldCount = serializers.SerializerMethodField()
+    rejectedCount = serializers.SerializerMethodField()
+    pendingCount = serializers.SerializerMethodField()
     interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
     skills = SkillMetricSerializer(many=True)
+    
+    
     class Meta:
         model = JobPostings
-        fields = '__all__'  
+        fields = '__all__'
 
+    def get_selectedCandidatesCount(self, obj):
+        return SelectedCandidates.objects.filter(application__job_id=obj).count()
+
+    def get_onHoldCount(self, obj):
+        return SelectedCandidates.objects.filter(application__status='onHold', application__job_id=obj).count()
+
+    def get_rejectedCount(self, obj):
+        return SelectedCandidates.objects.filter(application__status='rejected', application__job_id=obj).count()
+
+    def get_pendingCount(self, obj):
+        return SelectedCandidates.objects.filter(application__status='pending', application__job_id=obj).count()
+    
+   
     def to_representation(self, instance):
         data = super().to_representation(instance)
         primary_skills = []
@@ -166,7 +186,7 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = InterviewSchedule
-        fields = ['id', 'candidate', 'interviewer', 'job_id', 'round_num', 'status_display']
+        fields = ['id', 'candidate', 'interviewer', 'job_id', 'round_num', 'status_display','rctr']
     
     
 
@@ -303,6 +323,8 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 class InterviewScheduleSerializer(serializers.ModelSerializer):
     interviewer = InterviewerDetailsSerializer()
     candidate=CandidateResumeSerializer()
+    rctr = CustomUserSerializer(many=True)
+    job_id=JobPostingsSerializer()
     class Meta:
         model = InterviewSchedule
         fields = "__all__"
