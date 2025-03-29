@@ -22,6 +22,7 @@ from django.core.mail import send_mail
 from rest_framework.pagination import PageNumberPagination
 from .models import *
 from decimal import Decimal
+import re
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
@@ -109,41 +110,63 @@ def remove_first_last_line(input_string):
         return ""  
     return "\n".join(lines[1:-1])
 
+def extract_json(response_text):
+    """Extract JSON content from the response, handling cases where it's inside a code block."""
+    match = re.search(r"```json\n(.*?)\n```", response_text, re.DOTALL)
+    return match.group(1) if match else response_text
+
 def generate_questions_with_gemini(jd):
     model = genai.GenerativeModel("gemini-1.5-flash")
 
     job_title = jd.job_title
-    job_description = jd.job_description.strip() if jd.job_description else None
+    job_description = jd.job_description.strip() if jd.job_description else "Not provided or insufficiently detailed"
     years_of_experience = jd.years_of_experience
-    primary_skills = jd.get_primary_skills_list()
-    secondary_skills = jd.get_secondary_skills_list()
 
-    skills = ", ".join(primary_skills + secondary_skills)
+    primary_skills = SkillMetricsModel.objects.filter(job_id=jd, is_primary=True)
+    secondary_skills = SkillMetricsModel.objects.filter(job_id=jd, is_primary=False)
+
+    primary_skill_list = [
+        f"- {skill.skill_name} (Metric: {skill.metric_type}, Value: {skill.metric_value})"
+        for skill in primary_skills
+    ] or ["- No primary skills provided"]
+
+    secondary_skill_list = [
+        f"- {skill.skill_name} (Metric: {skill.metric_type}, Value: {skill.metric_value})"
+        for skill in secondary_skills
+    ] or ["- No secondary skills provided"]
 
     prompt = (
-        f"Generate 10 to 15 text-based questions to help a recruiter evaluate candidates for the job role '{job_title}'."
-        f"based on the following job description and skills.\n\n"
-        f"Job Description: {job_description if job_description else 'Not provided or insufficiently detailed'}\n\n"
-        f"Skills required: {skills if skills else 'Not provided or insufficiently detailed'}\n\n"
-        f"Years of experience required: {years_of_experience} years.\n\n"
-        f"Generate the questions focusing on:\n"
-        f"1. Validating the candidate’s experience and qualifications in the field.\n"
-        f"2. Assessing problem-solving, critical thinking, and role-specific responsibilities.\n"
-        f"3. Ensuring the candidate can effectively apply their knowledge in real-world scenarios.\n\n"
-        f"4. Ensuring the candidate had all the skills mentioned.\n\n"
-        f"Return the output as a list of dictionaries in the following format:\n\n"
-        f"[{{\n"
-        f"  'question_text': 'Your question here?',\n"
-        f"  'correct_answer': 'Example answer here'\n"
-        f"}}]"
+        f"Generate 10 to 15 text-based questions to help a recruiter evaluate candidates for the job role '{job_title}'.\n\n"
+        f"**Job Description:**\n{job_description}\n\n"
+        f"**Primary Skills Required:**\n" + "\n".join(primary_skill_list) + "\n\n"
+        f"**Secondary Skills Required:**\n" + "\n".join(secondary_skill_list) + "\n\n"
+        f"**Years of Experience Required:** {years_of_experience} years.\n\n"
+        f"### Instructions for Question Generation:\n"
+        f"1. Validate the candidate’s experience and qualifications.\n"
+        f"2. Assess problem-solving, critical thinking, and role-specific knowledge.\n"
+        f"3. Ensure the candidate can apply their knowledge in real-world scenarios.\n"
+        f"4. Verify the candidate possesses the mentioned skills.\n\n"
+        f"### Output Format:\n"
+        f"Return a list of dictionaries in the following format:\n"
+        f"[\n"
+        f"  {{\n"
+        f"    'question_text': 'Your question here?',\n"
+        f"    'correct_answer': 'Example answer here'\n"
+        f"  }}\n"
+        f"]"
     )
 
     response = model.generate_content(prompt)
-    questions_output = response.text  
-    questions_output = remove_first_last_line(questions_output)
-    questions_output = json.loads(questions_output)
     
-    return questions_output
+    # Extract and clean JSON from response
+    raw_output = response.candidates[0].content.parts[0].text
+    clean_json_text = extract_json(raw_output)
+
+    try:
+        questions_output = json.loads(clean_json_text)
+        return questions_output
+    except json.JSONDecodeError:
+        return {"error": "Invalid response format from AI. Extracted JSON was: " + clean_json_text}
 
 
 def screen_profile_ai(jd, resume):
@@ -202,51 +225,112 @@ def screen_profile_ai(jd, resume):
     return response.text
 
 
-
 def analyse_resume(jd, resume):
     model = genai.GenerativeModel("gemini-1.5-flash")
 
     job_title = jd.job_title
     job_description = jd.job_description.strip() if jd.job_description else "No detailed job description provided."
     years_of_experience = jd.years_of_experience
-    primary_skills = jd.get_primary_skills_list()
-    secondary_skills = jd.get_secondary_skills_list()
     qualifications = jd.qualifications.strip() if jd.qualifications else "Not specified."
-    job_location = jd.job_location
     job_type = jd.job_type
     job_level = jd.job_level
+    primary_skills = SkillMetricsModel.objects.filter(job_id=jd, is_primary=True)
+    secondary_skills = SkillMetricsModel.objects.filter(job_id=jd, is_primary=False)
 
-    
-    skills = ", ".join(primary_skills + secondary_skills) if (primary_skills or secondary_skills) else "Not specified."
+    primary_skill_list = [
+        f"- {skill.skill_name} (Metric: {skill.metric_type}, Value: {skill.metric_value})"
+        for skill in primary_skills
+    ] or ["- No primary skills provided"]
 
-    
+    secondary_skill_list = [
+        f"- {skill.skill_name} (Metric: {skill.metric_type}, Value: {skill.metric_value})"
+        for skill in secondary_skills
+    ] or ["- No secondary skills provided"]
+
     prompt = f"""
-        Evaluate the candidate's resume against the job description for the role '{job_title}' and provide the following insights:
+        Evaluate the candidate's resume against the job description for the role **'{job_title}'** and provide the following insights:
 
-        1. **Compatibility Score**: Provide a score out of 100 for how well the resume matches the job description.
-        2. **Areas of Alignment**: Highlight where the candidate's resume aligns with the job description, including:
-            - Required skills: {skills}.
-            - Experience: {years_of_experience} years or more.
-            - Qualifications: {qualifications}.
-            - Role-specific requirements from the job description.
-        3. **Areas of Mismatch or Gaps**: Identify missing skills, qualifications, or areas where the resume doesn't meet the job requirements.
-        4. **Suitability Summary**: Provide a concise summary of the candidate's overall suitability for the role, 
-            considering the job location ({job_location}), job type ({job_type}), and job level ({job_level}).
+### 1. **Compatibility Score**  
+Provide a score out of 100 indicating how well the resume matches the job description. Consider factors such as skills, experience, and qualifications.
 
-        Ensure the evaluation is clear, relevant, and avoids verbose or unnecessary details.
+### 2. **Areas of Alignment**  
+Highlight the strengths of the candidate in relation to the job description, including:  
+   - **Primary Skills:** {primary_skill_list}  
+   - **Secondary Skills:** {secondary_skill_list}  
+   - **Experience:** At least {years_of_experience} years  
+   - **Qualifications:** {qualifications}  
+   - **Other key requirements** from the job description  
 
-        **Job Description Details:**  
-        {job_description}
+For each skill, provide:
+   - **Field Name**
+   - **Score (out of 10)**
+   - **Reason for the score**
 
-        **Candidate Resume:**  
-        {resume}
+### 3. **Areas of Mismatch or Gaps**  
+Identify missing skills, qualifications, or areas where the resume falls short of the job requirements.
+
+### 4. **Suitability Summary**  
+Provide a concise summary of the candidate’s overall suitability for the role, considering factors such as:  
+   - **Job Type:** {job_type}  
+   - **Job Level:** {job_level}  
+   - **Overall Fit:** Should the candidate be shortlisted for an interview? Why or why not?
+
+Ensure the evaluation is structured, objective, and avoids excessive verbosity.
+
+---
+
+#### **Job Description Details:**  
+{job_description}  
+
+#### **Candidate Resume:**  
+{resume}  
     """
-
-    
     response = model.generate_content(prompt)
-
+    ai_response = response.text
     
-    return response.text
+    parsed_response = parse_ai_response(ai_response)
+    return json.dumps(parsed_response, indent=2)
+
+
+def parse_ai_response(ai_text):
+    lines = ai_text.split("\n")
+    skills_data = []
+    overall_score = None
+    overall_reason = ""
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        if "Compatibility Score:" in line:
+            overall_score = line.split(":")[-1].strip()
+        elif any(keyword in line for keyword in ["Primary Skills", "Secondary Skills", "Experience", "Qualifications", "Other Key Requirements"]):
+            parts = line.split(":", 1)
+            if len(parts) < 2:
+                continue  # Skip malformed lines
+                
+            field_name = parts[0].strip()
+            score_info = parts[1].strip()
+            score = "Not provided"
+            reason = "No detailed reason provided."
+            
+            if "(" in score_info:
+                score_parts = score_info.split("(")
+                if len(score_parts) > 1:
+                    score = score_parts[0].strip()
+            
+            skills_data.append({"field_name": field_name, "score": score, "reason": reason})
+        elif "Overall Fit:" in line:
+            overall_reason = line.split(":", 1)[-1].strip()
+    
+    return {
+        "skills": skills_data,
+        "overall_resume_score": {
+            "score": overall_score if overall_score else "Not provided",
+            "reason": overall_reason
+        }
+    }
 
 
 def generate_invoice(context):
