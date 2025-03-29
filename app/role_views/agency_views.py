@@ -289,9 +289,9 @@ class OrgJobEdits(APIView):
                         metric_type = skill.get('metric_type'),
                     )
                     if skill.get('metric_type') == 'rating':
-                        skill_metric.rating = skill.get('rating')
+                        skill_metric.rating = skill.get('metric_value')
                     elif skill.get('metric_type') == 'rating':
-                        skill_metric.experience = skill.get('experience')
+                        skill_metric.experience = skill.get('metric_value')
 
                     skill_metric.save()
 
@@ -303,9 +303,9 @@ class OrgJobEdits(APIView):
                         metric_type = skill.get('metric_type'),
                     )
                     if skill.get('metric_type') == 'rating':
-                        skill_metric.rating = skill.get('rating')
+                        skill_metric.rating = skill.get('metric_value')
                     elif skill.get('metric_type') == 'rating':
-                        skill_metric.experience = skill.get('experience')
+                        skill_metric.experience = skill.get('metric_value')
 
                     skill_metric.save()
 
