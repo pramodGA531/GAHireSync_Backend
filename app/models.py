@@ -635,7 +635,6 @@ class RecruiterProfile(models.Model):
         return self.name.username
 
 class SelectedCandidates(models.Model):
-
     JOINING_STATUS_CHOICES = [
         ('joined', 'joined'),
         ('not_joined', 'not_joined'),
@@ -651,7 +650,13 @@ class SelectedCandidates(models.Model):
         ('completed','completed'),
         ('incomplete','incomplete')
     ]
-
+    
+    CANDIDATE_ACCEPTANCE_CHOICES=[
+        ('accepted','accepted'),
+        ('rejected','rejected'),
+        ('pending','pending'),
+    ]
+    
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
     application = models.OneToOneField(JobApplication, on_delete=models.CASCADE, related_name= 'selected_candidates')
     ctc = models.DecimalField(max_digits=10, decimal_places=2)
@@ -659,8 +664,8 @@ class SelectedCandidates(models.Model):
     resigned_date = models.DateField(null=True, blank=True)
     other_benefits = models.CharField(max_length=250, blank=True)
     joining_status = models.CharField(max_length=20, choices=JOINING_STATUS_CHOICES,default='pending')
-    candidate_acceptance = models.BooleanField(default= False)
-    recruiter_acceptance = models.BooleanField(default=False)
+    candidate_acceptance = models.CharField(max_length= 20,choices=CANDIDATE_ACCEPTANCE_CHOICES,default='pending')
+    recruiter_acceptance = models.BooleanField(default=True)
     feedback  = models.CharField(max_length=250, blank=True)
     left_reason = models.CharField(max_length=200, blank=True)
     is_replacement_eligible = models.BooleanField(default= False)
@@ -670,8 +675,6 @@ class SelectedCandidates(models.Model):
     def __str__(self):
         return self.application.resume.candidate_name
     
-
-
 class InvoiceGenerated(models.Model):
     PENDING = 'Pending'
     PAID = 'Paid'

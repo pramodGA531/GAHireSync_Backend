@@ -417,7 +417,8 @@ class ReConfirmResumes(APIView):
     def get(self, request):
         try:
             job_applications = JobApplication.objects.filter(sender = request.user, status = 'selected')
-            selected_candidates = SelectedCandidates.objects.filter(application__in = job_applications, candidate_acceptance = True)
+            selected_candidates = SelectedCandidates.objects.filter(application__in = job_applications)
+            print("selected_candidates",selected_candidates)
             candidates_list = []
             for candidate in selected_candidates:
                 job_post = candidate.application.job_id
@@ -431,6 +432,10 @@ class ReConfirmResumes(APIView):
                     "selected_candidate_id": candidate.id,
                     "actual_ctc": job_post.ctc,
                     "recruiter_acceptance": candidate.recruiter_acceptance,
+                    "candidate_acceptance":candidate.candidate_acceptance,
+                    "candidate_joining_status":candidate.joining_status,
+                    
+                    
                 }
                 candidates_list.append(selected_candidate_json)
 
@@ -562,8 +567,7 @@ class OrganizationApplications(APIView):
             
 
 class ResumesSent(APIView):
-    permission_classes = [IsRecruiter]  # Ensure only authenticated users can access
-
+    permission_classes = [IsRecruiter]  
     def get(self, request, *args, **kwargs):
         user = request.user
         job_id = request.GET.get("job_id")  # Fixed request parameter retrieval
@@ -614,8 +618,6 @@ class GetInterviews(APIView):
 
         return Response({"interviews": interview_data}, status=200)
     
-
-
 class RecSummaryMetrics(APIView):
     def get(self, request, *args, **kwargs):
         print("calling this function")

@@ -493,7 +493,7 @@ class CandidateAcceptJob(APIView):
             if (user != actual_user):
                 return Response({"error":"Users are not matching"}, status=status.HTTP_400_BAD_REQUEST)
 
-            selected_candidate.candidate_acceptance = True
+            selected_candidate.candidate_acceptance = "accepted"
             selected_candidate.save()
 
             return Response({"message":"Accepted and Reconfirmation notification sent to recruiter successfully"}, status = status.HTTP_200_OK)
