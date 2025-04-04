@@ -563,6 +563,7 @@ class CandidateProfile(models.Model):
     experience_years = models.CharField(max_length=30, blank=True)
     skills = models.TextField(blank=True)  
     current_company = models.CharField(max_length=200, blank=True)
+    resume = models.FileField(upload_to='Candidate/Resumes/', null=True, blank=True)
 
     def __str__(self):
         return self.name.username

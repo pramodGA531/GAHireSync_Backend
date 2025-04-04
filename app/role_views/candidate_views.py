@@ -70,11 +70,12 @@ class CandidateProfileView(APIView):
 
                 formatted_date = date_str
                 
-                print(formatted_date)
 
                 profile = request.FILES.get('profile', None)
+                resume = request.FILES.get('resume', None)
                 input_data_json = {
                     "profile": profile,
+                    "resume": resume,
                     "about" : data.get('about',""),
                     "first_name" : data.get('first_name',""),
                     "middle_name" : data.get('middle_name',''),

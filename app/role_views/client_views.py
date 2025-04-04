@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from django.db import transaction
 from django.core.mail import send_mail
 from datetime import datetime
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from datetime import date
 from django.db.utils import IntegrityError
@@ -17,6 +17,7 @@ from ..utils import *
 from django.db.models import Count, Sum
 from collections import defaultdict
 from django.utils.timesince import timesince
+
 
 
 
@@ -143,38 +144,69 @@ class GetOrganizationTermsView(APIView):
     permission_classes = [IsClient]  
 
     def get(self, request):
-        user = request.user
-        org_code = request.GET.get('org_code')
         try:
-            organization = Organization.objects.get(org_code = org_code)
+            user = request.user
+            org_code = request.GET.get("org_code")
+            
+            # Fetch organization or return 404
+            organization = get_object_or_404(Organization, org_code=org_code)
+            
+            client = get_object_or_404(ClientDetails, user=user)
+            
+            # Get client-specific accepted terms
+            clientTerms = ClientTermsAcceptance.objects.filter(
+                client=client, organization=organization, valid_until__gte=timezone.now()
+            )
 
-        except Organization.DoesNotExist:
-            return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        client = ClientDetails.objects.get(user=user)
-        clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
+            # Get any pending negotiation requests
+            negotiation_request = NegotiationRequests.objects.filter(
+                client__user=user, organization=organization, is_accepted=False
+            )
 
-        if clientTerms.count() > 0:
-            organization_terms=clientTerms.first()
-        else:
-            organization_terms = OrganizationTerms.objects.get(organization = organization)
+            # Select the appropriate organization terms
+            organization_terms = clientTerms.first() if clientTerms.exists() else get_object_or_404(OrganizationTerms, organization=organization)
+            
+            # Serialize organization terms
+            terms_serializer = OrganizationTermsSerializer(organization_terms)
+            terms_data = terms_serializer.data
 
-        serializer = OrganizationTermsSerializer(organization_terms)
-        data = serializer.data
-        context = {
-            "service_fee": data.get("service_fee"),
-            "invoice_after": data.get("invoice_after"),
-            "payment_within": data.get("payment_within"),
-            "replacement_clause": data.get("replacement_clause"),
-            "interest_percentage": data.get("interest_percentage"),
-            "data":data
-        }
+            # Serialize negotiated terms if available
+            negotiated_data = (
+                NegotiationSerializer(negotiation_request.first()).data if negotiation_request.exists() else None
+            )
 
-        context['data_json'] = json.dumps(context['data'])
+            # Construct JSON response data
+            context = {
+                "service_fee": terms_data.get("service_fee"),
+                "invoice_after": terms_data.get("invoice_after"),
+                "payment_within": terms_data.get("payment_within"),
+                "replacement_clause": terms_data.get("replacement_clause"),
+                "interest_percentage": terms_data.get("interest_percentage"),
+                "data": terms_data,
+            }
 
-        html = render_to_string("organizationTerms.html", context)
-        return HttpResponse(html)
+            context["data_json"] = json.dumps(context["data"])
 
+            # Render HTML separately
+            html_context = {"service_fee": terms_data.get("service_fee"), 
+                "invoice_after": terms_data.get("invoice_after"), 
+                "payment_within": terms_data.get("payment_within"), 
+                "replacement_clause": terms_data.get("replacement_clause"), 
+                "data_json": json.dumps(terms_data)}
+            
+            
+            html = render(request, "organizationTerms.html", html_context).content.decode("utf-8")
+
+            # Return JSON response with terms and HTML
+            return JsonResponse(
+                {"negotiated_data": negotiated_data, "terms_data": context, "html": html},
+                safe=False,
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))  # Log the error for debugging
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 # Create Job Post
 class JobPostingView(APIView):
     permission_classes = [IsClient] 
@@ -617,8 +649,8 @@ class RejectJobEditRequestView(APIView):
                 return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
             id = request.GET.get('id')
             job = JobPostings.objects.get(id=id)
-            organization = organization.organization
-            manager_mail = organization.manager.email
+            manager_mail = job.organization.manager.email
+
             edited_job =JobPostingsEditedVersion.objects.get(id = job)
             edited_job.status = 'rejected'
             edited_job.save()
@@ -633,11 +665,9 @@ class RejectJobEditRequestView(APIView):
             The Recruitment Team
             """
 
-            # Send the email to the manager
-            send_mail(
+            send_email(
                 subject="Accepted Edit Request",
                 message=client_email_message,
-                from_email='your-client@example.com',  # Replace with your actual sender email
                 recipient_list=[manager_mail]
             )
             return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
@@ -646,7 +676,7 @@ class RejectJobEditRequestView(APIView):
         except JobPostingsEditedVersion.DoesNotExist:
             return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            print(e)
+            print(str(e))
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -702,11 +732,8 @@ class InterviewersView(APIView):
             user = request.user
             client = ClientDetails.objects.get(user = user)
             interviewers = client.interviewers.all()
-            print("interviewers",interviewers)
             interviewers_list = []
             for interviewer in interviewers:
-                print("interviewer",interviewer.username)
-                print("interviewer",interviewer.email)
                 
                 rounds_alloted = InterviewerDetails.objects.filter(name = interviewer)
                 rounds_alloted_count = rounds_alloted.count()
@@ -767,8 +794,8 @@ Email: {email}
 Password: {password}
 
 Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
+x
+Login Link: https://gahiresync.com/login
 
 If you have any questions, feel free to contact our support team.
 

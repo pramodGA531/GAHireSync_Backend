@@ -778,7 +778,6 @@ class RaiseTicketView(APIView):
             ticket_id = request.GET.get('ticket_id')
 
             if ticket_id:
-                print("entered here also")
                 try:
                     ticket = Tickets.objects.get(id=ticket_id)
                     replies = Messages.objects.filter(ticket_id = ticket.id)
@@ -791,11 +790,10 @@ class RaiseTicketView(APIView):
                                 "name": reply.ticket_id.raised_by.username if reply.is_user_raised_by else reply.ticket_id.assigned_to.username,
                                 "message": reply.message,
                                 "attachment": reply.attachment.url if reply.attachment else None,
+                                "attachment_name": reply.attachment.name if reply.attachment else None,
                                 "created_at": reply.created_at,
                             }
                         )
-                    if ticket.attachments is not None:
-                        print(ticket.attachments)
 
                     return Response({
                         "id":ticket.id,
@@ -807,6 +805,7 @@ class RaiseTicketView(APIView):
                         "replies_list": replies_list,
                         "created_at": ticket.created_at,
                         "attachments": ticket.attachments.url if ticket.attachments else None,
+                        "attachment_name": ticket.attachments.name if ticket.attachments else None,
                     }, status=status.HTTP_200_OK)
                 except Tickets.DoesNotExist:
                     return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -814,14 +813,11 @@ class RaiseTicketView(APIView):
 
             is_sent = request.GET.get('isSent')
             if is_sent == "true":
-                print("Not entered")
                 all_tickets = Tickets.objects.filter(raised_by=user)
             else:
-                print("Ntered")
                 all_tickets = Tickets.objects.filter(assigned_to=user)
             ticket_list = []
 
-            print(all_tickets.count)
 
             for ticket in all_tickets:
                 ticket_list.append({
@@ -898,6 +894,7 @@ class HandleReplies(APIView):
                 message = data.get('message',''),
                 is_user_raised_by  = True if ticket.raised_by == user else False,
                 attachment = data.get('attachment','')
+
             )
 
             return Response({"message":"Response saved successfully"}, status = status.HTTP_200_OK)
@@ -926,7 +923,8 @@ class HandleTicketView(APIView):
                         "created_at": ticket.created_at,
                         "updated_at": ticket.updated_at,
                         "resolved_at" : ticket.resolved_at,
-                        "attachments": ticket.attachments.url if ticket.attachments else None
+                        "attachments": ticket.attachments.url if ticket.attachments else None,
+                        "attachment_name": ticket.attachments.name if ticket.attachments else None,
                     }, status=status.HTTP_200_OK)
                 except Tickets.DoesNotExist:
                     return Response({"error": "Ticket not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -943,7 +941,8 @@ class HandleTicketView(APIView):
                     "raised_by": ticket.raised_by.username,
                     "status": ticket.status,
                     "created_at": ticket.created_at,
-                    "attachments": ticket.attachments.url if ticket.attachments else None
+                    "attachments": ticket.attachments.url if ticket.attachments else None,
+                    "attachment_name": ticket.attachments.name if ticket.attachments else None,
                 })
 
             return Response(ticket_list, status=status.HTTP_200_OK)
