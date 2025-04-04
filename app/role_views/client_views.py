@@ -649,8 +649,8 @@ class RejectJobEditRequestView(APIView):
                 return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
             id = request.GET.get('id')
             job = JobPostings.objects.get(id=id)
-            organization = organization.organization
-            manager_mail = organization.manager.email
+            manager_mail = job.organization.manager.email
+
             edited_job =JobPostingsEditedVersion.objects.get(id = job)
             edited_job.status = 'rejected'
             edited_job.save()
@@ -665,11 +665,9 @@ class RejectJobEditRequestView(APIView):
             The Recruitment Team
             """
 
-            # Send the email to the manager
-            send_mail(
+            send_email(
                 subject="Accepted Edit Request",
                 message=client_email_message,
-                from_email='your-client@example.com',  # Replace with your actual sender email
                 recipient_list=[manager_mail]
             )
             return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
@@ -678,7 +676,7 @@ class RejectJobEditRequestView(APIView):
         except JobPostingsEditedVersion.DoesNotExist:
             return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            print(e)
+            print(str(e))
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -734,11 +732,8 @@ class InterviewersView(APIView):
             user = request.user
             client = ClientDetails.objects.get(user = user)
             interviewers = client.interviewers.all()
-            print("interviewers",interviewers)
             interviewers_list = []
             for interviewer in interviewers:
-                print("interviewer",interviewer.username)
-                print("interviewer",interviewer.email)
                 
                 rounds_alloted = InterviewerDetails.objects.filter(name = interviewer)
                 rounds_alloted_count = rounds_alloted.count()
@@ -799,8 +794,8 @@ Email: {email}
 Password: {password}
 
 Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
+x
+Login Link: https://gahiresync.com/login
 
 If you have any questions, feel free to contact our support team.
 

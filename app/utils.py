@@ -346,7 +346,6 @@ email_verification_token = EmailVerificatioinTokenGenerator()
 
 def send_email_verification_link(user,domain):
 
-    print("enteredd")
     token = email_verification_token.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     # domain = get_current_site(request).domain
