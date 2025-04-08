@@ -28,13 +28,9 @@ class AgencyJobApplications(APIView):
             user = request.user
             org = Organization.objects.get(manager=user)
 
-            job_postings = JobPostings.objects.filter(organization=org).prefetch_related(
-                Prefetch(
-                    "jobapplication_set",
-                    queryset=JobApplication.objects.select_related("resume"),
-                    to_attr="applications"
-                )
-            )
+            job_postings = JobPostings.objects.filter(organization=org)
+
+            applications = JobApplication.objects.filter(job_id__in = job_postings)
 
             job_titles = [{"job_id": job.id, "job_title": job.job_title} for job in job_postings.distinct()]
 
@@ -42,12 +38,12 @@ class AgencyJobApplications(APIView):
                 {
                     "candidate_name": app.resume.candidate_name ,
                     "application_id": app.id,
-                    "job_title": job.job_title,
-                    "job_department": job.job_department,
-                    "job_description": job.job_description,
+                    "job_title": app.job_id.job_title,
+                    "job_department": app.job_id.job_department,
+                    "job_description": app.job_id.job_description,
                     "application_status": app.status,
                 }
-                for job in job_postings for app in job.applications
+                for app in applications
             ]
 
             return Response(
@@ -196,7 +192,6 @@ class OrgJobEdits(APIView):
     def get(self, request):
         try:
             user = request.user
-            print('user is ', user)
             if( request.GET.get('id')):
                 id = request.GET.get('id')
                 edited_job = JobPostingsEditedVersion.objects.get(id = id)
@@ -322,27 +317,29 @@ class OrgJobEdits(APIView):
                             type_of_interview=round_data.get('type_of_interview', ''),
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
-                        
+                    
+                link = f"{frontend_url}/client/edit-requests/{job_edited_post.id}"
                 client_message = f"""
-                We would like to inform you that there has been a request to edit the job posting for "{job_posting.job_title}" with the following details:
 
-                Please review the requested changes and update the job posting accordingly.
+Dear {job_posting.username.username},
 
-                Thank you for using our platform.
+Your job post for {job_posting.job_title} has been reviewed, and we have requested some edits for better alignment. Please update the job description at your earliest convenience.
+🔗 {link}
 
-                Best regards,  
-                The Recruitment Team
+For questions, reach out to your recruiter or support@hiresync.com.
+Best,
+HireSync Team
+
                 """
 
-                send_mail(
-                    subject="Upadte In Job Posting",
+                send_custom_mail(
+                    subject="Job Post Update Requested",
                     message=client_message,
-                    from_email='',
                     recipient_list=[client_email]
                 )
 
             return Response(
-                {"message": "Job post and interview rounds edit request sent successfully"},
+                {"message": "Job post edit request sent successfully"},
                 status=status.HTTP_200_OK
             )
 
@@ -366,6 +363,7 @@ class RecruitersView(APIView):
             return Response(serializer.data["recruiters"], status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
     def post(self, request):
         try:
             user = request.user
@@ -400,34 +398,7 @@ class RecruitersView(APIView):
 
                 org.recruiters.add(new_user)
 
-                subject = "Account Created on HireSync"
-                message = f"""
-Dear {username},
-
-Welcome to HireSync! Your recruiter account has been successfully created.
-
-Here are your account details:
-Username: {username}
-Email: {email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-
-                send_mail(
-                    subject=subject,
-                    message=message,
-                    from_email='',
-                    recipient_list=[email],
-                    fail_silently=False,
-                )
+                send_email_verification_link(new_user, True, "recruiter")
 
                 return Response(
                     {"message": "Recruiter account created successfully, and email sent."},
@@ -462,6 +433,19 @@ class AssignRecruiterView(APIView):
                 job.assigned_to.set(recruiters)  # Assign multiple recruiters
                 job.save()
 
+                for recruiter in recruiters:
+                    
+                    link = f"{frontend_url}/recruiter/postings/{job_id}"
+                    message = f"""
+
+A new job post {job.job_title} has been assigned to you. Please review the details and start the recruitment process.
+🔗 {link}
+
+Best,
+HireSync Team
+"""
+                    send_custom_mail(f"New Job Assigned – {job.job_title}", message, {recruiter.email})
+
                 return Response({"detail": "Recruiters Assigned Successfully"}, status=status.HTTP_200_OK)
         except Organization.DoesNotExist:
             return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -471,7 +455,6 @@ class AssignRecruiterView(APIView):
             return Response({"detail": "One or more recruiters not found"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 # Get All Recruiters 
@@ -503,8 +486,6 @@ class RecruitersList(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)  
-
-
 
 # Invoices
 # Get all invoice

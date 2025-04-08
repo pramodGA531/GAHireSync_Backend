@@ -19,9 +19,6 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.shortcuts import render
 from .permissions import *
-
-
-import base64
 import jwt
 import string 
 import random
@@ -29,6 +26,9 @@ from django.contrib.auth.tokens import default_token_generator
 from django.template import Template, Context
 from django.shortcuts import get_object_or_404
 from .utils import *
+
+
+frontend_url = os.environ['FRONTENDURL']
 
 class VerifyEmailView(APIView):
     def get(self, request, uidb64, token):
@@ -55,28 +55,26 @@ class VerifyEmailView(APIView):
                 user = CustomUser.objects.get(email = email)
             except CustomUser.DoesNotExist:
                 return Response({"error":"User with this email id does not exists"}, status= status.HTTP_400_BAD_REQUEST)
+            
             if user.is_verified:
                 return Response({"message":"Your email is already verified, try login"}, status=status.HTTP_200_OK)
+            
             try:
-                send_email_verification_link(user,domain="localhost:3000")
+                send_email_verification_link(user)
                 return Response({"message":"Verification Link sent successfully"}, status=status.HTTP_200_OK)
+            
             except Exception as e:
-                print(str(e))
                 return Response({"error":"Error sending verification email"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class ClientSignupView(APIView):
-    """
-    API view to sign up a new client user.
-    """
+
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
         combined_values = request.data
-        print("calling this view ")
         try:
-            print("CustomUser.CLIENT table",CustomUser.CLIENT)
             with transaction.atomic():
                 user_serializer = CustomUserSerializer(data={
                     'email': combined_values.get('email'),
@@ -85,12 +83,11 @@ class ClientSignupView(APIView):
                     'credit' : 50,
                     'password': combined_values.get('password')
                 })
-                print('user_serializer',user_serializer)
+
                 if user_serializer.is_valid(raise_exception=True):
                     user = user_serializer.save()
                     user.set_password(combined_values.get('password'))
                     user.save()
-                    
                     
                     client_data = {
                         'username': user.username,
@@ -107,14 +104,11 @@ class ClientSignupView(APIView):
                     
                     if client_serializer.is_valid(raise_exception=True):
                         client_serializer.save()
-                        # subject = 'Welcome to Our Service!'
-                        # message = 'Thank you for signing up with us.'
 
                         try:
-                            send_email_verification_link(user, domain = "localhost:3000")
-                        except Exception as e:
-                            print(f"Error sending verification link: {str(e)}")
+                            send_email_verification_link(user, signup = True)
 
+                        except Exception as e:
                             return Response(
                                 {"error": "There was an issue sending the welcome email. Please try again later."},
                                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -226,9 +220,8 @@ class LoginView(APIView):
             }
             
             refresh = RefreshToken.for_user(user)
-            # print(refresh)
             access_token = str(refresh.access_token)
-            message = f"Successfully signed in. If not done by you please change your password."
+
             return Response({'access_token': access_token,'role':user.role, "user_details": user_details}, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -272,22 +265,30 @@ class ForgotPasswordAPIView(APIView):
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-            reset_password_link = f"http://localhost:3000/reset/{uid}/{token}"
+            reset_password_link = f"{frontend_url}/reset/{uid}/{token}"
 
             email_template = """
-Hi {{ user.username }},
-Please click the link below to reset your password:
-{{ reset_password_link }}
+
+Dear {{user.username}},
+
+We received a request to reset your password for your HireSync account. Click the link below to set a new password:
+🔗 {{reset_password_link}}
+
+For security reasons, this link will expire in 20 minutes. If you didn’t request this, you can safely ignore this email.
+Need help? Contact support@hiresync.com.
+
+Best,
+HireSync Support Team
 """
             template = Template(email_template)
             context = Context({
                 'user': user,
                 'reset_password_link': reset_password_link,
             })
-            print(reset_password_link)
+
             message = template.render(context)
 
-            send_mail('Reset your password', message,'', [email])
+            send_custom_mail( subject = 'Reset Your Password – HireSync', body=message, to_email=[email])
             return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
 
 class ResetPasswordAPIView(APIView):
@@ -316,12 +317,10 @@ class ResetPasswordAPIView(APIView):
                 user.set_password(new_password)
                 user.save()
                 message = f"Password successfully changed. If not done by you please change your password."
-                send_mail(
+                send_custom_mail(
                     'Password Changed',
                     message,
-                    '',
                     [user.email],
-                    fail_silently=False,
                 )
                 return Response({'success': 'Password has been reset successfully.'})
             else:
@@ -340,7 +339,7 @@ class changePassword(APIView):
                 user.set_password(new_password)
                 user.save()
                 message = f"Password successfully changed. If not done by you please change your password."
-                send_mail(
+                send_custom_mail(
                     'Password Changed',
                     message,
                     '',

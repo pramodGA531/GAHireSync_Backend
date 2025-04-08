@@ -148,34 +148,27 @@ class GetOrganizationTermsView(APIView):
             user = request.user
             org_code = request.GET.get("org_code")
             
-            # Fetch organization or return 404
             organization = get_object_or_404(Organization, org_code=org_code)
             
             client = get_object_or_404(ClientDetails, user=user)
             
-            # Get client-specific accepted terms
             clientTerms = ClientTermsAcceptance.objects.filter(
                 client=client, organization=organization, valid_until__gte=timezone.now()
             )
 
-            # Get any pending negotiation requests
             negotiation_request = NegotiationRequests.objects.filter(
                 client__user=user, organization=organization, is_accepted=False
             )
 
-            # Select the appropriate organization terms
             organization_terms = clientTerms.first() if clientTerms.exists() else get_object_or_404(OrganizationTerms, organization=organization)
-            
-            # Serialize organization terms
+
             terms_serializer = OrganizationTermsSerializer(organization_terms)
             terms_data = terms_serializer.data
 
-            # Serialize negotiated terms if available
             negotiated_data = (
                 NegotiationSerializer(negotiation_request.first()).data if negotiation_request.exists() else None
             )
 
-            # Construct JSON response data
             context = {
                 "service_fee": terms_data.get("service_fee"),
                 "invoice_after": terms_data.get("invoice_after"),
@@ -187,7 +180,6 @@ class GetOrganizationTermsView(APIView):
 
             context["data_json"] = json.dumps(context["data"])
 
-            # Render HTML separately
             html_context = {"service_fee": terms_data.get("service_fee"), 
                 "invoice_after": terms_data.get("invoice_after"), 
                 "payment_within": terms_data.get("payment_within"), 
@@ -197,7 +189,6 @@ class GetOrganizationTermsView(APIView):
             
             html = render(request, "organizationTerms.html", html_context).content.decode("utf-8")
 
-            # Return JSON response with terms and HTML
             return JsonResponse(
                 {"negotiated_data": negotiated_data, "terms_data": context, "html": html},
                 safe=False,
@@ -205,12 +196,12 @@ class GetOrganizationTermsView(APIView):
             )
 
         except Exception as e:
-            print(str(e))  # Log the error for debugging
+            print(str(e))  
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-# Create Job Post
+        
+
 class JobPostingView(APIView):
     permission_classes = [IsClient] 
-    # print("called this function") 
 
     def addTermsAndConditions(self, job_post):
         try:
@@ -257,11 +248,9 @@ class JobPostingView(APIView):
         
 
     def post(self, request):
-        print("role",request.user)
-        print("function is called ")
         data = request.data
         username = request.user
-        print("username",username)
+
         organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
         if not username or username.role != 'client':
             return Response({"error": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
@@ -351,8 +340,6 @@ class JobPostingView(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
-                        print("round_data",round_data)
-                        #here there is error mail and name are in reverse
                         interviewer = CustomUser.objects.get(username = round_data.get('email'))
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
@@ -361,56 +348,22 @@ class JobPostingView(APIView):
                             type_of_interview=round_data.get('type_of_interview', ''),
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
-                        print("mode of interview is ",round_data.get('mode_of_interview'), " and total interviewer data is ",round_data)
-                client = ClientDetails.objects.get(user=username)
-                client_message = f"""
-    Dear {username.first_name},
-    Your job posting for "{job_posting.job_title}" has been successfully created with the following details:
-
-    **Organization:** {organization.name}
-    **Job Title:** {job_posting.job_title}
-    **Department:** {job_posting.job_department}
-    **Job Location:** {job_posting.job_locations}
-    **CTC:** {job_posting.ctc}
-    **Years of Experience Required:** {job_posting.years_of_experience}
-  
-
-    Thank you for using our platform.
-
-    Best regards,
-    The Recruitment Team
-"""
-
+                new_job_link = f"{frontend_url}/agency/postings/{job_posting.id}"
                 manager_message = f"""
-Dear {organization.manager.first_name},
 
-A new job posting has been created for your organization "{organization.name}" by {username.first_name} {username.last_name}.
+Dear {organization.manager.username},
 
-**Job Title:** {job_posting.job_title}
-**Department:** {job_posting.job_department}
-**Location:** {job_posting.job_locations}
-**CTC:** {job_posting.ctc}
-**Years of Experience:** {job_posting.years_of_experience}
+A new job post has been created by {username} for the position {job_posting.job_title}. Please review the details and take the necessary action.
+🔗 {new_job_link}
 
+Best,
+HireSync Team
 
-
-Please review and approve the posting at your earliest convenience.
-
-Best regards,
-The Recruitment Team
 """
 
-                send_mail(
-                    subject="Job Posting Created Successfully",
-                    message=client_message,
-                    from_email='',
-                    recipient_list=[username.email]
-                )
-
-                send_mail(
-                    subject="New Job Posting Created",
+                send_custom_mail(
+                    subject="New Job Post Created – Action Required",
                     message=manager_message,
-                    from_email='',
                     recipient_list=[organization.manager.email]
                 )
 
@@ -933,28 +886,6 @@ class AcceptApplicationView(APIView):
         if existing_user:
             candidate_profile = CandidateProfile.objects.get(name=existing_user)
 
-            subject = "You Have Been Shortlisted for Another Job on HireSync"
-            message = f"""
-Dear {candidate_name},
-
-Congratulations! You have been shortlisted for another job opportunity on HireSync.
-
-Please log in to your account to view more details.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Best Regards,  
-HireSync Team
-            """
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email='noreply@hiresync.com',
-                recipient_list=[candidate_email],
-                fail_silently=False,
-            )
             return candidate_profile
 
 
@@ -977,33 +908,7 @@ HireSync Team
                 name = new_user,
                 email =candidate_email,
             )
-            subject = "Account Created on HireSync"
-            message = f"""
-Dear {candidate_name},
-
-Welcome to HireSync! Your Candidate account has been successfully created.
-
-Here are your account details:
-Username: {candidate_name}
-Email: {candidate_email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-            send_mail(
-                        subject=subject,
-                        message=message,
-                        from_email='noreply@hiresync.com',
-                        recipient_list=[candidate_email],
-                        fail_silently=False,
-                )
+    
             return candidate_profile
         else:
             raise serializers.ValidationError(user_serializer.errors)
@@ -1023,6 +928,20 @@ HireSync Team
                 job_application.status = 'processing'
                 job_application.round_num = 1
                 candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+
+                link = f"{frontend_url}/candidate/applications"
+                message = f"""
+
+Dear {candidate.name.username},
+Great news! You have been shortlisted for the {job_application.job_id.job_title} role at {job_application.job_id.username}.
+Next steps: [Interview scheduling details]
+🔗 {link}
+Good luck!
+
+Best,
+HireSync Team
+
+"""
                 job_application.save()
 
             return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)

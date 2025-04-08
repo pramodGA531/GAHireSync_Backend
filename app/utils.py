@@ -4,7 +4,7 @@ import json
 import google.generativeai as genai
 from django.conf import settings
 from django.utils.html import strip_tags
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives, EmailMessage
 import fitz
 from django.template.loader import render_to_string
 from docx import Document
@@ -23,8 +23,17 @@ from rest_framework.pagination import PageNumberPagination
 from .models import *
 from decimal import Decimal
 import re
+import os
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.conf import settings
+import logging
+
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
+frontend_url = os.environ['FRONTENDURL']
+
 
 def generate_passwrord(length=15):
     alphabet = string.ascii_letters + string.digits 
@@ -344,41 +353,6 @@ class EmailVerificatioinTokenGenerator(PasswordResetTokenGenerator):
 email_verification_token = EmailVerificatioinTokenGenerator()
 
 
-def send_email_verification_link(user,domain):
-
-    token = email_verification_token.make_token(user)
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    # domain = get_current_site(request).domain
-    link = f"http://{domain}/verify-email/{uid}/{token}/"  
-    message = f"""
-
-
-Dear {user.username},
-
-Welcome to **HireSync!** 🎉  
-You're just one step away from getting started.
-
-Please verify your email address by clicking the link below:
-
-🔗 **[Verify My Email]({link})**
-
-⚠️ *This link will expire in 20 minutes.*
-
-If you didn’t sign up for HireSync, please ignore this email.
-
-Best regards,  
-**The HireSync Team**  
-HireSync Inc.
-"""
-    send_mail(
-        subject="Verify Your Email - HireSync",
-        message=message,
-        from_email="your-email@example.com",
-        recipient_list=[user.email],
-    )
-
-
-
 def calculate_profile_percentage(candidate):
            
         fields_to_check = [
@@ -409,56 +383,6 @@ class TenResultsPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 10
     
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
-from django.utils.html import strip_tags
-from django.conf import settings
-import logging
-
-# Set up logging (you can also configure this in your Django settings)
-logger = logging.getLogger(__name__)
-
-def sendemailTemplate(subject, template_name, context, recipient_list):
-    """
-    Sends an HTML email with a text alternative.
-
-    :param subject: The subject of the email
-    :param template_name: The name of the template for the email content
-    :param context: The context to render the template
-    :param recipient_list: List of recipients to send the email to
-    :return: True if email is sent, False otherwise
-    """
-    try:
-        # Render the HTML content using the template and context
-        html_content = render_to_string(template_name, context)
-
-        # Generate plain text version of the email (for email clients that don't support HTML)
-        text_content = strip_tags(html_content)
-
-        # Create the email message
-        email = EmailMultiAlternatives(
-            subject, 
-            text_content, 
-            settings.DEFAULT_FROM_EMAIL,  # Use the default sender email from settings
-            recipient_list
-        )
-
-        # Attach the HTML content as an alternative
-        email.attach_alternative(html_content, "text/html")
-
-        # Send the email
-        email.send()
-
-        # Log the success
-        logger.info(f"Email sent successfully to: {', '.join(recipient_list)}")
-
-        return True
-
-    except Exception as e:
-        # Log the error with details for debugging
-        logger.error(f"Failed to send email to {', '.join(recipient_list)}. Error: {e}")
-
-        return False
     
 def calculate_invoice_amounts(selected_candidate, terms, client_gst, org_gst):
     ctc_in_lakhs = Decimal(str(selected_candidate.ctc))  
@@ -544,4 +468,194 @@ def create_invoice_context(invoice):
     }
     return context
   
+
+logger = logging.getLogger(__name__)
+
+def sendemailTemplate(subject, template_name, context, recipient_list):
+    """
+    Sends an HTML email with a text alternative.
+
+    :param subject: The subject of the email
+    :param template_name: The name of the template for the email content
+    :param context: The context to render the template
+    :param recipient_list: List of recipients to send the email to
+    :return: True if email is sent, False otherwise
+    """
+    try:
+        html_content = render_to_string(template_name, context)
+
+        text_content = strip_tags(html_content)
+
+        email = EmailMultiAlternatives(
+            subject, 
+            text_content, 
+            settings.DEFAULT_FROM_EMAIL,  
+            recipient_list
+        )
+
+        email.attach_alternative(html_content, "text/html")
+        email.send()
+        logger.info(f"Email sent successfully to: {', '.join(recipient_list)}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send email to {', '.join(recipient_list)}. Error: {e}")
+        return False
+
+def send_custom_mail(subject, body, to_email):
+    try:
+        from_email = settings.DEFAULT_FROM_EMAIL
+
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=to_email if isinstance(to_email, list) else [to_email],
+        )
+        email.send(fail_silently=False)
+
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+
+
+def send_email_verification_link(user, signup, role):
+
+    token = email_verification_token.make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+
+    link = f"http://{frontend_url}/verify-email/{uid}/{token}/" 
+
+    if signup == False: 
+        message = f"""
+
+    Dear {user.username},
+
+    Welcome to HireSync! To complete your registration, please verify your email address by clicking the link below:
+    🔗 {link}
+
+    If you didn’t sign up, please disregard this email. Need assistance? Reach out at support@hiresync.com.
+
+    Best,
+    HireSync Team
+
+    """
+    subject = "Verify Your Email – Welcome to HireSync"
+    
+    if signup: 
+
+        if role == 'client':
+            subject = f"Welcome to HireSync – Your Account is Ready!"
+            message = f"""
+
+Dear {user.username},
+
+Congratulations! Your client account on HireSync has been successfully created.
+You can now post jobs seamlessly.
+
+Verify your account 
+🔗 {link}
+
+Need assistance? Contact us at support@hiresync.com.
+Best,
+HireSync Team
+    
+""" 
+        if role == 'manager':
+            subject = f"Welcome to HireSync – Your Account is Ready!"
+            message = f"""
+
+Dear {user.username},
+
+Congratulations! Your account on HireSync has been successfully created.
+
+You can now manage your job posts seamlessly.
+
+Verify your account 
+🔗 {link}
+
+Need assistance? Contact us at support@hiresync.com.
+Best,
+HireSync Team
+
+"""
+        if role == 'recruiter':
+            subject = f"Welcome to HireSync – Your Account is Ready!"
+            message = f"""
+
+Dear {user.username},
+
+Congratulations! Your recruiter account on HireSync has been successfully created.
+
+You can now send applications/schedule interviews seamlessly.
+
+Verify your account 
+🔗 {link}
+
+Need assistance? Contact us at support@hiresync.com.
+Best,
+HireSync Team
+
+"""
+        if role == 'interviewer':
+            subject = f"Welcome to HireSync – Your Account is Ready!"
+            message = f"""
+
+Dear {user.username},
+
+Congratulations! Your interviewer account on HireSync has been successfully created.
+
+You can now send conduct interviews seamlessly.
+
+Verify your account 
+🔗 {link}
+
+Need assistance? Contact us at support@hiresync.com.
+Best,
+HireSync Team
+
+"""
+        if role == 'candidate':
+            subject = f"Welcome to HireSync – Your Account is Ready!"
+            message = f"""
+
+Dear {user.username},
+
+Congratulations! Your candidate account on HireSync has been successfully created.
+
+You can now send apply jobs seamlessly.
+
+Verify your account 
+🔗 {link}
+
+Need assistance? Contact us at support@hiresync.com.
+Best,
+HireSync Team
+
+"""
+        if role == 'accountant':
+            subject = f"Welcome to HireSync – Your Account is Ready!"
+            message = f"""
+
+Dear {user.username},
+
+Congratulations! Your accountant account on HireSync has been successfully created.
+
+You can now send apply jobs seamlessly.
+
+Verify your account 
+🔗 {link}
+
+Need assistance? Contact us at support@hiresync.com.
+Best,
+HireSync Team
+
+"""
+
+    send_custom_mail(
+        subject=subject,
+        message=message,
+        recipient_list=[user.email],
+    )
+
 

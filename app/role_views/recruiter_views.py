@@ -120,7 +120,6 @@ class CandidateResumeView(APIView):
 
 
                 for skill in primary_skills:
-                    # print("entered")
                     skill_metric = CandidateSkillSet.objects.create(
                         candidate = candidate_resume,
                         skill_name = skill[0],
@@ -136,7 +135,6 @@ class CandidateResumeView(APIView):
                     skill_metric.save()
 
                 for skill in secondary_skills:
-                    # print("entered")
                     skill_metric = CandidateSkillSet.objects.create(
                         candidate = candidate_resume,
                         skill_name = skill[0],
@@ -151,7 +149,6 @@ class CandidateResumeView(APIView):
                     
                     skill_metric.save()
 
-                # Create Job Application
                 JobApplication.objects.create(
                     resume=candidate_resume,
                     job_id=job,
@@ -159,6 +156,19 @@ class CandidateResumeView(APIView):
                     sender=user,
                     receiver=receiver,
                 )
+                
+                link = f"{frontend_url}/client/get-resumes/{job.id}"
+                message = f"""
+
+Dear {job.username.username},
+
+A candidate profile has been submitted for {job.job_title} by {request.user.username}. Please review the details and provide feedback.
+🔗 {link}
+
+Best,
+HireSync Team
+""" 
+                send_custom_mail(f"New Candidate Submitted – {job.job_title}",message, {job.username.email})
 
                 return Response({"message": "Resume added successfully"}, status=status.HTTP_201_CREATED)
 
