@@ -346,7 +346,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 class RecSummery(APIView):
-    def get(self, request, *args, **kwargs):
+    def get(self, request, *args, **kwargs): 
         try:
             recruiter_id = request.GET.get("rctr_id")
             recruiter_obj = CustomUser.objects.get(id=recruiter_id)
