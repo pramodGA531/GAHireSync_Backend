@@ -460,37 +460,6 @@ class JobApplication(models.Model):
     def __str__(self):
         return f"{self.resume.candidate_name} applied for {self.job_id.job_title}"
 
-# Candidate Evaluation Model
-class CandidateEvaluation(models.Model):
-
-    SELECTED = 'selected'
-    REJECTED = 'rejected'
-    HOLD = 'hold'
-    PENDING = 'pending'
-
-    STATUS = [
-        (SELECTED, 'selected'),
-        (REJECTED, 'rejected'),
-        (HOLD, 'hold'),
-        (PENDING, 'pending')
-    ]
-
-    id = models.AutoField(primary_key=True)
-    job_application = models.ForeignKey(JobApplication, on_delete=models.CASCADE)
-    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
-    interview_schedule = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE)
-    score = models.IntegerField(default=0)
-    remarks = models.TextField(null=True, blank=True)
-    round_num = models.IntegerField()
-    primary_skills_rating = models.TextField(null=True)
-    secondary_skills_ratings = models.TextField(null = True, blank=True)
-    comments = models.TextField(null=True, blank=True)
-    status = models.CharField(max_length=40, choices=STATUS, default='pending')
-    class Meta:
-        unique_together = ('job_id','job_application','round_num')
-
-    def __str__(self):
-        return f"Evaluation for {self.job_application.resume.candidate_name}"
 
 
 # Terms Acceptance Model
@@ -570,6 +539,38 @@ class CandidateProfile(models.Model):
 
     def get_primary_skills_list(self):
         return self.primary_skills.split(",") if self.primary_skills else []
+    
+class CandidateEvaluation(models.Model):
+
+    SELECTED = 'selected'
+    REJECTED = 'rejected'
+    HOLD = 'hold'
+    PENDING = 'pending'
+
+    STATUS = [
+        (SELECTED, 'selected'),
+        (REJECTED, 'rejected'),
+        (HOLD, 'hold'),
+        (PENDING, 'pending')
+    ]
+
+    id = models.AutoField(primary_key=True)
+    job_application = models.ForeignKey(JobApplication, on_delete=models.CASCADE)
+    candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    interview_schedule = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE)
+    score = models.IntegerField(default=0)
+    remarks = models.TextField(null=True, blank=True)
+    round_num = models.IntegerField()
+    primary_skills_rating = models.TextField(null=True)
+    secondary_skills_ratings = models.TextField(null = True, blank=True)
+    comments = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=40, choices=STATUS, default='pending')
+    class Meta:
+        unique_together = ('job_id','job_application','round_num')
+
+    def __str__(self):
+        return f"Evaluation for {self.job_application.resume.candidate_name}"
 
 
 class CandidateDocuments(models.Model):

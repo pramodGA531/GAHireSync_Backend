@@ -55,6 +55,27 @@ class AgencyJobApplications(APIView):
             return Response({"detail": "Organization not found."}, status=404)
         except Exception as e:
             return Response({"detail": str(e)}, status=500)
+        
+    def delete(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            org = Organization.objects.get(manager=user)
+            application_ids = request.data.get("application_ids", [])
+
+            
+            apps_to_delete = JobApplication.objects.filter(
+                id__in=application_ids,
+            )
+
+            deleted_count = apps_to_delete.count()
+            apps_to_delete.delete()
+
+            return Response({"detail": f"Deleted {deleted_count} applications."}, status=200)
+
+        except Organization.DoesNotExist:
+            return Response({"detail": "Organization not found."}, status=404)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=500)
 
 
 class AgencyDashboardAPI(APIView):

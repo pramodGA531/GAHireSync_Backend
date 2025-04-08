@@ -2100,6 +2100,15 @@ class ViewCandidateDetails(APIView):
             candidate_experiences_qs = CandidateExperiences.objects.filter(candidate = candidate_profile.id)
             candidate_education_qs = CandidateEducation.objects.filter(candidate = candidate_profile.id, )
 
+            candidate_evaluation = CandidateEvaluation.objects.filter(candidate = candidate_profile)[:5]
+            review_list = []
+            for review in candidate_evaluation:
+                review_list.append(
+                    {
+                        "interviewer": review.interview_schedule.interviewer.name.username,
+                        "review": review.remarks,
+                    }
+                )
             candidate_experiences = [
                 {
                     "company_name": experience.company_name,
@@ -2110,7 +2119,7 @@ class ViewCandidateDetails(APIView):
                 }
                 for experience in candidate_experiences_qs
             ]
-
+            
             candidate_education = [
                 {
                     "institution_name": education.institution_name,
@@ -2124,13 +2133,15 @@ class ViewCandidateDetails(APIView):
             ]
 
             candidate_details_json = {
-                "candidate_name": candidate_profile.name.username,
-                "candidate_email": candidate_profile.email,
+                "name": candidate_profile.name.username,
+                "email": candidate_profile.email,
                 "address": candidate_profile.permanent_address,
                 "phone": candidate_profile.phone_num,
-                "candidate_experiences": candidate_experiences,  
-                "candidate_education": candidate_education,  
-                # "candidate_profile": candidate_profile.profile,
+                "experiences": candidate_experiences,  
+                "education": candidate_education,  
+                "resume": candidate_profile.resume,
+                "profile": candidate_profile.profile,
+                "reviews": review_list,
             }
 
             return Response(candidate_details_json, status = status.HTTP_200_OK)     
