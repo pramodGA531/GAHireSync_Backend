@@ -350,7 +350,7 @@ class PromoteCandidateView(APIView):
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
-            candidate = CandidateProfile.objects.get(name = application.resume.candidate_name)
+            candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
 
             remarks = CandidateEvaluation.objects.create(
                 primary_skills_rating = primary_skills,
@@ -385,15 +385,18 @@ class RejectCandidate(APIView):
             resume_id = request.GET.get('id')
             round_num = request.data.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
-            print(request.data)
+
             primary_skills = request.data.get('primary_skills', '')
             secondary_skills = request.data.get('secondary_skills', '')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
 
+            candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
+
             remarks = CandidateEvaluation.objects.create(
                 primary_skills_rating = primary_skills,
                 secondary_skills_ratings = secondary_skills,
+                candidate = candidate,
                 round_num = round_num,
                 remarks = remarks,
                 status = "REJECTED",
@@ -469,6 +472,7 @@ HireSync.
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
     def post(self, request):
+        print("Called this function")
         try:
             resume_id = request.GET.get('id')
             round_num = request.GET.get('round_num')
@@ -486,13 +490,15 @@ HireSync.
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
-
+            
+            candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
 
             with transaction.atomic():
 
                 remarks = CandidateEvaluation.objects.create(
                     primary_skills_rating = primary_skills,
                     secondary_skills_ratings = secondary_skills,
+                    candidate = candidate,
                     round_num = round_num,
                     remarks = remarks,
                     status = "SELECTED",

@@ -503,6 +503,7 @@ def sendemailTemplate(subject, template_name, context, recipient_list):
         return False
 
 def send_custom_mail(subject, body, to_email):
+    print(frontend_url)
     try:
         from_email = settings.DEFAULT_FROM_EMAIL
 
@@ -524,7 +525,7 @@ def send_email_verification_link(user, signup, role):
     token = email_verification_token.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-    link = f"http://{frontend_url}/verify-email/{uid}/{token}/" 
+    link = f"{frontend_url}/verify-email/{uid}/{token}/" 
 
     if signup == False: 
         message = f"""
@@ -654,8 +655,8 @@ HireSync Team
 
     send_custom_mail(
         subject=subject,
-        message=message,
-        recipient_list=[user.email],
+        body=message,
+        to_email=[user.email],
     )
-
+ 
 

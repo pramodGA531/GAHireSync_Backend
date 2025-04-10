@@ -147,7 +147,6 @@ class GetOrganizationTermsView(APIView):
         try:
             user = request.user
             org_code = request.GET.get("org_code")
-            
             organization = get_object_or_404(Organization, org_code=org_code)
             
             client = get_object_or_404(ClientDetails, user=user)
@@ -160,7 +159,10 @@ class GetOrganizationTermsView(APIView):
                 client__user=user, organization=organization, is_accepted=False
             )
 
-            organization_terms = clientTerms.first() if clientTerms.exists() else get_object_or_404(OrganizationTerms, organization=organization)
+            if clientTerms.count() > 0:
+             organization_terms=clientTerms.first()
+            else:
+                organization_terms = OrganizationTerms.objects.get(organization = organization)
 
             terms_serializer = OrganizationTermsSerializer(organization_terms)
             terms_data = terms_serializer.data
@@ -340,7 +342,7 @@ class JobPostingView(APIView):
 
                 if interview_rounds:
                     for round_data in interview_rounds:
-                        interviewer = CustomUser.objects.get(username = round_data.get('email'))
+                        interviewer = CustomUser.objects.get(email = round_data.get('email'))
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
@@ -363,8 +365,8 @@ HireSync Team
 
                 send_custom_mail(
                     subject="New Job Post Created – Action Required",
-                    message=manager_message,
-                    recipient_list=[organization.manager.email]
+                    body=manager_message,
+                    to_email=[organization.manager.email]
                 )
 
                 self.addTermsAndConditions(job_posting)
@@ -702,13 +704,13 @@ class InterviewersView(APIView):
                     "rounds_completed": rounds_completed,
                     "id":interviewer.id
                 }
-                print("interviewer_json",interviewer_json)
+
                 interviewers_list.append(interviewer_json)
-                print("list",interviewers_list)
             return Response(interviewers_list, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
     def post(self, request):
         try:
             user = request.user
@@ -849,7 +851,9 @@ class RejectApplicationView(APIView):
     permission_classes = [IsClient]
     def post(self, request):
         try:
-            user = request.user
+            if not request.data.get('feedback'):
+                return Response({"error":"Feedback is not sent, please give the feedback"}, status= status.HTTP_400_BAD_REQUEST)
+            
             
             id = request.GET.get('id')          # <--- candidate application id
             if not id:
@@ -858,7 +862,7 @@ class RejectApplicationView(APIView):
             candidate_resume = CandidateResume.objects.get(id = id)
             job_application = JobApplication.objects.get(resume = candidate_resume)
             job_application.status = "rejected"
-            job_application.feedback = request.data.get("feedback")
+            job_application.feedback = request.data.get('feedback')
             job_application.next_interview = None
             job_application.save()
 
@@ -917,6 +921,8 @@ class AcceptApplicationView(APIView):
     def post(self, request):
         try:
             resume_id = request.GET.get('id')
+            if not request.data.get('feedback'):
+                return Response({"error":"Feedback is not sent, please give the feedback"}, status= status.HTTP_400_BAD_REQUEST)
             
             try:
                 resume = CandidateResume.objects.get(id = resume_id)
@@ -927,6 +933,7 @@ class AcceptApplicationView(APIView):
             with transaction.atomic():
                 job_application.status = 'processing'
                 job_application.round_num = 1
+                job_application.feedback = request.data.get('feedback')
                 candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
 
                 link = f"{frontend_url}/candidate/applications"
@@ -941,7 +948,8 @@ Good luck!
 Best,
 HireSync Team
 
-"""
+"""             
+                send_custom_mail("Congratulations! You’ve Been Shortlisted", body = message, to_email = [candidate.name.email])
                 job_application.save()
 
             return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)

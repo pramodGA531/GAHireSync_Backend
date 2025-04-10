@@ -60,7 +60,7 @@ class VerifyEmailView(APIView):
                 return Response({"message":"Your email is already verified, try login"}, status=status.HTTP_200_OK)
             
             try:
-                send_email_verification_link(user)
+                send_email_verification_link(user,False, "all")
                 return Response({"message":"Verification Link sent successfully"}, status=status.HTTP_200_OK)
             
             except Exception as e:
@@ -106,9 +106,10 @@ class ClientSignupView(APIView):
                         client_serializer.save()
 
                         try:
-                            send_email_verification_link(user, signup = True)
+                            send_email_verification_link(user = user, signup = True, role="client")
 
                         except Exception as e:
+                            print(str(e))
                             return Response(
                                 {"error": "There was an issue sending the welcome email. Please try again later."},
                                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -162,37 +163,9 @@ class AgencySignupView(APIView):
                         org_serializer.save()
 
                     try:
-                        send_email_verification_link(user, domain = "localhost:3000")
+                        send_email_verification_link(user, True , "manager")
                     except Exception as e:
                         print(f"Error sending verification link: {str(e)}")
-
-
-#                     subject = "Agency Created Successfully on HireSync"
-#                     message = f"""
-# Dear {user.username},
-
-# Your agency "{org_data['name']}" has been successfully created on HireSync.
-
-# Organization Code: {org_data['org_code']}
-# Username: {user.username}
-# Email: {user.email}
-
-# Please log in to the platform to explore the features and manage your agency:
-# Login Link: https://hiresync.com/lpgin
-
-# If you have any questions or need assistance, feel free to contact support.
-
-# Regards,
-# HireSync Team
-# """
-#                     send_mail(
-#                         subject=subject,
-#                         message=message,
-#                         from_email='',
-#                         recipient_list=[user.email],
-#                         fail_silently=False,
-#                     )
-
 
                     return Response({"message": "Verification link successfully sent to your mail"}, status=status.HTTP_201_CREATED)
         
