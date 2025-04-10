@@ -387,9 +387,28 @@ class AccountantsSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'username', 'created_at', 'organization'] 
 
 
+
+class TagSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tag
+        fields = ['id', 'name']
+
+    def get_name(self, obj):
+        import ast
+        try:
+            val = ast.literal_eval(obj.name)
+            if isinstance(val, list):
+                return val[0]  # or return val if you want a list
+            return val
+        except:
+            return obj.name
+        
 class BlogPostSerializer(serializers.ModelSerializer):
     user = CustomUserSerializer()
+    tags = TagSerializer(many=True)  # Add this line to serialize related tags
+
     class Meta:
         model = BlogPost
         fields = '__all__'
-    

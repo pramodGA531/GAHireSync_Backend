@@ -766,9 +766,14 @@ class Messages(models.Model):
     def __str__(self):
         return f"Ticket {self.ticket_id}"
     
+class Tag(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    
 class BlogPost(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
+    tags = models.ManyToManyField(Tag, blank=True)
+    author=models.CharField(max_length=255,default="ameer")
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -777,3 +782,4 @@ class BlogPost(models.Model):
     
     def __str__(self):
         return self.title
+    
