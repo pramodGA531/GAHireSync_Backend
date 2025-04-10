@@ -1778,7 +1778,8 @@ class CandidateLeftView(APIView):
                             "left_reason": selected_candidate.left_reason,
                             "is_replacement_eligible": selected_candidate.is_replacement_eligible,
                             "left_date": selected_candidate.resigned_date,
-                            "replacement_status": selected_candidate.replacement_status
+                            "replacement_status": selected_candidate.replacement_status,
+                            "id":selected_candidate.id,
                         }
                     )
             return Response(selected_candidates_list, status = status.HTTP_200_OK)
@@ -1884,7 +1885,6 @@ class ReplacementsView(APIView):
             selected_candidate = SelectedCandidates.objects.select_related("application__job_id").get(id=selected_candidate_id)
 
             with transaction.atomic():
-                # selected_candidate.joining_status = "left"
                 selected_candidate.replacement_status = 'pending'
                 selected_candidate.save()
 
@@ -1896,7 +1896,7 @@ class ReplacementsView(APIView):
                 job_post.status = "opened"
                 job_post.save()  
 
-            return Response({"message": "Replacement applied successfully successfully"}, status=status.HTTP_200_OK)
+            return Response({"message": "Replacement applied successfully"}, status=status.HTTP_200_OK)
 
         except SelectedCandidates.DoesNotExist:
             return Response({"error": "Selected candidate not found"}, status=status.HTTP_404_NOT_FOUND)

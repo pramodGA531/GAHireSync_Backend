@@ -845,8 +845,6 @@ class ViewSelectedCandidates(APIView):
             return Response(selected_candidates_list, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        
 
 
 class AccountantsView(APIView):
