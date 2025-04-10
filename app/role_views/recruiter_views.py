@@ -120,7 +120,6 @@ class CandidateResumeView(APIView):
 
 
                 for skill in primary_skills:
-                    # print("entered")
                     skill_metric = CandidateSkillSet.objects.create(
                         candidate = candidate_resume,
                         skill_name = skill[0],
@@ -136,7 +135,6 @@ class CandidateResumeView(APIView):
                     skill_metric.save()
 
                 for skill in secondary_skills:
-                    # print("entered")
                     skill_metric = CandidateSkillSet.objects.create(
                         candidate = candidate_resume,
                         skill_name = skill[0],
@@ -151,7 +149,6 @@ class CandidateResumeView(APIView):
                     
                     skill_metric.save()
 
-                # Create Job Application
                 JobApplication.objects.create(
                     resume=candidate_resume,
                     job_id=job,
@@ -159,6 +156,19 @@ class CandidateResumeView(APIView):
                     sender=user,
                     receiver=receiver,
                 )
+                
+                link = f"{frontend_url}/client/get-resumes/{job.id}"
+                message = f"""
+
+Dear {job.username.username},
+
+A candidate profile has been submitted for {job.job_title} by {request.user.username}. Please review the details and provide feedback.
+🔗 {link}
+
+Best,
+HireSync Team
+""" 
+                send_custom_mail(f"New Candidate Submitted – {job.job_title}",message, {job.username.email})
 
                 return Response({"message": "Resume added successfully"}, status=status.HTTP_201_CREATED)
 
@@ -167,7 +177,35 @@ class CandidateResumeView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
  
+class AllScheduledInterviews(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            all_interviews = InterviewSchedule.objects.filter(
+                rctr__in=[request.user] 
+            ).exclude(
+                status__in=['pending']
+            ).select_related('interviewer', 'candidate')
 
+            interviews_list = []
+
+            for interview in all_interviews:
+                interviews_list.append({
+                    "interviewer_name": interview.interviewer.name.username,
+                    "candidate_name": interview.candidate.candidate_name,
+                    "status": interview.status,
+                    "scheduled_date": interview.scheduled_date,
+                    "from_time": interview.from_time,
+                    "to_time": interview.to_time,
+                    "id":interview.id,
+                    "round_num": interview.round_num,
+                })
+
+            return Response(interviews_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
 # Scheduling the interview
 class ScheduleInterview(APIView):
     permission_classes = [IsRecruiter]
@@ -178,6 +216,8 @@ class ScheduleInterview(APIView):
                 pending_arr = []
                 applications = JobApplication.objects.filter(sender = user, status = 'processing')
                 for application in applications:
+                    if  application.next_interview and application.next_interview.status != 'pending':
+                        continue
                     pending_arr.append({
                         "application_id" : application.id,
                         "job_title" : application.job_id.job_title,
@@ -329,6 +369,25 @@ class ScheduleInterview(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GetIntervieweRemarks(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            interview_schedule_id = request.GET.get('interview_id')
+            interview_remarks = CandidateEvaluation.objects.get(interview_schedule__id = interview_schedule_id)
+            remarks_json = {
+                "primary_skills_rating": interview_remarks.primary_skills_rating,
+                "secondary_skills_rating": interview_remarks.secondary_skills_ratings,
+                "remarks": interview_remarks.remarks,
+            }
+
+            return Response(remarks_json, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
 
 # Getting the next round details
 class NextRoundInterviewDetails(APIView):

@@ -22,6 +22,10 @@ from .utils import *
 from django.core.files.base import ContentFile
 
 
+
+
+frontend_url = os.environ['FRONTENDURL']
+
 class GetUserDetails(APIView):
     def get(self,request):
         try:
@@ -175,51 +179,21 @@ class NegotiateTermsView(APIView):
                 interest_percentage=data.get('interest_percentage')
             )
 
-            
-            client_email_message = f"""
-Dear {client.user.first_name},
-
-Your negotiation request has been successfully submitted to {organization.name}. The details of your request are as follows:
-
-**Service Fee:** {data.get('service_fee')}
-**Replacement Clause:** {data.get('replacement_clause')}
-**Invoice After:** {data.get('invoice_after')} days
-**Payment Within:** {data.get('payment_within')} days
-**Interest Percentage:** {data.get('interest_percentage')}%
-We will notify you as soon as the organization manager reviews your request.
-
-Best regards,  
-The Negotiation Team
-"""
-
-            
+            negotiation_link = f"{frontend_url}/agency/negotiations/{negotiation_request.id}"
             manager_email_message = f"""
-Dear {organization.manager.first_name},
 
-A new negotiation request has been submitted by {client.user.first_name} {client.user.last_name} from {organization.name}. Here are the details:
+Dear {organization.manager.username},
 
-**Service Fee:** {data.get('service_fee')}
-**Replacement Clause:** {data.get('replacement_clause')}
-**Invoice After:** {data.get('invoice_after')} days
-**Payment Within:** {data.get('payment_within')} days
-**Interest Percentage:** {data.get('interest_percentage')}%
+A terms and conditions negotiation request has been submitted. Please review and take the necessary action.
+🔗 {negotiation_link}
 
-Please review this request at your earliest convenience.
+Best,
+HireSync Team
 
-Best regards,  
-The Negotiation Team
 """
 
-            
             send_mail(
-                subject="Negotiation Request Submitted",
-                message=client_email_message,
-                from_email='',
-                recipient_list=[client.user.email]
-            )
-
-            send_mail(
-                subject="New Negotiation Request Received",
+                subject="Job Post Terms & Conditions – Action Needed",
                 message=manager_email_message,
                 from_email='',
                 recipient_list=[organization.manager.email]
@@ -256,25 +230,21 @@ The Negotiation Team
                     interest_percentage=negotiation_request.interest_percentage
                 )
 
-                
+                link = f"{frontend_url}/client/postjob"    
                 client_email_message = f"""
-Dear {negotiation_request.client.user.first_name},
+            
+Dear {negotiation_request.client.user.username},
 
-Your negotiation request with {negotiation_request.organization.name} has been accepted. Here are the agreed terms:
+Your terms negotiation request has been accepted. You can proceed with the next steps.
+🔗 {link}
+For any concerns, contact us at support@hiresync.com.
 
-**Service Fee:** {negotiation_request.service_fee}
-**Replacement Clause:** {negotiation_request.replacement_clause}
-**Invoice After:** {negotiation_request.invoice_after} days
-**Payment Within:** {negotiation_request.payment_within} days
-**Interest Percentage:** {negotiation_request.interest_percentage}%
+Best,
+HireSync Team
 
-Thank you for negotiating with us. We look forward to a successful collaboration.
-
-Best regards,  
-{negotiation_request.organization.name} Team
                 """
                 send_mail(
-                    subject="Negotiation Request Accepted",
+                    subject="Job Terms & Conditions – Update",
                     message=client_email_message,
                     from_email="",
                     recipient_list=[negotiation_request.client.user.email]
@@ -288,15 +258,16 @@ Best regards,
                 client_email_message = f"""
 Dear {negotiation_request.client.user.first_name},
 
-We regret to inform you that your negotiation request with {negotiation_request.organization.name} has been rejected.
+Your terms negotiation request has been rejected. You can proceed with the next steps.
 
-Please feel free to reach out to discuss any other possible terms.
+For any concerns, contact us at support@hiresync.com.
 
-Best regards,  
-{negotiation_request.organization.name} Team
-                """
+Best,
+HireSync Team
+
+"""
                 send_mail(
-                    subject="Negotiation Request Rejected",
+                    subject="Job Terms & Conditions – Update",
                     message=client_email_message,
                     from_email="",
                     recipient_list=[negotiation_request.client.user.email]

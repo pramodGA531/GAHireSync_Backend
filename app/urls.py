@@ -113,7 +113,9 @@ urlpatterns = [
     path('recruiter/reconfirmation-reject/', RejectReconfirmResumes.as_view(), name='handle-reject'),
     path('recruiter/organization-applications/', OrganizationApplications.as_view(), name='organization-all-applications'),
     path('recruiter/resumesent/',ResumesSent.as_view(),name="resumes-sent"),
-    
+    path('recruiter/all-scheduled-interviews/',AllScheduledInterviews.as_view(), name='all-scheduled-interviews' ),
+    path('recruiter/get-interview-marks/', GetIntervieweRemarks.as_view(), name='get-interview-remarks'),
+
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('get_invoices/',Invoices.as_view()),
     path('update_invoices/',Invoices.as_view()),
