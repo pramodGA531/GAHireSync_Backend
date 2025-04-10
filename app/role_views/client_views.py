@@ -1171,29 +1171,88 @@ class ScheduledInterviewsForJobId(APIView):
 
 
 # Get all interview details
+# class ClientInterviewsView(APIView):
+#     permission_classes = [IsClient]
+#     def get(self, request):
+#         try:
+#             if request.GET.get('job_id'):
+#                 job_id = request.GET.get('job_id')
+#                 interviewer_details = InterviewerDetails.objects.filter(job_id = job_id)
+#                 rounds_list = []
+#                 for round in interviewer_details:
+#                     rounds_list.append({
+#                         "interviewer_name": round.name.username,
+#                         "interviewer_email": round.name.email,
+#                         "round_num": round.round_num,
+#                         "mode_of_interview": round.mode_of_interview,
+#                         "type_of_interview": round.type_of_interview,
+#                     })
+#                 scheduled_interviews = InterviewSchedule.objects.filter(job_id = job_id)
+#                 interviews_list = []
+#                 for interview in scheduled_interviews:
+#                     interviews_list.append({
+#                         "interviewer_name": interview.interviewer.name.username,
+#                         "round_num": interview.round_num,
+#                         "status": interview.status,
+#                         "meet_link":interview.meet_link,
+#                         "candidate_name": interview.candidate.candidate_name,
+#                         "scheduled_date": interview.scheduled_date,
+#                         "scheduled_time": f"{interview.from_time} - {interview.to_time}",
+#                         "mode_of_interview": interview.interviewer.mode_of_interview,
+#                         "type_of_interview": interview.interviewer.type_of_interview,
+#                     })
+
+#                 return Response({"scheduled_interviews": interviews_list,"interviewers": rounds_list }, status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             print(str(e))
+#             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+
+
+
 class ClientInterviewsView(APIView):
     permission_classes = [IsClient]
+
     def get(self, request):
         try:
-            if request.GET.get('job_id'):
-                job_id = request.GET.get('job_id')
-                interviewer_details = InterviewerDetails.objects.filter(job_id = job_id)
-                rounds_list = []
+            job_id = request.GET.get('job_id')
+            rounds_list = []
+            interviews_list = []
+
+            # 👇 if job_id is provided, filter for that job
+            if job_id:
+                job_ids = [job_id]
+            else:
+                # 👇 otherwise, fetch all job IDs posted by the current client
+                client = request.user
+                job_ids = JobPostings.objects.filter(username=client).values_list('id', flat=True)
+
+            # 🔁 Iterate over all job IDs
+            for jid in job_ids:
+                # Fetch interviewer rounds
+                interviewer_details = InterviewerDetails.objects.filter(job_id=jid)
+                job = JobPostings.objects.get(id=jid)
+                serialized_job = JobPostingsSerializer(job).data
                 for round in interviewer_details:
                     rounds_list.append({
+                        "job_id": serialized_job,
                         "interviewer_name": round.name.username,
                         "interviewer_email": round.name.email,
                         "round_num": round.round_num,
                         "mode_of_interview": round.mode_of_interview,
                         "type_of_interview": round.type_of_interview,
                     })
-                scheduled_interviews = InterviewSchedule.objects.filter(job_id = job_id)
-                interviews_list = []
+
+                # Fetch interview schedules
+                scheduled_interviews = InterviewSchedule.objects.filter(job_id=jid)
+               # here is the JobPostingsSerializer serializer so, do that work 
                 for interview in scheduled_interviews:
                     interviews_list.append({
+                        "job_id": serialized_job,
                         "interviewer_name": interview.interviewer.name.username,
                         "round_num": interview.round_num,
                         "status": interview.status,
+                        "meet_link": interview.meet_link,
                         "candidate_name": interview.candidate.candidate_name,
                         "scheduled_date": interview.scheduled_date,
                         "scheduled_time": f"{interview.from_time} - {interview.to_time}",
@@ -1201,11 +1260,15 @@ class ClientInterviewsView(APIView):
                         "type_of_interview": interview.interviewer.type_of_interview,
                     })
 
-                return Response({"scheduled_interviews": interviews_list,"interviewers": rounds_list }, status=status.HTTP_200_OK)
+            return Response({
+                "scheduled_interviews": interviews_list,
+                "interviewers": rounds_list
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         
 
 class CandidatesOnHold(APIView):

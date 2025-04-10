@@ -16,49 +16,68 @@ from django.db.models import Prefetch
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from django.utils.timezone import now,is_aware, make_naive
-
-
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 
 class AgencyJobApplications(APIView):
+    permission_classes = [IsManager]
     def get(self, request, *args, **kwargs):
         try:
             user = request.user
             org = Organization.objects.get(manager=user)
 
-            job_postings = JobPostings.objects.filter(organization=org).prefetch_related(
-                Prefetch(
-                    "jobapplication_set",
-                    queryset=JobApplication.objects.select_related("resume"),
-                    to_attr="applications"
-                )
-            )
+            job_postings = JobPostings.objects.filter(organization=org)
+            applications = JobApplication.objects.filter(job_id__in=job_postings).select_related('resume', 'job_id')
 
-            job_titles = [{"job_id": job.id, "job_title": job.job_title} for job in job_postings.distinct()]
+            job_titles = [
+                {"job_id": job.id, "job_title": job.job_title}
+                for job in job_postings.distinct()
+            ]
 
             applications_list = [
                 {
-                    "candidate_name": app.resume.candidate_name ,
+                    "candidate_name": app.resume.candidate_name,
                     "application_id": app.id,
-                    "job_title": job.job_title,
-                    "job_department": job.job_department,
-                    "job_description": job.job_description,
+                    "job_title": app.job_id.job_title,
+                    "job_department": app.job_id.job_department,
+                    "job_description": app.job_id.job_description,
                     "application_status": app.status,
                 }
-                for job in job_postings for app in job.applications
+                for app in applications
             ]
 
             return Response(
                 {"applications_list": applications_list, "job_titles": job_titles},
-                status=200
+                status=status.HTTP_200_OK
             )
+
+        except Organization.DoesNotExist:
+            return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+    def delete(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            org = Organization.objects.get(manager=user)
+            application_ids = request.data.get("application_ids", [])
+
+            
+            apps_to_delete = JobApplication.objects.filter(
+                id__in=application_ids,
+            )
+
+            deleted_count = apps_to_delete.count()
+            apps_to_delete.delete()
+
+            return Response({"detail": f"Deleted {deleted_count} applications."}, status=200)
+
         except Organization.DoesNotExist:
             return Response({"detail": "Organization not found."}, status=404)
         except Exception as e:
             return Response({"detail": str(e)}, status=500)
+    
 
 
 class AgencyDashboardAPI(APIView):

@@ -109,8 +109,6 @@ class OrganizationTermsView(APIView):
 
         return render(request, "organizationTerms.html", context)
 
-
-
     def put(self, request):
         try:
             user = request.user
@@ -133,9 +131,6 @@ class OrganizationTermsView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
-
-
-
 
 class NegotiateTermsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -972,26 +967,65 @@ class HandleTicketView(APIView):
         
 class BlogPostView(APIView):
     def get(self, request):
-        if request.GET.get('blog_id'):
-            blog_posts = BlogPost.objects.get(id=request.GET.get('blog_id'))
-            serializer = BlogPostSerializer(blog_posts).data
-            return Response(serializer, status=status.HTTP_200_OK)
-        
-        blog_posts = BlogPost.objects.filter(is_approved = True).order_by('-created_at')
-        serializer = BlogPostSerializer(blog_posts, many=True).data
-        return Response(serializer)
-    
-    def post(self,request):
+        blog_id = request.GET.get('blog_id')
+
+        if blog_id:
+            try:
+                blog_post = BlogPost.objects.get(id=blog_id)
+                serializer = BlogPostSerializer(blog_post)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except BlogPost.DoesNotExist:
+                return Response({'detail': 'Blog not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # If no blog_id, return all approved blogs with tags
+        blog_posts = BlogPost.objects.filter(is_approved=True).order_by('-created_at')
+        serializer = BlogPostSerializer(blog_posts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    def post(self, request):
         user = request.user
-        is_approved = False
-        if user.role == 'admin':
-            is_approved = True
+        is_approved = user.role == 'admin'
         title = request.data.get('title')
+        author = request.data.get('author')
         content = request.data.get('content')
         thumbnail = request.data.get('thumbnail')
-        BlogPost.objects.create(user=user,title=title,content=content,thumbnail=thumbnail,is_approved=is_approved)
-        return Response({'message':'Blog post created successfully'},status=status.HTTP_201_CREATED)
+        
+        # Handle tags input safely
+        raw_tags = request.data.get('tags', [])
+        
+        tag_list = []
+        if isinstance(raw_tags, str):
+            try:
+                # If it's a stringified list like '["consulting", "agency"]'
+                import ast
+                parsed_tags = ast.literal_eval(raw_tags)
+                if isinstance(parsed_tags, list):
+                    tag_list = [tag.strip().lower() for tag in parsed_tags]
+                else:
+                    # Fallback: comma-separated
+                    tag_list = [tag.strip().lower() for tag in raw_tags.split(',') if tag.strip()]
+            except:
+                # If not a list, fallback to comma-separated
+                tag_list = [tag.strip().lower() for tag in raw_tags.split(',') if tag.strip()]
+        elif isinstance(raw_tags, list):
+            tag_list = [tag.strip().lower() for tag in raw_tags]
     
+        # Create the blog post
+        blog_post = BlogPost.objects.create(
+            user=user,
+            title=title,
+            author=author,
+            content=content,
+            thumbnail=thumbnail,
+            is_approved=is_approved
+        )
+    
+        # Create or get tags and assign to blog post
+        for tag_name in tag_list:
+            tag, _ = Tag.objects.get_or_create(name=tag_name)
+            blog_post.tags.add(tag)
+    
+        return Response({'message': 'Blog post created successfully'}, status=status.HTTP_201_CREATED)
+
 class AdminGetBlogs(APIView):
     def get(self, request):
         try:
