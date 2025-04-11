@@ -35,7 +35,7 @@ class VerifyEmailView(APIView):
         try:
 
             uid = force_str(urlsafe_base64_decode(uidb64))
-            user = get_object_or_404(CustomUser, pk=uid)
+            user = get_object_or_404(CustomUser, pk=uid) 
 
             if email_verification_token.check_token(user, token):
                 user.is_verified = True

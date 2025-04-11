@@ -148,9 +148,12 @@ urlpatterns = [
     path('ticket/update-status/', UpdateStatus.as_view(),name='handle-replies' ),
 
     path('superadmin/handle-tickets/', HandleTicketView.as_view(),name='handle-tickets-by-admin' ),
+    
 
     path('user/blogs/', BlogPostView.as_view(), name='view-and-create-blogs'),
     path('superadmin/approve-blogs/', ApproveBlogPost.as_view(), name='admin-handling-blogs'),
     path('myblogs/', MyBlogs.as_view(), name='his-blogs'),
+    
+    path('jobpost/terms/',GetJobPostTerms.as_view(),name='job-terms'),
 
 ]
