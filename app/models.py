@@ -248,8 +248,8 @@ class SkillMetricsModel(models.Model):
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE, related_name="skills")
     skill_name = models.CharField(max_length=50,)
     is_primary = models.BooleanField(default=False)
-    metric_type = models.CharField(max_length=15, )
-    metric_value = models.CharField(max_length=15, blank=True)
+    metric_type = models.CharField(max_length=100, )
+    metric_value = models.CharField(max_length=100, blank=True)
 
     def __str__(self):
         return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
@@ -262,9 +262,8 @@ class SkillMetricsModelEdited(models.Model):
     job_id = models.ForeignKey(JobPostingsEditedVersion, on_delete=models.CASCADE, related_name="skills")
     skill_name = models.CharField(max_length=50,)
     is_primary = models.BooleanField(default=False)
-    rating = models.CharField(max_length=20, blank=True)    
-    experience = models.CharField(max_length=30, blank=True)
-    metric_type = models.CharField(max_length=15, choices=METRIC_CHOICES)
+    metric_value = models.CharField(max_length=100, blank=True)
+    metric_type = models.CharField(max_length=100, choices=METRIC_CHOICES)
 
     def __str__(self):
         return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
