@@ -202,6 +202,8 @@ class GetOrganizationTermsView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
+
+
 class JobPostingView(APIView):
     permission_classes = [IsClient] 
 
@@ -2239,6 +2241,9 @@ class DeleteJobPost(APIView):
         except Exception as e:
             print(str(e))  
             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+        
 # class AllJobPosts(APIView):
 #     permission_classes = [IsClient]
 #     def get(self, request):

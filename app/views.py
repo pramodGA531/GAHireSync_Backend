@@ -1074,4 +1074,43 @@ class ApproveBlogPost(APIView):
         
         except Exception as e:
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+        
+
+class GetJobPostTerms(APIView):
+    permission_classes = [IsClient]
+
+    def get(self, request):
+        try:
+            client = request.user
+
+            # Fetch all jobs created by this client
+            jobs = JobPostings.objects.filter(username=client)
+
+            job_terms_list = []
+
+            for job in jobs:
+                try:
+                    # Get the single term for each job
+                    term = JobPostTerms.objects.get(job_id=job)
+                    job_terms_list.append({
+                        'job_id':job.id,
+                        'status':job.status,
+                        'organization':job.organization.name,
+                        'job_title': job.job_title,
+                        'term_id': term.id,
+                        'term_description': term.description,
+                        'service_fee': term.service_fee,
+                        'invoice_after': term.invoice_after,
+                        'payment_within': term.payment_within,
+                        'interest_percentage': term.interest_percentage,
+                        'created_at': term.created_at,
+                    })
+
+                except JobPostTerms.DoesNotExist:
+                    # Skip if a job doesn't have associated terms
+                    continue
+
+            return Response({'data': job_terms_list}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
