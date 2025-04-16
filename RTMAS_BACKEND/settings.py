@@ -192,8 +192,8 @@ SIMPLE_JWT = {
 
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-# EMAIL_HOST = "mail.gaconsulting.in"
+# EMAIL_HOST = "smtp.gmail.com"
+EMAIL_HOST = "mail.gaconsulting.in"
 EMAIL_PORT = 465
 EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
