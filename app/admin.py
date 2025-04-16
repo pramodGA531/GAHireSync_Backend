@@ -1,33 +1,5 @@
 from django.contrib import admin
-from .models import (
-    CustomUser,
-    Organization,
-    OrganizationTerms,
-    UserProfile,
-    ClientDetails,
-    JobPostings,
-    InterviewerDetails,
-    CandidateResume,
-    JobApplication,
-    InterviewSchedule,
-    CandidateEvaluation,
-    ClientTermsAcceptance,
-    JobPostingsEditedVersion,
-    InterviewerDetailsEditedVersion,
-    CandidateProfile,
-    CandidateCertificates,
-    CandidateExperiences,
-    CandidateEducation,
-    RecruiterProfile,
-    SelectedCandidates,
-    JobPostTerms,
-    InvoiceGenerated,
-    SkillMetricsModel,
-    SkillMetricsModelEdited,
-    CandidateSkillSet,
-    Tickets,
-    BlogPost,
-)
+from .models import *
 
 @admin.register(CustomUser)
 class CustomUserAdmin(admin.ModelAdmin):
@@ -64,7 +36,7 @@ class ClientDetailsAdmin(admin.ModelAdmin):
 
 @admin.register(JobPostings)
 class JobPostingsAdmin(admin.ModelAdmin):
-    list_display = ('job_title', 'username', 'status', 'created_at')
+    list_display = ('job_title', 'username', 'approval_status', 'created_at')
     search_fields = ('job_title', 'username__username')
     list_filter = ('status', 'job_department')
     ordering = ('-created_at',)
@@ -116,7 +88,7 @@ class ClientTermsAcceptanceAdmin(admin.ModelAdmin):
 
 @admin.register(JobPostingsEditedVersion)
 class JobPostingEditedVersionAdmin(admin.ModelAdmin):
-    list_display= ('id','edited_by','job_title')
+    list_display= ('id','version_number','user','status')
 
 
 @admin.register(InterviewerDetailsEditedVersion)
@@ -156,7 +128,6 @@ class SkillMetricsModelAdmin(admin.ModelAdmin):
 @admin.register(SkillMetricsModelEdited)
 class SkillMetricsModelEditedAdmin(admin.ModelAdmin):
     list_display = ('job_id','skill_name','is_primary','metric_type')
-    search_fields = ('job_id__job_title','is_primary')
     ordering = ('-job_id__created_at',)
 
 @admin.register(CandidateSkillSet)
@@ -172,3 +143,7 @@ class TicketsAdmin(admin.ModelAdmin):
 class BlogPostAdmin(admin.ModelAdmin):
     list_display = ('user','is_approved','created_at',)
     ordering = ('-created_at',)
+
+@admin.register(JobPostEditFields)
+class JobPostEditFieldsAdmin(admin.ModelAdmin):
+    list_display = ('edit_id','field_name','field_value','status')

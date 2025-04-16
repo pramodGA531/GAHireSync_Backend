@@ -41,44 +41,6 @@ class GetUserDetails(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-class AcceptJobPostView(APIView):
-    def post(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-
-            if request.user.role != 'manager':  
-                return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
-            
-            job_id = int(request.GET.get('id'))
-            print(job_id, "is the id")
-            if not job_id:
-                return Response({"error": "Job post id is required"}, status=status.HTTP_400_BAD_REQUEST) 
-            
-            accept = request.query_params.get('accept')
-
-
-            try:
-                job_post = JobPostings.objects.get(id = job_id)
-                if accept:
-                    job_post.approval_status  = "accepted"
-                else:
-                    job_post.approval_status  = "rejected"
-
-                job_post.save()
-                return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
-            except JobPostings.DoesNotExist:
-                return Response({"error":"Job post does not exists"}, status = status.HTTP_400_BAD_REQUEST)
-
-
-        except Exception as e:
-            print("error is ",str(e))
-            return Response(
-                {"detail": f"An error occurred: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-     
-
 class OrganizationTermsView(APIView):
     permission_classes = [IsAuthenticated]   
 
@@ -294,18 +256,6 @@ class JobDetailsAPIView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except JobPostings.DoesNotExist:
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
-
-class JobEditStatusAPIView(APIView):
-    def get(self, request):
-        try:
-            job_id = request.GET.get('id')
-            job_edit_post = JobPostingsEditedVersion.objects.get(id=job_id)
-            return Response({"status":job_edit_post.status}, status=status.HTTP_200_OK)
-        except JobPostingsEditedVersion.DoesNotExist:
-            return Response({'notFound':"Job edit post not found"},status= status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
         
 class RecJobPostings(APIView):
     def get(self, request, *args, **kwargs): 
