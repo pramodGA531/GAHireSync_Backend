@@ -472,6 +472,21 @@ Best,
 HireSync Team
 """
                     send_custom_mail(f"New Job Assigned – {job.job_title}", message, {recruiter.email})
+                    
+                    notification = Notifications.objects.create(
+                    sender=request.user,
+                    receiver=recruiter,
+                    subject=f"New Job Assigned by Manager",
+                    message=(
+        f"📢 New Job Assignment\n\n"
+        f"You have been assigned a new job post to source profiles for.\n\n"
+        f"Position: **{job.job_title}**\n"
+        f"Client: {job.username}\n\n"
+        f"Please begin reviewing profiles and shortlisting suitable candidates for this role.\n\n"
+        f"id::{job.id}"  # for frontend to convert into a clickable <Link />
+        f"link::'recruiter/postings/"
+    )
+                )
 
                 return Response({"detail": "Recruiters Assigned Successfully"}, status=status.HTTP_200_OK)
         except Organization.DoesNotExist:

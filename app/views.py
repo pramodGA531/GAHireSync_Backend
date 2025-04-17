@@ -51,20 +51,46 @@ class AcceptJobPostView(APIView):
                 return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
             
             job_id = int(request.GET.get('id'))
-            print(job_id, "is the id")
             if not job_id:
                 return Response({"error": "Job post id is required"}, status=status.HTTP_400_BAD_REQUEST) 
             
-            accept = request.query_params.get('accept')
-
-
+            accept = request.query_params.get('accept')=='true'
+            print('accept',accept)
+            
             try:
                 job_post = JobPostings.objects.get(id = job_id)
+                
                 if accept:
                     job_post.approval_status  = "accepted"
+                    
+                    notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=job_post.username,
+    subject=f"Job Post Accepted by {request.user.username}",
+    message=(
+        f"✅ Job Request Accepted\n\n"
+        f"Your job request for the position of **{job_post.job_title}** has been accepted by "
+        f"{request.user.username}.\n\n"
+        f"The organization has started reviewing and shortlisting suitable profiles for this role. "
+        f"You will be notified once candidates are shortlisted or selected.\n\n"
+        f"Thank you for using our platform! 🙌"
+    )
+)
                 else:
                     job_post.approval_status  = "rejected"
-
+                    notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=job_post.username,
+    subject=f"Job Post Rejected by {request.user.username}",
+    message=(
+        f"Job Request Rejected\n\n"
+        f"Your job request for the position of **{job_post.job_title}** has been reviewed by "
+        f"{request.user.username} and was not accepted.\n\n"
+        f"This could be due to internal requirements or job role mismatch.\n\n"
+        f"You may consider submitting a new job request with updated details if needed.\n\n"
+        f"Thank you for understanding."
+    )
+)
                 job_post.save()
                 return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
             except JobPostings.DoesNotExist:
@@ -80,6 +106,7 @@ class AcceptJobPostView(APIView):
      
 
 class OrganizationTermsView(APIView):
+    
     permission_classes = [IsAuthenticated]   
 
     def get(self, request):
@@ -168,7 +195,6 @@ class NegotiateTermsView(APIView):
 
         try:
             data = request.data
-
             negotiation_request = NegotiationRequests.objects.create(
                 client=client,
                 organization=organization,
@@ -178,7 +204,6 @@ class NegotiateTermsView(APIView):
                 payment_within=data.get('payment_within'),
                 interest_percentage=data.get('interest_percentage')
             )
-
             negotiation_link = f"{frontend_url}/agency/negotiations/{negotiation_request.id}"
             manager_email_message = f"""
 
@@ -198,7 +223,19 @@ HireSync Team
                 from_email='',
                 recipient_list=[organization.manager.email]
             )
-
+            print("request.user",request.user)
+            print("organization.manager it's a user of the Organization" ,organization.manager)
+            print("Notifications",Notifications)
+            
+            notification = Notifications.objects.create(
+                        sender=request.user,
+                        receiver=organization.manager,
+                        subject="Negotiation Request",
+                        message="You have received a new negotiation request.",
+            )
+            
+            # sending notification from client to the agency find the emails of the client and the agency
+            
             return Response({"detail": "Negotiation request created successfully"}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
@@ -249,7 +286,10 @@ HireSync Team
                     from_email="",
                     recipient_list=[negotiation_request.client.user.email]
                 )
-
+                # here i need to send the notification to from agency to the client accept notification here find the emails of the client and the agency 
+                
+                
+                
             elif data.get('status') == "rejected":
                 negotiation_request.is_accepted = False
                 negotiation_request.save()
@@ -272,6 +312,9 @@ HireSync Team
                     from_email="",
                     recipient_list=[negotiation_request.client.user.email]
                 )
+                
+                #  accept notification  here i need to send the notification to the agency to the client find the emails of the client and the agency 
+                
 
             else:
                 return Response({"detail": "Invalid status provided. Please use 'accepted' or 'rejected'."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1111,6 +1154,47 @@ class GetJobPostTerms(APIView):
                     continue
 
             return Response({'data': job_terms_list}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class GetNotifications(APIView):
+    def get(self, request):
+        try:
+            # Check if the 'count' query parameter is provided
+            count_param = request.query_params.get('count', None)
+
+            # If count is requested, filter for unseen notifications and return the count
+            if count_param is not None:
+                unseen_notifications_count = Notifications.objects.filter(receiver=request.user, seen=False).count()
+                return Response({'count': unseen_notifications_count}, status=status.HTTP_200_OK)
+
+            # Otherwise, return all notifications for the user
+            notifications = Notifications.objects.filter(receiver=request.user)
+            serializer = NotificationsSerializer(notifications, many=True)
+            return Response({'data': serializer.data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def put(self, request):
+        try:
+            notification_ids = request.data.get('notification_ids', [])
+            print("Received IDs:", notification_ids)
+            print("Request user:", request.user)
+
+            notifications = Notifications.objects.filter(
+                id__in=notification_ids,
+                receiver=request.user
+            )
+            print("Matching notifications:", notifications)
+            print("Query Count:", notifications.count())
+
+            if notifications.exists():
+                notifications.update(seen=True)
+                return Response({'data': "Successfully updated"}, status=status.HTTP_200_OK)
+            else:
+                return Response({'data': "No matching notifications found"}, status=status.HTTP_404_NOT_FOUND)
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -368,11 +368,41 @@ class PromoteCandidateView(APIView):
 
             application.next_interview.status = 'completed'
             application.next_interview.save()
-            application.round_num = round_num+1
+            application.round_num = round_num+1 # This is for the next Round info 
             application.next_interview = None
             application.status = 'processing'
             application.save()
-
+            customCand=CustomUser.objects.get(email=candidate.email)
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=application.sender,
+    subject=f"Candidate {customCand.username} has been shortlisted for the role {application.job_id.job_title}",
+    message=(
+        f"Candidate Promotion Notice\n\n"
+        f"Client: {request.user.username}\n"
+        f"Position: {application.job_id.job_title}\n\n"
+        f"The candidate {customCand.username} has successfully cleared round {application.next_interview.round_num}. "
+        f"Please schedule interview {application.round_num + 1} availability of candidate and interviewer\n\n"
+        f"Link::recruiter/schedule_applications/"
+    )
+)
+            
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=customCand,
+    subject=f"Congratulations {customCand.username}! You have qualified for the next round for the role {application.job_id.job_title}",
+    message=(
+        f"Interview Progress Update\n\n"
+        f"Dear {customCand.username},\n\n"
+        f"Congratulations! You have successfully cleared round {application.next_interview.round_num} "
+        f"for the position of {application.job_id.job_title}.\n\n"
+        f"We will be scheduling your next interview (Round {application.round_num + 1}) soon. "
+        f"Our team will contact you regarding your availability.\n\n"
+        f"Stay tuned!\n\n"
+    )
+)
             return Response({"message":"Candidate promoted to nexts round successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
@@ -409,7 +439,36 @@ class RejectCandidate(APIView):
             application.next_interview.save()
             application.status = 'rejected'
             application.save()
-
+            
+            customCand=CustomUser.objects.get(email=candidate.email)
+            
+            notification = Notifications.objects.create(
+                    sender=request.user,
+                    receiver=application.sender,
+                    subject=f"Candidate {customCand.username} is rejected for the role {application.job_id.job_title}",
+                    message = (
+    f"Candidate Rejection Notice\n\n"
+    f"Client: {request.user.username}\n"
+    f"Position: {application.job_id.job_title}\n\n"
+    f"{request.user.username} has conducted the interview for round {application.next_interview.round_num} "
+    f"with the submitted candidate {customCand.username} for the position of {application.job_id.job_title}, "
+    f"and has decided not to move forward with them at this time.\n\n"
+    f"link::recruiter/postings/"
+)
+)
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=customCand,
+    subject=f"Update on your application for the role {application.job_id.job_title}",
+    message=(
+        f"Application Update\n\n"
+        f"Dear {customCand.username},\n\n"
+        f"We appreciate your interest in the {application.job_id.job_title} position.\n\n"
+        f"After careful consideration following your interview for round {application.next_interview.round_num}, "
+        f"we regret to inform you that we will not be moving forward with your application at this time.\n\n"
+    )
+)
             return Response({"message":"Rejected successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
             print(str(e))
@@ -464,6 +523,9 @@ HireSync.
                 from_email='',
                 recipient_list=[manager_email, recruiters_emails]
             )
+            
+            
+
 
             return Response({"message":"Candidate Selected Successfully"}, status=status.HTTP_200_OK)
 
@@ -512,7 +574,53 @@ HireSync.
                 application.status = 'hold'
                 application.next_interview = None
                 application.save()
-
+                customCand=CustomUser.objects.get(email=candidate.email)
+                
+                notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=customCand,
+    subject=f"Update on your application for the role {application.job_id.job_title}",
+    message=(
+        f"Application Update\n\n"
+        f"Dear {customCand.username},\n\n"
+        f"We appreciate your interest in the {application.job_id.job_title} position with {request.user.username}.\n\n"
+        f"We are pleased to inform you that you have successfully cleared all rounds of the interview process.\n\n"
+        f"Your profile is now under final review for the last call.\n"
+        f"Our team will get back to you shortly with the final update.\n\n"
+        f"Thank you for your patience and continued interest.\n\n"
+        f"Best wishes,\n"
+    )
+)
+                notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=application.job_id.username,
+    subject=f"Profile cleared all interviews for {application.job_id.job_title} — Final Confirmation Needed",
+    message=(
+        f"Application Update\n\n"
+        f"Position: {application.job_id.job_title}\n\n"
+        f"The candidate {customCand.username} has successfully completed all rounds of interviews for the "
+        f"position of {application.job_id.job_title}.\n\n"
+        f"Please review the candidate’s profile and provide your final decision regarding their selection.\n\n"
+        f"link::client/candidates/"
+    )
+)           
+                
+                notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=application.sender,
+    subject=f"Candidate {customCand.username} has cleared all interviews for the role {application.job_id.job_title}",
+    message=(
+        f"Candidate Progress Update\n\n"
+        f"Client: {request.user.username}\n"
+        f"Position: {application.job_id.job_title}\n\n"
+        f"{request.user.username} has completed all interview rounds with the candidate {customCand.username} "
+        f"for the position of {application.job_id.job_title}.\n\n"
+        f"The candidate has successfully cleared all interviews and their profile is now under final review by the client.\n"
+        f"Kindly follow up with the client for the final decision.\n\n"
+        f"link::recruiter/postings/"
+    )
+)
+                
                 applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
                 job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
 
