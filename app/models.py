@@ -130,6 +130,7 @@ class ClientDetails(models.Model):
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
+    jobcode = models.CharField(max_length=10,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
@@ -167,6 +168,10 @@ class JobPostings(models.Model):
     num_of_positions = models.IntegerField(default=1)
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
+
+    class Meta:
+        unique_together = ('username', 'jobcode') 
+    
     
     def get_locations(self):
         return self.job_locations.split(",") if self.job_locations else []
@@ -188,59 +193,50 @@ class JobPostingsEditedVersion(models.Model):
         (REJECTED,'rejected'),
         (PENDING,'pending'),
     ]
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    version_number = models.IntegerField(editable=False, default=1)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    base_version = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 
-    id = models.OneToOneField(JobPostings, on_delete= models.CASCADE,primary_key=True)
-    username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role":"client"},related_name="job_post_by_client")
-    edited_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "manager"},related_name="job_post_edited_by_manager")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, default="")
-    job_title = models.CharField(max_length=255, )
-    job_department = models.CharField(max_length=100, )
-    job_description = models.TextField()
-    years_of_experience = models.TextField(max_length=100)
-    ctc = models.CharField(max_length=50)
-    rounds_of_interview = models.IntegerField()
-    job_locations = models.CharField(max_length=100)
-    job_type = models.CharField(max_length=100, )
-    probation_type = models.CharField(max_length=20, blank=True)    # paid or unpaid
-    job_level = models.CharField(max_length=100, )
-    qualifications = models.TextField()
-    timings = models.CharField(max_length=100 )
-    other_benefits = models.TextField()
-    working_days_per_week = models.IntegerField(default=5)
-    decision_maker = models.CharField(max_length=100, )
-    decision_maker_email = models.CharField(max_length=100, )
-    bond = models.TextField(max_length=255, )
-    rotational_shift = models.BooleanField()
-    age = models.CharField(max_length=255 , )
-    gender = models.CharField(max_length = 100 , )
-    visa_status = models.CharField(max_length=100, )
-    passport_availability = models.CharField(max_length=50,)
-    time_period = models.CharField(max_length=50 , default=" ",blank=True)
-    qualification_department = models.CharField(max_length=50,)
-    notice_period = models.CharField(max_length=30,default=" ",blank=True )
-    notice_time = models.CharField(max_length=30, default=" ")
-    industry = models.CharField(max_length=40 , )
-    differently_abled = models.CharField(max_length=40, )
-    languages = models.CharField(max_length=100 , )
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
-    status = models.TextField(choices=STATUS_CHOICES, default='pending')
-    num_of_positions = models.IntegerField(default= 1)
-    job_close_duration = models.DateField(null=True)
-
-    def get_primary_skills_list(self):
-        return self.primary_skills.split(",") if self.primary_skills else []
-
-    def get_secondary_skills_list(self):
-        return self.secondary_skills.split(",") if self.secondary_skills else []
-    
-    def get_locations(self):
-        return self.job_locations.split(",") if self.job_locations else []
-    
-    def get_languages(self):
-        return self.languages.split(",") if self.languages else []
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            latest = JobPostingsEditedVersion.objects.filter(job_id=self.job_id).order_by('-version_number').first()
+            self.version_number = (latest.version_number + 1) if latest else 1
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.job_title
+        return f"Edit version for job post {self.job_id.job_title}"
+
+class JobPostEditFields(models.Model):
+    ACCEPTED = 'accepted'
+    REJECTED = 'rejected'
+    PENDING = 'pending'
+
+    STATUS_CHOICES = [
+        (ACCEPTED,'accepted'),
+        (REJECTED,'rejected'),
+        (PENDING,'pending'),
+    ]
+
+    edit_id = models.ForeignKey(JobPostingsEditedVersion, on_delete= models.CASCADE)
+    field_name = models.CharField(max_length=50)
+    field_value = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    def clean(self):
+        from django.apps import apps
+        job_post_fields = [field.name for field in JobPostings._meta.get_fields()]
+        if self.field_name not in job_post_fields:
+            raise ValidationError(f"'{self.field_name}' is not a valid field of JobPostings model.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # This will call the clean() method before saving
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Edit request for field {self.field_name}"
 
 
 class SkillMetricsModel(models.Model):
@@ -248,8 +244,8 @@ class SkillMetricsModel(models.Model):
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE, related_name="skills")
     skill_name = models.CharField(max_length=50,)
     is_primary = models.BooleanField(default=False)
-    metric_type = models.CharField(max_length=15, )
-    metric_value = models.CharField(max_length=15, blank=True)
+    metric_type = models.CharField(max_length=100, )
+    metric_value = models.CharField(max_length=100, blank=True)
 
     def __str__(self):
         return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
@@ -262,12 +258,11 @@ class SkillMetricsModelEdited(models.Model):
     job_id = models.ForeignKey(JobPostingsEditedVersion, on_delete=models.CASCADE, related_name="skills")
     skill_name = models.CharField(max_length=50,)
     is_primary = models.BooleanField(default=False)
-    rating = models.CharField(max_length=20, blank=True)    
-    experience = models.CharField(max_length=30, blank=True)
-    metric_type = models.CharField(max_length=15, choices=METRIC_CHOICES)
+    metric_value = models.CharField(max_length=100, blank=True)
+    metric_type = models.CharField(max_length=100, choices=METRIC_CHOICES)
 
     def __str__(self):
-        return f"{self.job_id.job_title}-{self.skill_name}-{self.metric_type}"
+        return f"{self.skill_name}-{self.metric_type}"
 
 class InterviewerDetails(models.Model):
     FACE = 'face_to_face'

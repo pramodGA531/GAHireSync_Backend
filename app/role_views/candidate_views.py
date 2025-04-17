@@ -401,8 +401,8 @@ class CandidateApplicationsView(APIView):
                 return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
 
             user = CustomUser.objects.get(username = request.user)
-            candidate_resume = CandidateResume.objects.get(candidate_name = user.username, candidate_email = user.email)
-            applications= JobApplication.objects.filter(resume = candidate_resume)
+            candidate_resume = CandidateResume.objects.filter(candidate_name = user.username, candidate_email = user.email)
+            applications= JobApplication.objects.filter(resume__in = candidate_resume)
             applications_serialized = JobApplicationSerializer(applications, many=True)
             return Response({"data":applications_serialized.data}, status=status.HTTP_200_OK)
 

@@ -24,7 +24,6 @@ urlpatterns = [
     path('org-particular-job/',OrgParticularJobPost.as_view(), name='org-particular-job'),
     path('org/get-recruiters/', RecruitersList.as_view(), name='get-recruiters-to-allot'),
     path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
-    path('org/accept-job/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
     path('job-details/recruiter/<int:job_id>/', RecJobDetails.as_view(), name='rec-job-details'),
     path('accept-job-post/',AcceptJobEditRequestView.as_view(),name = 'accept-job-post'),
@@ -42,7 +41,6 @@ urlpatterns = [
     path('client/dashboard/',ClientDashboard.as_view(), name='client-dashboard-details'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
-    path('client/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
     path('client/get-resumes/',GetResumeView.as_view(),name = 'get-resumes'),
     path('client/reject-application/',RejectApplicationView.as_view(), name ='reject-application'),
     path('client/accept-application/',AcceptApplicationView.as_view(), name ='accept-application'),
@@ -121,26 +119,25 @@ urlpatterns = [
     path('update_invoices/',Invoices.as_view()),
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
+    path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
     path('manager/create_accountant/', AccountantsView.as_view() , name='create-acountant' ),
     path('manager/accountants/', AccountantsView.as_view() , name='create-acountant' ),
-    
+    path('manager/action-on-edit-job/', JobEditActionView.as_view(), name='handle-job-edit-request'),
     path('manger/applications/',AgencyJobApplications.as_view()),
-    path('cand/reconfirmation/', CandidateReConfirmation.as_view()),
-    
-    
-    
-    
+    path('manager/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
     path('manager/job-posts/',AgencyJobPosts.as_view(),name='agency-job-posts' ),
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
     path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
 
+    path('view-applications/', AllApplicationsForJob.as_view(), name='view-all-applications-for-job-id'),
 
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
     path('candidate_status_for_job/',CandidateStatusForJobView.as_view(), name='candidate-status-for-particular-job'),
     path('notification_to_update_profile/', NotificationToUpdateProfileView.as_view(), name='notification-to-update-profile'),
+    path('cand/reconfirmation/', CandidateReConfirmation.as_view()),
 
     path('view-tickets/', RaiseTicketView.as_view(),name='raise-ticket' ),
     path('ticket/send-reply/', HandleReplies.as_view(),name='handle-replies' ),

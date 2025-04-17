@@ -337,18 +337,6 @@ class JobDetailsAPIView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except JobPostings.DoesNotExist:
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
-
-class JobEditStatusAPIView(APIView):
-    def get(self, request):
-        try:
-            job_id = request.GET.get('id')
-            job_edit_post = JobPostingsEditedVersion.objects.get(id=job_id)
-            return Response({"status":job_edit_post.status}, status=status.HTTP_200_OK)
-        except JobPostingsEditedVersion.DoesNotExist:
-            return Response({'notFound':"Job edit post not found"},status= status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
         
 class RecJobPostings(APIView):
     def get(self, request, *args, **kwargs): 
@@ -1198,3 +1186,73 @@ class GetNotifications(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+class AllApplicationsForJob(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            job_id = request.GET.get('job_id')
+            print(job_id, "is the job id")
+            job = JobPostings.objects.get(id=job_id)
+
+            applications = JobApplication.objects.filter(job_id=job.id)
+            applications_list = []
+            for application in applications:
+                applications_list.append({
+                    "candidate_name": application.resume.candidate_name,
+                    "application_id": application.id,
+                    "last_updated": application.updated_at,
+                    "status": application.status,
+                    "round_num": application.round_num,
+                })
+
+            job_details = {
+                "job_title": job.job_title,
+                "job_type": job.job_type,
+                "deadline": job.job_close_duration,
+                "client_name": job.username.username,
+                "num_of_positions": job.num_of_positions
+            }
+
+            pending_list = []
+            selected_list = []
+            rejected_list = []
+            hold_list = []
+            round_wise_processing = {}
+
+            total_rounds = job.rounds_of_interview or 0
+            for i in range(1, total_rounds + 1):
+                round_key = f"round_{i}"
+                round_wise_processing[round_key] = []
+
+            for application in applications_list:
+                status_val = application["status"]
+                round_num = application["round_num"]
+
+                if status_val == 'pending':
+                    pending_list.append(application)
+                elif status_val == 'selected':
+                    selected_list.append(application)
+                elif status_val == 'rejected':
+                    rejected_list.append(application)
+                elif status_val == 'hold':
+                    hold_list.append(application)
+                elif status_val == 'processing':
+                    round_key = f"round_{round_num}"
+                    if round_key not in round_wise_processing:
+                        round_wise_processing[round_key] = []
+                    round_wise_processing[round_key].append(application)
+
+            response_data = {
+                "job_details": job_details,
+                "pending": pending_list,
+                "selected": selected_list,
+                "rejected": rejected_list,
+                "processing": round_wise_processing,
+                "hold": hold_list,
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -240,24 +240,6 @@ class JobPostEditedSerializer(serializers.ModelSerializer):
         return data
     
     
-
-class JobPostEditedSerializerMinFields(serializers.ModelSerializer):
-    edited_by_username = serializers.SerializerMethodField()
-    organization_name = serializers.SerializerMethodField()
-    organization_code = serializers.SerializerMethodField()
-    class Meta:
-        model = JobPostingsEditedVersion
-        fields = ['id', 'job_title', 'organization','edited_by','created_at','status', 'edited_by_username','organization_name','organization_code' ]
-
-    def get_edited_by_username(self,obj):
-        return obj.edited_by.username if obj.edited_by else None
-    
-    def get_organization_name(self, obj):
-        return obj.organization.name if obj.organization else None
-    
-    def get_organization_code(self,obj):
-        return obj.organization.org_code if obj.organization else None
-
 class JobPostUpdateSerializer(serializers.ModelSerializer):
 
     notice_time = serializers.CharField(required=False, allow_blank=True)

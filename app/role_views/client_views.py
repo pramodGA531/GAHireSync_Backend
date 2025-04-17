@@ -47,6 +47,13 @@ class ClientDashboard(APIView):
 
             jobs_list = []
             for post in job_posts:
+
+                edit_status = ""
+
+                edit_request = JobPostingsEditedVersion.objects.filter(job_id=post.id).first()
+                if edit_request:
+                    edit_status = edit_request.status
+
                 jobs_list.append({
                     "job_title": post.job_title,
                     "posted": timesince(post.created_at) + " ago",
@@ -55,7 +62,10 @@ class ClientDashboard(APIView):
                     "applications": application_counts_dict.get(post.id, 0),
                     "applications_last_week": recent_applications_dict.get(post.id, 0),
                     "years_of_experience": post.years_of_experience,
+                    "approval_status" : post.approval_status,
+                    "edit_request_status": edit_status,
                 })
+
             
             total_vacancies = all_jobs.aggregate(total=Sum('num_of_positions'))['total'] or 0
             resumes_received = all_applications.count()
@@ -261,6 +271,15 @@ class JobPostingView(APIView):
 
         if not organization:
             return Response({"error": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+        job_code = data.get('job_code')
+        if not job_code:
+            return Response({"error":"Please send us the jobcode"}, status=status.HTTP_400_BAD_REQUEST)
+
+        job_postings = JobPostings.objects.filter(jobcode=job_code, username=username)
+        if job_postings.exists():
+            return Response({"error":"This Jobcode is already exists in your company"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
@@ -275,6 +294,7 @@ class JobPostingView(APIView):
                 job_posting = JobPostings.objects.create(
                     username=username,
                     organization=organization,
+                    jobcode = job_code,
                     job_title=data.get('job_title', ''),
                     job_department=data.get('job_department'),
                     job_description=data.get('job_description'),
@@ -481,6 +501,7 @@ class getClientJobposts(APIView):
                     closed = SelectedCandidates.objects.filter(application__in = applications, joining_status = 'joined').count()
                     job_details = {
                         "id": job.id,
+                        "job_code": job.jobcode,
                         "job_title": job.job_title,
                         "total_candidates": applications_count,
                         "company": job.organization.name,
@@ -515,132 +536,158 @@ class JobEditRequestsView(APIView):
                 id = request.GET.get('id')
                 try:  
                     job = JobPostings.objects.get(id = id)
-                    edited_job = JobPostingsEditedVersion.objects.get(id = id)
+                    edited_job = JobPostingsEditedVersion.objects.filter(job_id = job).exclude(user  = user).order_by('-created_at').first()
                     if(edited_job.status != 'pending'):
                         return Response({"error":"You have already reacted to this job post edit"}, status = status.HTTP_400_BAD_REQUEST)
-                    serialized_edited_job = JobPostEditedSerializer(edited_job)
+                    
+                    edited_data = JobPostEditFields.objects.filter(edit_id = edited_job)
+                    edited_data_json = []
+
+                    for field in edited_data:
+                        edited_data_json.append({
+                            "field_name": field.field_name,
+                            "field_value": field.field_value,
+                            "status": field.status,
+                        })
+
                     serialized_job = JobPostingsSerializer(job)
-                    return Response({"data":serialized_edited_job.data,"job":serialized_job.data}, status = status.HTTP_200_OK)
+                    return Response({"edited_job":edited_data_json,"job":serialized_job.data}, status = status.HTTP_200_OK)
                 except JobPostings.DoesNotExist:
-                    return Response({"error":"job posting not found"},status = status.HTTP_400_BAD_REQUEST)
+                    return Response({"error":"Job posting not found"},status = status.HTTP_400_BAD_REQUEST)
                 except JobPostingsEditedVersion.DoesNotExist:
                     return Response({"error":"Job posting edited not found"},status = status.HTTP_400_BAD_REQUEST)
+                
+                
             else:
-                edited_jobs = JobPostingsEditedVersion.objects.filter(username = user)
+                edited_jobs = JobPostingsEditedVersion.objects.filter(job_id__username = user).exclude(user  = user)
                 if not edited_jobs:
                     return Response({"details":"There are no Edit Job Requests"}, status = status.HTTP_200_OK)
-                serialized_edited_jobs = JobPostEditedSerializerMinFields(edited_jobs,many=True)
-                return Response(serialized_edited_jobs.data, status=status.HTTP_200_OK)
+                jobs_list = []
+                for job in edited_jobs:
+                    jobs_list.append({
+                        "job_title":job.job_id.job_title,
+                        "organization_code": job.job_id.organization.org_code,
+                        "edited_by": job.user.username,
+                        "status": job.status,
+                        "organization_name": job.job_id.organization.name,
+                        "job_code": job.job_id.jobcode,
+                        "id": job.job_id.id,
+                    })
+                return Response(jobs_list, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-# Accept Edit request of the agecy
 class AcceptJobEditRequestView(APIView):
-    def get(self, request):
+    permission_classes = [IsClient]
+
+    def post(self, request):
         try:
-            id = request.GET.get('id')
+            job_id = request.GET.get('job_id')
             user = request.user
-            if user.role != 'client':
-                return Response({"error":"You are not allowed to do this request"}, status=status.HTTP_400_BAD_REQUEST)
-            edited_job = JobPostingsEditedVersion.objects.get(id=id)
-            if not edited_job:
-                return Response({"error":"Unable to process your request"}, status = status.HTTP_400_BAD_REQUEST)
-            
-            edited_job = JobPostingsEditedVersion.objects.get(id=id)
-            job_post = JobPostings.objects.get(id=id)
-            organization = job_post.organization
-            manager_mail = organization.manager.email
 
-            edited_data_serializer = JobPostUpdateSerializer(edited_job)
-            edited_data = edited_data_serializer.data
-            if 'notice_time' not in edited_data:
-                edited_data['notice_time'] = ''
-            if 'time_period' not in edited_data:
-                edited_data['time_period'] = ''
-                
-            job_post_serializer = JobPostUpdateSerializer(instance=job_post, data=edited_data, partial=True)
-            if job_post_serializer.is_valid():
-                job_post_serializer.save()
-            else:
-                print(job_post_serializer.errors)
-                return Response(job_post_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            edited_interviewers = InterviewerDetailsEditedVersion.objects.filter(job_id= id)
-            edited_inter_serializer = InterviewDetailsEditedSerializer(edited_interviewers,many = True)
-            edited_inter_data = edited_inter_serializer.data
+            job_post = JobPostings.objects.get(id=job_id)
+            edited_fields_version = JobPostingsEditedVersion.objects.filter(job_id=job_post).first()
+            if not edited_fields_version:
+                return Response({"error": "Edited job post not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            for interviewer in edited_inter_data:
-                interviewer_instance = InterviewerDetails.objects.get(job_id = job_post, round_num = interviewer['round_num'] )
+            changes = request.data.get('changes', [])
+            new_changes = request.data.get('new_changes', [])
 
-                interviewer_instance.type_of_interview = interviewer.get('type_of_interview')
-                interviewer_instance.mode_of_interview = interviewer.get('mode_of_interview')
-                interviewer_instance.save()
+            accepted_field_names = [field.get('field_name') for field in changes]
 
-            job_edit_status = JobPostingsEditedVersion.objects.get(id = id)
-            job_edit_status.status = 'accepted'
-            job_edit_status.save()
-            
+            edited_field_values = JobPostEditFields.objects.filter(edit_id=edited_fields_version)
 
-            client_email_message = f"""
-            # Dear Manager,
+            with transaction.atomic():
+                for field_edit in edited_field_values:
+                    if field_edit.field_name in accepted_field_names:
 
-            We are pleased to inform you that your requested changes to the job posting have been accepted and processed successfully.
+                        new_value = next((item['field_value'] for item in changes if item['field_name'] == field_edit.field_name), None)
+                        setattr(job_post, field_edit.field_name, new_value)
+                        field_edit.status = 'accepted'
+                        field_edit.field_value = new_value
+                    else:
+                        field_edit.status = 'rejected'
+                    field_edit.save()
 
-            Thank you for your continued support. The job posting has been updated accordingly.
+                job_post.save()
 
-            Best regards,  
-            The Recruitment Team
-            """
+                edited_fields_version.status = 'accepted'
+                edited_fields_version.save()
 
-            # Send the email to the manager
-            send_mail(
+                if len(new_changes) > 0:
+                    new_version = JobPostingsEditedVersion.objects.create(
+                        job_id=job_post,
+                        user=user,
+                    )
+                    for change in new_changes:
+                        field_name = change.get('field_name')
+                        field_value = change.get('field_value')
+                        if field_name and field_value is not None:
+                            JobPostEditFields.objects.create(
+                                edit_id=new_version,
+                                field_name=field_name,
+                                field_value=field_value,
+                            )
+
+            manager_email_message = f"""
+Dear Manager,
+
+We are pleased to inform you that your requested changes to the job posting have been accepted and processed successfully.
+
+Thank you for your continued support. The job posting has been updated accordingly.
+
+Best regards,  
+The Recruitment Team
+"""
+
+            manager_mail = job_post.organization.manager.email
+            send_custom_mail(
                 subject="Accepted Edit Request",
-                message=client_email_message,
-                from_email='your-client@example.com',  # Replace with your actual sender email
-                recipient_list=[manager_mail]
+                body=manager_email_message,
+                to_email=[manager_mail]
             )
 
-            return Response({"message": "Job edit request accepted successfully"}, status = status.HTTP_200_OK)
+            return Response({"message": "Job edit request accepted successfully"}, status=status.HTTP_200_OK)
 
-        except JobPostingsEditedVersion.DoesNotExist:
-            return Response({"error": "Edited job post not found"}, status=status.HTTP_404_NOT_FOUND)
         except JobPostings.DoesNotExist:
             return Response({"error": "Job post not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-# Reject Edit Request of the agency
+
 class RejectJobEditRequestView(APIView):
+    permission_classes= [IsClient]
     def get(self, request):
         try:
-            if(not request.user):
-                return Response({"error":"You are not an user"},status=status.HTTP_400_BAD_REQUEST)
-            if not request.user.role =='client':
-                return Response({"error":"You are not allowed to do this job"},status=status.HTTP_400_BAD_REQUEST)
-            id = request.GET.get('id')
-            job = JobPostings.objects.get(id=id)
+
+            job_id = request.GET.get('job_id')
+            job = JobPostings.objects.get(id=job_id)
             manager_mail = job.organization.manager.email
 
-            edited_job =JobPostingsEditedVersion.objects.get(id = job)
+            edited_job =JobPostingsEditedVersion.objects.filter(id = job).order_by('-created_at').first()
+            edited_job_fields = JobPostEditFields.objects.filter(edit_id = edited_job)
+
+            for field in edited_job_fields:
+                field.status = 'rejected'
+                field.save()
+
             edited_job.status = 'rejected'
             edited_job.save()
             client_email_message = f"""
             # Dear Manager,
 
-            We are sorry to inform you that your requested changes to the job posting have been Rejected 
+We are sorry to inform you that your requested changes to the job posting have been Rejected 
 
-            Thank you for your continued support. The job posting has been Rejected.
+Thank you for your continued support. The job posting has been Rejected.
 
-            Best regards,  
-            The Recruitment Team
-            """
+Best regards,  
+The Recruitment Team
+"""
 
-            send_email(
+            send_custom_mail(
                 subject="Accepted Edit Request",
-                message=client_email_message,
-                recipient_list=[manager_mail]
+                body=client_email_message,
+                to_email=[manager_mail]
             )
             return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
         except JobPostings.DoesNotExist:
@@ -1947,7 +1994,8 @@ class CandidateLeftView(APIView):
                             "left_reason": selected_candidate.left_reason,
                             "is_replacement_eligible": selected_candidate.is_replacement_eligible,
                             "left_date": selected_candidate.resigned_date,
-                            "replacement_status": selected_candidate.replacement_status
+                            "replacement_status": selected_candidate.replacement_status,
+                            "id":selected_candidate.id,
                         }
                     )
             return Response(selected_candidates_list, status = status.HTTP_200_OK)
@@ -2092,7 +2140,6 @@ class ReplacementsView(APIView):
             selected_candidate = SelectedCandidates.objects.select_related("application__job_id").get(id=selected_candidate_id)
 
             with transaction.atomic():
-                # selected_candidate.joining_status = "left"
                 selected_candidate.replacement_status = 'pending'
                 selected_candidate.save()
 
@@ -2104,7 +2151,7 @@ class ReplacementsView(APIView):
                 job_post.status = "opened"
                 job_post.save()  
 
-            return Response({"message": "Replacement applied successfully successfully"}, status=status.HTTP_200_OK)
+            return Response({"message": "Replacement applied successfully"}, status=status.HTTP_200_OK)
 
         except SelectedCandidates.DoesNotExist:
             return Response({"error": "Selected candidate not found"}, status=status.HTTP_404_NOT_FOUND)

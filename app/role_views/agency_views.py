@@ -94,7 +94,7 @@ class AgencyDashboardAPI(APIView):
             approval_pending = JobPostings.objects.filter(organization__name = agency_name, approval_status='pending').count()
             interviews_scheduled = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).count()
             recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, assigned_to=None).count()
-            jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(organization__name=agency_name).count()  
+            jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(job_id__organization__manager=user).count()  
             opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
 
             upcoming_interviews = []
@@ -169,7 +169,6 @@ class OrgJobPostings(APIView):
                     selected = JobApplication.objects.filter(job_id = job, status='selected').count()
                     rejected = JobApplication.objects.filter(job_id = job, status='rejected').count()
                     number_of_rounds = InterviewerDetails.objects.filter(job_id = job).count()
-                    print(job.assigned_to)
                     job_json = {
                         "job_id": job.id,
                         # "recruiter_name": job.assigned_to.username if job.assigned_to else "Not-Assigned",
@@ -181,7 +180,6 @@ class OrgJobPostings(APIView):
                         "applied": "applied",
                     }
             except Exception as e:
-                print("error here", str(e))
                 return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
             serializer = JobPostingsSerializer(job_postings, many=True)
@@ -215,6 +213,74 @@ class OrgParticularJobPost(APIView):
             return Response({"error":str(e)}, status= status.HTTP_400_BAD_REQUEST)
         
 # View the edit request of manager(your role)
+class JobEditStatusAPIView(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            job_id = request.GET.get('id')
+            if not job_id:
+                return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            job = JobPostings.objects.get(id=job_id)
+
+            if job.approval_status == 'accepted':
+                return Response({"status": 'accepted'}, status=status.HTTP_200_OK)
+
+            if job.approval_status == 'reject':
+                return Response({"status": 'rejected'}, status=status.HTTP_200_OK)
+
+            # 4. Get latest job edit version
+            job_edit_version = JobPostingsEditedVersion.objects.filter(job_id=job_id).order_by("-created_at").first()
+
+            if not job_edit_version:
+                return Response({'notFound': "Job edit post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # 5. Fetch edited fields
+            job_edit_fields = JobPostEditFields.objects.filter(edit_id=job_edit_version)
+
+            # 6. If any field is rejected, return all fields
+            if any(field.status == 'rejected' for field in job_edit_fields):
+                rejected_fields_json = [{
+                    "field_name": field.field_name,
+                    "field_value": field.field_value,
+                    "status": field.status
+                } for field in job_edit_fields]
+
+                return Response({
+                    "status": "field_rejected",
+                    "fields_rejected": rejected_fields_json
+                }, status=status.HTTP_200_OK)
+
+            # 7. If edit is accepted or user is owner, continue with field diff view
+            if job_edit_version.user == request.user or job_edit_version.status == 'accepted':
+                return Response({"status": job_edit_version.status}, status=status.HTTP_200_OK)
+
+            # 8. Build old and new fields comparison
+            old_fields_json = []    
+            if job_edit_version.base_version:
+                old_edit_fields = JobPostEditFields.objects.filter(edit_id=job_edit_version.base_version)
+                old_fields_json = [{
+                    "field_name": field.field_name,
+                    "field_value": field.field_value,
+                    "status": field.status,
+                } for field in old_edit_fields]
+
+            new_fields_json = [{
+                "field_name": field.field_name,
+                "field_value": field.field_value
+            } for field in job_edit_fields]
+
+            # 9. Return diff
+            return Response({
+                "status": job_edit_version.status,
+                "old_fields": old_fields_json,
+                "new_fields": new_fields_json
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
 class OrgJobEdits(APIView):
     def get(self, request):
         try:
@@ -237,138 +303,133 @@ class OrgJobEdits(APIView):
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
     def post(self, request):
-        data = request.data
-        username = request.user
-        id = request.GET.get('id')
-        primary_skills = data.get('primary_skills')
-        secondary_skills = data.get('secondary_skills')
-        organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
-        job = JobPostings.objects.get(id = id)
-        if not username or username.role != 'manager':
-            return Response({"detail": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not organization:
-            return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not job:
-            return Response({"detail":"Invalid Job ID"}, status=status.HTTP_400_BAD_REQUEST)
-        
         try:
-            job_edited_post = JobPostingsEditedVersion.objects.get(id=id)
-            if(job_edited_post) and job_edited_post.status != 'pending':
-                job_edited_post.delete()
-                InterviewerDetailsEditedVersion.objects.filter(job_id=id).delete()
-        except JobPostingsEditedVersion.DoesNotExist:
-            pass
+            data = request.data
+            user = request.user
+            job_id = request.GET.get('id')
 
-        try:
+            changes = data.get('changes', [])
+            primary_skills = data.get('primarySkills', [])
+            secondary_skills = data.get('secondarySkills', [])
+
             with transaction.atomic():
-                interview_rounds = data.get('interview_details', [])
-                client = JobPostings.objects.get(id=id).username
-                client_email=client.email
+                job = JobPostings.objects.get(id=job_id)
 
-                job_posting = JobPostingsEditedVersion.objects.create(
-                    id = job,
-                    username = client,
-                    edited_by=username,
-                    organization=organization,
-                    job_title=data.get('job_title', ''),
-                    job_department=data.get('job_department'),
-                    job_description=data.get('job_description'),
-                    years_of_experience=data.get('years_of_experience','Not Specified'),
-                    ctc=data.get('ctc',"Not Specified"),
-                    rounds_of_interview = len(interview_rounds),
-                    job_locations=data.get('job_locations'),
-                    job_type=data.get('job_type'),
-                    job_level=data.get('job_level'),
-                    qualifications=data.get('qualifications'),
-                    timings=data.get('timings'),
-                    other_benefits=data.get('other_benefits'),
-                    working_days_per_week=data.get('working_days_per_week'),
-                    decision_maker=data.get('decision_maker'),
-                    decision_maker_email=data.get('decision_maker_email'),
-                    bond=data.get('bond'),
-                    rotational_shift = data.get('rotational_shift') == "yes",
-                    age = data.get('age'),
-                    gender = data.get('gender'), 
-                    industry = data.get('industry'),
-                    differently_abled = data.get('differently_abled'),
-                    visa_status = data.get('visa_status'),
-                    time_period = data.get('time_period'),
-                    notice_period = data.get('notice_period'),
-                    notice_time = data.get('notice_time',''),
-                    qualification_department = data.get('qualification_department'),
-                    languages = data.get('languages'),
-                    num_of_positions = data.get('num_of_positions'),
-                    job_close_duration  = data.get('job_close_duration'),
-                    passport_availability = data.get('passport_availability'),
-                    status = 'pending'
+                edit_version = JobPostingsEditedVersion.objects.create(
+                    job_id=job,
+                    user=user,
                 )
 
-                for skill in primary_skills:
-                    skill_metric = SkillMetricsModelEdited.objects.create(
-                        job_id = job_posting,
-                        is_primary = True,
-                        skill_name = skill.get('skill_name'),
-                        metric_type = skill.get('metric_type'),
-                    )
-                    if skill.get('metric_type') == 'rating':
-                        skill_metric.rating = skill.get('metric_value')
-                    elif skill.get('metric_type') == 'rating':
-                        skill_metric.experience = skill.get('metric_value')
+                for field_name, field_value in changes.items():
+                    original_value = getattr(job, field_name, None)
 
-                    skill_metric.save()
-
-                for skill in secondary_skills:
-                    skill_metric = SkillMetricsModelEdited.objects.create(
-                        job_id = job_posting,
-                        is_primary = False,
-                        skill_name = skill.get('skill_name'),
-                        metric_type = skill.get('metric_type'),
-                    )
-                    if skill.get('metric_type') == 'rating':
-                        skill_metric.rating = skill.get('metric_value')
-                    elif skill.get('metric_type') == 'rating':
-                        skill_metric.experience = skill.get('metric_value')
-
-                    skill_metric.save()
-
-                if interview_rounds:
-                    for round_data in interview_rounds:
-                        print(round_data)
-                        name = CustomUser.objects.get(username = round_data.get('name').get('username'))
-                        InterviewerDetailsEditedVersion.objects.create(
-                            job_id=job_posting,
-                            round_num=round_data.get('round_num'),
-                            name=name,
-                            type_of_interview=round_data.get('type_of_interview', ''),
-                            mode_of_interview=round_data.get('mode_of_interview'),
+                    if field_value != original_value:
+                        JobPostEditFields.objects.create(
+                            edit_id=edit_version,
+                            field_name=field_name,
+                            field_value=field_value,
                         )
-                    
-                link = f"{frontend_url}/client/edit-requests/{job_edited_post.id}"
-                client_message = f"""
 
-Dear {job_posting.username.username},
+                actual_primary_skills = SkillMetricsModel.objects.filter(job_id = job, is_primary = True)
+                actual_secondary_skills = SkillMetricsModel.objects.filter(job_id = job, is_primary = False)
+                
+                for skill in primary_skills:
+                    skill_name = skill.get('skill_name')
+                    metric_type = skill.get('metric_type')
+                    metric_value = skill.get('metric_value')
 
-Your job post for {job_posting.job_title} has been reviewed, and we have requested some edits for better alignment. Please update the job description at your earliest convenience.
-🔗 {link}
+                    try:
+                        actual_skill = actual_primary_skills.get(skill_name=skill_name)
 
-For questions, reach out to your recruiter or support@hiresync.com.
-Best,
-HireSync Team
+                        existing_value = getattr(actual_skill, metric_type, None)
 
-                """
+                        if existing_value != metric_value:
+                            skill_metric = SkillMetricsModelEdited.objects.create(
+                                job_id=edit_version,
+                                is_primary=True,
+                                skill_name=skill_name,
+                                metric_type=metric_type,
+                            )
+                            setattr(skill_metric, metric_type, metric_value)
+                            skill_metric.save()
 
-                send_custom_mail(
-                    subject="Job Post Update Requested",
-                    message=client_message,
-                    recipient_list=[client_email]
+                    except actual_primary_skills.model.DoesNotExist:
+                        skill_metric = SkillMetricsModelEdited.objects.create(
+                            job_id=edit_version,
+                            is_primary=True,
+                            skill_name=skill_name,
+                            metric_type=metric_type,
+                        )
+                        setattr(skill_metric, metric_type, metric_value)
+                        skill_metric.save()
+                                
+                for skill in secondary_skills:
+                    skill_name = skill.get('skill_name')
+                    metric_type = skill.get('metric_type')
+                    metric_value = skill.get('metric_value')
+
+                    try:
+                        actual_index = actual_secondary_skills.get(skill_name=skill_name)
+
+                        if actual_index.metric_type != metric_type or actual_index.metric_value != metric_value:
+                            skill_metric = SkillMetricsModelEdited.objects.create(
+                                job_id=edit_version,
+                                is_primary=False,
+                                skill_name=skill_name,
+                                metric_type=metric_type,
+                                metric_value=metric_value,
+                            )
+                            
+                    except actual_secondary_skills.DoesNotExist:
+                        skill_metric = SkillMetricsModelEdited.objects.create(
+                            job_id=edit_version,
+                            is_primary=False,
+                            skill_name=skill_name,
+                            metric_type=metric_type,
+                            metric_value=metric_value,
+                        )
+    
+                        skill_metric.save()
+
+                # Email logic...
+
+                return Response(
+                    {"message": "Job post edit request sent successfully"},
+                    status=status.HTTP_200_OK
                 )
 
+        except Exception as e:
+            print("error is ", str(e))
             return Response(
-                {"message": "Job post edit request sent successfully"},
-                status=status.HTTP_200_OK
+                {"detail": f"An error occurred: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class AcceptJobPostView(APIView):
+    permission_classes = [IsManager]
+    def post(self, request):
+        try:
+            job_id = int(request.GET.get('id'))
+
+            if not job_id:
+                return Response({"error": "Job post id is required"}, status=status.HTTP_400_BAD_REQUEST) 
+            
+            action = request.GET.get('action')
+
+
+            try:
+                job_post = JobPostings.objects.get(id = job_id)
+                if(action == 'accept'):
+                    job_post.approval_status  = "accepted"
+                elif(action == 'reject'):
+                    job_post.approval_status  = "rejected"
+
+                job_post.save()
+                return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
+            except JobPostings.DoesNotExist:
+                return Response({"error":"Job post does not exists"}, status = status.HTTP_400_BAD_REQUEST)
+
 
         except Exception as e:
             print("error is ",str(e))
@@ -376,6 +437,42 @@ HireSync Team
                 {"detail": f"An error occurred: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class JobEditActionView(APIView):
+    permission_classes = [IsManager]
+    def post(self, request):
+        try:
+            job_id = request.GET.get('id')
+            job = JobPostings.objects.get(id=job_id)
+            action = request.GET.get('action')
+            if action == 'accept':
+                job_edit_request = JobPostingsEditedVersion.objects.filter(job_id=job).order_by('-created_at').first()
+                if job_edit_request.user.role == 'client':
+
+                    job_edit_fields = JobPostEditFields.objects.filter(edit_id= job_edit_request)
+
+                    with transaction.atomic():
+                        for field in job_edit_fields:
+                            setattr(job,field.field_name, field.field_value)
+                            field.status = 'accepted'
+                            field.save()
+                        print('entered here')
+                        job_edit_request.status = "accepted"
+                        job_edit_request.save()
+                job.approval_status = 'accepted'
+                job.save()
+                
+                return Response({"message":"Job approved successfully"}, status=status.HTTP_200_OK)
+            
+            if action == 'reject':
+                job.approval_status = 'reject'
+                job.save()
+
+                return Response({"message":"Job post rejected successfully"}, status=status.HTTP_200_OK)            
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 # Get all the recruiters and Add the recruiter
 class RecruitersView(APIView):
@@ -866,8 +963,6 @@ class ViewSelectedCandidates(APIView):
             return Response(selected_candidates_list, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        
 
 
 class AccountantsView(APIView):
