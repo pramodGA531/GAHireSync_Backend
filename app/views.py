@@ -41,28 +41,23 @@ class GetUserDetails(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
 class AcceptJobPostView(APIView):
+    permission_classes = [IsManager]
     def post(self, request):
         try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-
-            if request.user.role != 'manager':  
-                return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
-            
             job_id = int(request.GET.get('id'))
+
             if not job_id:
                 return Response({"error": "Job post id is required"}, status=status.HTTP_400_BAD_REQUEST) 
             
-            accept = request.query_params.get('accept')=='true'
-            print('accept',accept)
-            
+            action = request.GET.get('action')
+
+
             try:
                 job_post = JobPostings.objects.get(id = job_id)
-                
-                if accept:
+                if(action == 'accept'):
                     job_post.approval_status  = "accepted"
-                    
                     notification = Notifications.objects.create(
     sender=request.user,
     receiver=job_post.username,
@@ -76,7 +71,7 @@ class AcceptJobPostView(APIView):
         f"Thank you for using our platform! 🙌"
     )
 )
-                else:
+                elif(action == 'reject'):
                     job_post.approval_status  = "rejected"
                     notification = Notifications.objects.create(
     sender=request.user,
@@ -91,6 +86,7 @@ class AcceptJobPostView(APIView):
         f"Thank you for understanding."
     )
 )
+
                 job_post.save()
                 return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
             except JobPostings.DoesNotExist:
@@ -103,8 +99,6 @@ class AcceptJobPostView(APIView):
                 {"detail": f"An error occurred: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-     
-
 class OrganizationTermsView(APIView):
     
     permission_classes = [IsAuthenticated]   
