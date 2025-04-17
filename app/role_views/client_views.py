@@ -519,7 +519,7 @@ class JobEditRequestsView(APIView):
                 id = request.GET.get('id')
                 try:  
                     job = JobPostings.objects.get(id = id)
-                    edited_job = JobPostingsEditedVersion.objects.get(job_id = job)
+                    edited_job = JobPostingsEditedVersion.objects.filter(job_id = job).exclude(user  = user).order_by('-created_at').first()
                     if(edited_job.status != 'pending'):
                         return Response({"error":"You have already reacted to this job post edit"}, status = status.HTTP_400_BAD_REQUEST)
                     
@@ -542,7 +542,7 @@ class JobEditRequestsView(APIView):
                 
                 
             else:
-                edited_jobs = JobPostingsEditedVersion.objects.filter(job_id__username = user)
+                edited_jobs = JobPostingsEditedVersion.objects.filter(job_id__username = user).exclude(user  = user)
                 if not edited_jobs:
                     return Response({"details":"There are no Edit Job Requests"}, status = status.HTTP_200_OK)
                 jobs_list = []

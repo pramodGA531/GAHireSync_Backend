@@ -130,7 +130,7 @@ class ClientDetails(models.Model):
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
-    jobcode = models.CharField(max_length=10,)
+    jobcode = models.CharField(max_length=10,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
@@ -194,8 +194,8 @@ class JobPostingsEditedVersion(models.Model):
         (PENDING,'pending'),
     ]
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
-    version_number = models.IntegerField(editable=False)
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    version_number = models.IntegerField(editable=False, default=1)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     base_version = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
