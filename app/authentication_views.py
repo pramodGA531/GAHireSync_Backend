@@ -107,7 +107,18 @@ class ClientSignupView(APIView):
 
                         try:
                             send_email_verification_link(user = user, signup = True, role="client")
-
+                            
+#                             notification = Notifications.objects.create(
+#     sender='GA HireSync Team',
+#     receiver=user,
+#     subject="Welcome to GA HireSync – Collaborate and Grow Together!",
+#     message=(
+#         "We're thrilled to have you on board with GA HireSync! "
+#         "Start collaborating, explore top talent, and grow your business. "
+#         "If you have any questions, our support team is always here to help. "
+#         "Let’s build something great together!"
+#     )
+# )
                         except Exception as e:
                             print(str(e))
                             return Response(
@@ -164,6 +175,18 @@ class AgencySignupView(APIView):
 
                     try:
                         send_email_verification_link(user, True , "manager")
+#                         notification = Notifications.objects.create(
+#     sender='GA HireSync Team',
+#     receiver=request.user,
+#     subject="Welcome to GA HireSync – Collaborate and Grow Together!",
+#     message=(
+#         "We're thrilled to have you on board with GA HireSync! "
+#         "Start collaborating, explore top talent, and grow your business. "
+#         "If you have any questions, our support team is always here to help. "
+#         "Let’s build something great together!"
+#     )
+# )
+
                     except Exception as e:
                         print(f"Error sending verification link: {str(e)}")
 
@@ -308,6 +331,15 @@ HireSync Support Team
             message = template.render(context)
 
             send_custom_mail( subject = 'Reset Your Password – HireSync', body=message, to_email=[email])
+            notification = Notifications.objects.create(
+    sender='GA HireSync Team',
+    receiver=request.user,
+    subject="You have requested a password reset",
+    message=(
+        "Your password has been reset. If this wasn't you, please raise a support ticket or contact the support team immediately."
+    )
+)
+
             return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
 
 class ResetPasswordAPIView(APIView):
@@ -341,6 +373,7 @@ class ResetPasswordAPIView(APIView):
                     message,
                     [user.email],
                 )
+                
                 return Response({'success': 'Password has been reset successfully.'})
             else:
                 return Response({'error': 'Invalid token.'}, status=400)
@@ -365,6 +398,15 @@ class changePassword(APIView):
                     [user.email],
                     fail_silently=False,
                 )
+                
+                notification = Notifications.objects.create(
+    sender='GA HireSync Team',
+    receiver=request.user,
+    subject=f"Your Password Has beed Changed  ",
+    message=(
+        f"Your Password Has beed Changed "
+    )
+)
                 return Response({'success': True})
             else:
                 return Response({'success': False, 'message': 'New passwords do not match.'})

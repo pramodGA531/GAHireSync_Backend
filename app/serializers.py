@@ -23,12 +23,14 @@ class CustomUserSerializer(serializers.ModelSerializer):
             "username": {"required": True},
         }
 
-
 class OrganizationSerializer(serializers.ModelSerializer):
-    recruiters = CustomUserSerializer(many=True,read_only=True)
+    recruiters = CustomUserSerializer(many=True, read_only=True)
+    manager = CustomUserSerializer(read_only=True)  # Corrected line
+
     class Meta:
         model = Organization
         exclude = ['gst_number']
+        
 
 
 class ClientDetailsInterviewersSerializer(serializers.ModelSerializer):
