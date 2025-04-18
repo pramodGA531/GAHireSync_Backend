@@ -169,7 +169,21 @@ Best,
 HireSync Team
 """ 
                 send_custom_mail(f"New Candidate Submitted – {job.job_title}",message, {job.username.email})
-
+                
+                notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=job.username,
+    subject=f"Resumes Sent for the Role: {job.job_title}",
+    message=(
+        f"📄 Resumes Submitted\n\n"
+        f"Profiles have been sent for your job post: **{job.job_title}**.\n\n"
+        f"Please review the submitted resumes and provide feedback accordingly.\n\n"
+        f"Your feedback is important to proceed with the next steps.\n\n"
+        f"id::{job.id}"  # used in frontend to generate a clickable Link
+        f"link::'client/get-resumes/'"
+    )
+)
+                
                 return Response({"message": "Resume added successfully"}, status=status.HTTP_201_CREATED)
 
         except JobPostings.DoesNotExist:
@@ -242,7 +256,6 @@ class ScheduleInterview(APIView):
                 
                 if application.status == 'pending':
                     return Response({"error":"Client is'nt shortlisted this application"}, status = status.HTTP_400_BAD_REQUEST)
-
                 try:
                     next_interview_details = InterviewerDetails.objects.get(job_id = application.job_id.id, round_num = application.round_num)
 
@@ -262,7 +275,10 @@ class ScheduleInterview(APIView):
                     "interview_type": next_interview_details.type_of_interview,
                     "interview_mode": next_interview_details.mode_of_interview,
                 }
-
+                
+                
+                
+                
                 return Response(application_details, status=status.HTTP_200_OK)
                 
         except Exception as e:
@@ -270,6 +286,7 @@ class ScheduleInterview(APIView):
     
     def post(self, request):
         try:
+            print("enterd to scdl interviews")
             if not request.GET.get('application_id'):
                 return Response({"error": "Application ID is required"}, status=status.HTTP_400_BAD_REQUEST)
             rctr=request.user
@@ -308,9 +325,8 @@ class ScheduleInterview(APIView):
 
             if(scheduled_date is None):
                 return Response({"error":"Please select date and time"}, status = status.HTTP_400_BAD_REQUEST)
-
+            print("from_time",from_time,"to_time",to_time,"round_num",application.round_num)
             with transaction.atomic():
-
                 next_scheduled_interview = InterviewSchedule.objects.create(
                     # rctr=rctr,
                     candidate = application.resume,
@@ -364,7 +380,42 @@ class ScheduleInterview(APIView):
                 recipient_list=[interviewer_email, candidate_email],
                 from_email=''
             )
-
+            
+            ClientDetail=ClientDetails.objects.get(user=application.job_id.username)
+                
+            customCand=CustomUser.objects.get(email=application.resume.candidate_email)
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=customCand,
+    subject=f"Interview Scheduled for {application.job_id.job_title} ",
+    message = (
+    f"Interview Scheduled\n\n"
+    f"Your interview has been scheduled on {scheduled_date}.\n"
+    f"Round Number: {interviewer.round_num}\n"
+    f"Role: {application.job_id.job_title}\n"
+    f"Interviewer: {interviewer.name.username}\n"
+    f"Type of Interview: {interviewer.type_of_interview}\n"
+    f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
+    f"Please check the details here: link::candidate/upcoming_interviews/"
+)
+)
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=interviewer.name,  # Assuming this is the User object of the interviewer
+    subject=f"Interview Scheduled with {customCand.username}",
+    message=(
+        f"Interview Assignment\n\n"
+        f"You have been scheduled to conduct an interview with {customCand.username}.\n"
+        f"Scheduled Date: {scheduled_date}\n"
+        f"Role: {application.job_id.job_title}\n"
+        f"Round Number: {interviewer.round_num}\n"
+        f"Type of Interview: {interviewer.type_of_interview}\n"
+        f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
+        f"Please check the interview details here: link::interviewer/interviews/"
+)
+)
+            
+            
             return Response({"message": "Next Interview Scheduled Successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:

@@ -496,7 +496,40 @@ class CandidateAcceptJob(APIView):
 
             selected_candidate.candidate_acceptance = "accepted"
             selected_candidate.save()
-
+            
+            customCand =selected_candidate.candidate.name
+            application=selected_candidate.application
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=application.sender,
+    subject=f"Hey, Recruiter Candidate Accepts the offer position {application.job_id.job_title}",
+    message=(
+        f"Offer Acceptance Notification\n\n"
+        f"The candidate {customCand.username} has officially accepted the offer "
+        f"for the position of {application.job_id.job_title}.\n\n"
+        f"Joining Date: {selected_candidate.joining_date}\n"
+        f"Agreed CTC: {selected_candidate.ctc}\n\n"
+        f"Please follow up to confirm whether {customCand.username} has joined on the scheduled date.\n\n"
+    )
+)
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=application.job_id.username,
+    subject=f"Cand Accepted the offer role {application.job_id.job_title}",
+    message=(
+        f"Offer Acceptance Notification\n\n "
+        f"The candidate {customCand.username} has officially accepted the offer "
+        f"for the position of {application.job_id.job_title}.\n\n"
+        f"Joining Date: {selected_candidate.joining_date}\n"
+        f"Agreed CTC: {selected_candidate.ctc}\n\n"
+        f"Kindly confirm on the joining day if the candidate has reported and completed the joining formalities.  \n\n"
+    )
+)
+            
+            
+            
             return Response({"message":"Accepted and Reconfirmation notification sent to recruiter successfully"}, status = status.HTTP_200_OK)
 
         except Exception as e:

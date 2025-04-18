@@ -392,6 +392,23 @@ HireSync Team
                 )
 
                 self.addTermsAndConditions(job_posting)
+                
+                notification = Notifications.objects.create(
+                    sender=request.user,
+                    receiver=organization.manager,
+                    subject=f"New Job Request by {request.user.username}",
+                    message = (
+    f"🔔 New Job Request\n\n"
+    f"Client: {request.user.username}\n"
+    f"Position: {job_posting.job_title}\n\n"
+    f"{request.user.username} has sent a new job request to your organization for the position of "
+    f"{job_posting.job_title}.\n\n"
+    f"id::{job_posting.id}"  # This will be parsed in frontend
+    f"link::'agency/postings/'"
+)
+                )
+            
+                
                 # clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
                 # if clientTerms.count() < 0:
                 #     ClientTermsAcceptance.objects.create(client=client,organization=organization,service_fee = acceptedterms.service_fee,replacement_clause = acceptedterms.replacement_clause,invoice_after = acceptedterms.invoice_after,payment_within = acceptedterms.payment_within,interest_percentage = acceptedterms.interest_percentage)
@@ -912,8 +929,25 @@ class RejectApplicationView(APIView):
             job_application.feedback = request.data.get('feedback')
             job_application.next_interview = None
             job_application.save()
+            clientCompanyDetails=ClientDetails.objects.get(user=request.user)
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=job_application.sender,  # The recruiter who submitted the profile
+    subject=f"Profile for {job_application.job_id.job_title} Rejected by Client",
+    message=(
+        f"Update:\n\n"
+        f"The candidate profile of {candidate_resume.candidate_name} you submitted for the position of **{job_application.job_id.job_title}** "
+        f"has been **rejected** by the client.\n\n"
+        f"Client: {clientCompanyDetails.name_of_organization}\n\n"
+        f"You may suggest other candidates for this role.\n\n"
+        f"feedback by client: {job_application.feedback}"
+        f"id::\n"
+        f"link::recruiter/postings/"  # Parsed into a clickable Link on frontend
+    )
+)
 
             return Response({"message":"Rejected Successfully"}, status = status.HTTP_200_OK)
+            
         
         except CandidateResume.DoesNotExist:
             return Response({"error":"Candidate Resume not exists with that id"}, status = status.HTTP_400_BAD_REQUEST)
@@ -937,7 +971,7 @@ class AcceptApplicationView(APIView):
         if existing_user:
             candidate_profile = CandidateProfile.objects.get(name=existing_user)
 
-            return candidate_profile
+            return candidate_profile, existing_user
 
 
         password = generate_random_password()
@@ -960,7 +994,7 @@ class AcceptApplicationView(APIView):
                 email =candidate_email,
             )
     
-            return candidate_profile
+            return candidate_profile,new_user
         else:
             raise serializers.ValidationError(user_serializer.errors)
         
@@ -981,7 +1015,7 @@ class AcceptApplicationView(APIView):
                 job_application.status = 'processing'
                 job_application.round_num = 1
                 job_application.feedback = request.data.get('feedback')
-                candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                candidate ,customCand= self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
 
                 link = f"{frontend_url}/candidate/applications"
                 message = f"""
@@ -998,6 +1032,42 @@ HireSync Team
 """             
                 send_custom_mail("Congratulations! You’ve Been Shortlisted", body = message, to_email = [candidate.name.email])
                 job_application.save()
+                clientCompanyDetails=ClientDetails.objects.get(user=request.user)
+                
+                notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=customCand,
+    subject=f"Shortlisted for {job_application.job_id.job_title}",
+    message=(
+        f"✅ Congratulations!\n\n"
+        f"You have been **shortlisted** for the position of **{job_application.job_id.job_title}**.\n\n"
+        f"Company: {clientCompanyDetails.name_of_organization}\n\n"
+        f"Please check your dashboard for more details and next steps.\n\n"
+        f"id::{job_application.id}\n"
+        f"link::candidate/applications/"  # This will be parsed by frontend into a clickable Link
+    )
+)
+                
+                notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=job_application.sender,  # Recruiter who submitted the profile
+    subject=f"Profile for {job_application.job_id.job_title} Accepted by Client",
+    message=(
+        f"✅ Great News!\n\n"
+        f"The candidate profile you submitted for the position of **{job_application.job_id.job_title}** "
+        f"has been **accepted** by the client.\n\n"
+        f"Client: {clientCompanyDetails.name_of_organization}\n\n"
+        f"Schedule interview as per candidate and interviewer availability.\n\n"
+        f"id::\n"
+        f"link::recruiter/schedule_applications/"  # Parsed into a clickable Link on frontend
+    )
+)
+                
+                
+                
+                
+                
+                # notificaion here 
 
             return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)
             
@@ -1058,7 +1128,7 @@ HireSync Team
                         recipient_list=[candidate_email],
                         fail_silently=False,
                 )
-            return candidate_profile
+            return candidate_profile,new_user
         else:
             raise serializers.ValidationError(user_serializer.errors)
         
@@ -1083,7 +1153,7 @@ HireSync Team
             with transaction.atomic():
                 job_application.status = 'hold'
                 job_application.round_num = 0
-                candidate = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                candidate ,customCand= self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
                 job_application.save()
 
             return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)
@@ -1303,7 +1373,7 @@ class HandleSelect(APIView):
 
             candidate = CandidateProfile.objects.get(email = application.resume.candidate_email)
 
-            SelectedCandidates.objects.create(
+            selectedCand = SelectedCandidates.objects.create(
                 application = application,
                 candidate = candidate,
                 ctc = data.get('ctc'),
@@ -1314,9 +1384,45 @@ class HandleSelect(APIView):
             
             application.status = 'selected'
             application.save()
+            
+            customCand=CustomUser.objects.get(email=candidate.email)
+            
+            # here need to send the notficiations to the recruiter ,client , candidate 
+            
+            # notification moto is you have cleared all the rounds joining date and the agreed ctc,
+            
+            # 
 
             # send email and sms notifications here
-
+            
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=customCand,
+    subject=f"You Have Selected for position {application.job_id.job_title}",
+    message = (
+    f"Dear {customCand.username},\n\n"
+    f"Congratulations!\n\n"
+    f"We are excited to inform you that you have been selected for the position of {application.job_id.job_title}"
+    f"Your joining date is scheduled for{selectedCand.joining_date}, and your agreed CTC is {selectedCand.ctc}.\n\n"
+    f"We look forward to having you on board!\n\n"
+    f"please accept the offer In the dashboard"
+    f"link::candidate/selected_jobs/"
+)
+)
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=application.sender,  # Assuming recruiter is the sender
+    subject=f"Candidate {customCand.username} Selected for the Position {application.job_id.job_title}",
+    message=(
+        f"congrates Dear Recruiter"
+        f"Candidate Selection Update\n\n"
+        f"The candidate {customCand.username} has been selected for the position of {application.job_id.job_title}.\n\n"
+        f"Joining Date: {selectedCand.joining_date}\n"
+        f"Agreed CTC: {selectedCand.ctc}\n\n"
+        f"Please proceed with the onboarding formalities and coordinate further as needed.\n\n"
+    )
+)
             return Response({"message":"Candidate is Selected"},status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
@@ -1921,6 +2027,32 @@ class CandidateLeftView(APIView):
                     candidate.is_replacement_eligible = days_worked <= replacement_clause
 
             candidate.save()
+            
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=candidate.application.sender,
+    subject=f"Candidate {candidate.candidate.name.username} is left",
+    message=(
+        f"Application Update\n\n"
+        f"Position: {candidate.application.job_id.job_title}\n\n"
+        f"The candidate {candidate.candidate.name.username} has left the organization.\n\n"
+        f"Reason for leaving: {candidate.left_reason}\n\n"
+    )
+)           
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=candidate.application.job_id.organization.manager,
+    subject=f"Candidate {candidate.candidate.name.username} is left",
+    message=(
+        f"Application Update\n\n"
+        f"Position: {candidate.application.job_id.job_title}\n\n"
+        f"The candidate {candidate.candidate.name.username} has left the organization.\n\n"
+        f"Reason for leaving: {candidate.left_reason}\n\n"
+    )
+)        
+            
+            
 
             return Response({"message":"Candidate status updated successfully"},status = status.HTTP_200_OK)
         except Exception as e:
@@ -1931,6 +2063,7 @@ class CandidateLeftView(APIView):
 class CandidateJoined(APIView):
     permission_classes = [IsClient]
     def post(self, request):
+        print("Entered")
         try:
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
@@ -1940,6 +2073,17 @@ class CandidateJoined(APIView):
             job_openings = candidate.application.job_id.num_of_positions
             jobs_filled_applications = JobApplication.objects.filter(job_id = candidate.application.job_id)
             jobs_filled = SelectedCandidates.objects.filter(application__in = jobs_filled_applications, joining_status = 'joined').count()
+            
+            notification = Notifications.objects.create(
+    sender=request.user,
+    receiver=candidate.application.sender,
+    subject=f"Candidate {request.user.username} Has Successfully Joined",
+    message=(
+        f"Joining Confirmation\n\n"
+        f"We are pleased to inform you that the candidate {request.user.username} "
+        f"has successfully joined for the position of {candidate.application.job_id.job_title}.\n\n"
+    )
+)
 
             if job_openings>jobs_filled:
                 return Response({"message":"Status updated successfully"}, status=status.HTTP_200_OK)
@@ -1949,7 +2093,8 @@ class CandidateJoined(APIView):
             job_post = candidate.application.job_id
             job_post.status = 'closed'
             job_post.save()
-
+            
+         
             return Response({"message":"All Job openings are filled, job post is closed successfully"}, status=status.HTTP_200_OK)
             
         except Exception as e:

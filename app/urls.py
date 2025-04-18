@@ -151,5 +151,7 @@ urlpatterns = [
     path('myblogs/', MyBlogs.as_view(), name='his-blogs'),
     
     path('jobpost/terms/',GetJobPostTerms.as_view(),name='job-terms'),
+    
+    path('notifications/',GetNotifications.as_view(),name='all-notifications'),
 
 ]
