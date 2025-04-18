@@ -131,6 +131,8 @@ urlpatterns = [
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
     path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
+    
+
 
     path('view-applications/', AllApplicationsForJob.as_view(), name='view-all-applications-for-job-id'),
 
