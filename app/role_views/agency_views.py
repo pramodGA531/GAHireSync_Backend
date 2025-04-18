@@ -390,7 +390,19 @@ class OrgJobEdits(APIView):
                         )
     
                         skill_metric.save()
-
+                notification = Notifications.objects.create(
+                                    sender=request.user,
+                                    receiver=job.username,
+                                    subject=f"Job Edit Request",
+                                    message = (
+                    f"✏ Job Edit Request\n\n"
+                    f"The organization has requested an edit for the following job post.\n\n"
+                    f"Position: *{job.job_title}*\n"
+                    f"Client: {job.username}\n\n"
+                    f"Please review the requested changes and update the job post accordingly.\n\n"
+                    f"link::client/approvals/"
+                )
+                                )
                 # Email logic...
 
                 return Response(
@@ -461,13 +473,35 @@ class JobEditActionView(APIView):
                         job_edit_request.save()
                 job.approval_status = 'accepted'
                 job.save()
-                
+                notification = Notifications.objects.create(
+                    sender=request.user,
+                    receiver=job.username,
+                    subject=f"Job {job.job_title} request has been approved by {request.user}",
+                    message=(
+                        f"Dear {job.username},\n\n"
+                        f"Your request for the job '{job.job_title}' has been approved by {request.user}.\n"
+                        "We will now proceed to find the perfect profiles for this job.\n\n"
+                        "Best regards,\n"
+                        f"{request.user}"
+                    )
+                )
                 return Response({"message":"Job approved successfully"}, status=status.HTTP_200_OK)
             
             if action == 'reject':
                 job.approval_status = 'reject'
                 job.save()
+                notification = Notifications.objects.create(
+                    sender=request.user,
+                    receiver=job.username,
+                    subject=f"Job {job.job_title} request has been rejected by {request.user}",
+                    message=(
+                        f"Dear {job.username},\n\n"
+                        f"Your request for the job '{job.job_title}' has been rejected by {request.user}.\n"
 
+                        "Best regards,\n"
+                        f"{request.user}"
+                    )
+                )
                 return Response({"message":"Job post rejected successfully"}, status=status.HTTP_200_OK)            
 
         except Exception as e:
@@ -1024,3 +1058,15 @@ class AccountantsView(APIView):
 
         except Exception as e:
             return Response({"error": f"Failed to create accountant. {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class OrganizationView(APIView):
+    permission_classes = [IsManager]
+    def get(self,request):
+        try:
+            user = request.user
+            organization = Organization.objects.get(manager=user)
+            serializer = OrganizationSerializer(organization)
+            return Response(serializer.data,status=status.HTTP_200_OK)
+        except ObjectDoesNotExist as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)

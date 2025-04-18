@@ -782,7 +782,7 @@ class BlogPost(models.Model):
 class Notifications(models.Model):
     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)
     receiver = models.ForeignKey(CustomUser, related_name='received_notifications', on_delete=models.CASCADE,null=True, blank=True)
-    subject = models.CharField(max_length=50)
+    subject = models.CharField(max_length=255)
     seen = models.BooleanField(default=False)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
