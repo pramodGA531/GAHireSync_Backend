@@ -147,3 +147,7 @@ class BlogPostAdmin(admin.ModelAdmin):
 @admin.register(JobPostEditFields)
 class JobPostEditFieldsAdmin(admin.ModelAdmin):
     list_display = ('edit_id','field_name','field_value','status')
+
+@admin.register(Notifications)
+class NotificationsAdmin(admin.ModelAdmin):
+    list_display = ('sender','receiver','seen')

@@ -120,6 +120,7 @@ urlpatterns = [
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
+    path('manager/information',OrganizationView.as_view(),name='org-info'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
     path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
     path('manager/create_accountant/', AccountantsView.as_view() , name='create-acountant' ),

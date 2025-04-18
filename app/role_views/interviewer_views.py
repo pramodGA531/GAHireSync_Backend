@@ -368,7 +368,7 @@ class PromoteCandidateView(APIView):
 
             application.next_interview.status = 'completed'
             application.next_interview.save()
-            application.round_num = round_num+1 # This is for the next Round info 
+            application.round_num = round_num+1 
             application.next_interview = None
             application.status = 'processing'
             application.save()
@@ -382,9 +382,9 @@ class PromoteCandidateView(APIView):
         f"Candidate Promotion Notice\n\n"
         f"Client: {request.user.username}\n"
         f"Position: {application.job_id.job_title}\n\n"
-        f"The candidate {customCand.username} has successfully cleared round {application.next_interview.round_num}. "
+        f"The candidate {customCand.username} has successfully cleared round {application.round_num}. "
         f"Please schedule interview {application.round_num + 1} availability of candidate and interviewer\n\n"
-        f"Link::recruiter/schedule_applications/"
+        f"link::recruiter/schedule_applications/"
     )
 )
             
@@ -396,7 +396,7 @@ class PromoteCandidateView(APIView):
     message=(
         f"Interview Progress Update\n\n"
         f"Dear {customCand.username},\n\n"
-        f"Congratulations! You have successfully cleared round {application.next_interview.round_num} "
+        f"Congratulations! You have successfully cleared round {application.round_num} "
         f"for the position of {application.job_id.job_title}.\n\n"
         f"We will be scheduling your next interview (Round {application.round_num + 1}) soon. "
         f"Our team will contact you regarding your availability.\n\n"

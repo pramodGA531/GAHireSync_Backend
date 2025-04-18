@@ -649,18 +649,17 @@ The Recruitment Team
             )
             
             notification = Notifications.objects.create(
-    sender=request.user,
-    receiver=job_post.organization.manager,  # The recruiter who submitted the profile
-    subject=f"Client has taken action on your job request for the position: {job_post.job_title}",
-    message=(
-        f" Job Post Update\n\n"
-        f"The client has reviewed and taken action on your job request for the position: **{job_post.job_title}**.\n\n"
-        f"please check"
-        f"id::{job_post.id}"  # for frontend to convert into a clickable <Link />
-        f"link::agency/postings/"
-    )
-)
-            
+                sender=request.user,
+                receiver=job_post.organization.manager,  # The recruiter who submitted the profile
+                subject=f"Client has taken action on your job request for the position: {job_post.job_title}",
+                message=(
+                    f" Job Post Update\n\n"
+                    f"The client has reviewed and taken action on your job request for the position: *{job_post.job_title}*.\n\n"
+                    f"please check"
+                    f"id::{job_post.id}"  # for frontend to convert into a clickable <Link />
+                    f"link::agency/postings/"
+                )
+            )
             return Response({"message": "Job edit request accepted successfully"}, status=status.HTTP_200_OK)
 
         except JobPostings.DoesNotExist:
@@ -703,18 +702,17 @@ The Recruitment Team
                 to_email=[manager_mail]
             )
             notification = Notifications.objects.create(
-    sender=request.user,
-    receiver=job.organization.manager,  # The recruiter who submitted the job
-    subject=f"Client has taken action on your job request for the position: {job.job_title}",
-    message=(
-        f"Job Post Update\n\n"
-        f"The client has reviewed and taken action on your job request for the position: **{job.job_title}**.\n\n"
-        f"please check"
-        f"id::{job.id}"  # for frontend to convert into a clickable <Link />
-        f"link::agency/postings/"
-    )
-)
-            
+                sender=request.user,
+                receiver=job.organization.manager,  # The recruiter who submitted the profile
+                subject=f"Client has taken action on your job request for the position: {job.job_title}",
+                message=(
+                    f" Job Post Update\n\n"
+                    f"The client has reviewed and taken action on your job request for the position: *{job.job_title}*.\n\n"
+                    f"please check"
+                    f"id::{job.id}"  # for frontend to convert into a clickable <Link />
+                    f"link::agency/postings/"
+                )
+            )
             return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
         except JobPostings.DoesNotExist:
             return Response({"error":"Edited Job not found"},status=status.HTTP_400_BAD_REQUEST)
