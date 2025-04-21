@@ -5,7 +5,6 @@ __pycache__/
 # Ignore the virtual environment
 venv/
 env/
-**/migrations/**
 resumes/
 # Ignore database files
 db.sqlite3

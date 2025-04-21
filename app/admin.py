@@ -148,10 +148,7 @@ class BlogPostAdmin(admin.ModelAdmin):
 class JobPostEditFieldsAdmin(admin.ModelAdmin):
     list_display = ('edit_id','field_name','field_value','status')
 
-# @admin.register(Notifications)
-# class NotificationsAdmin(admin.ModelAdmin):
-#     list_display = ('sender','receiver','seen')
-
-@admin.register(NotificationsModel)
+@admin.register(Notifications)
 class NotificationsAdmin(admin.ModelAdmin):
     list_display = ('sender','receiver','seen')
+

@@ -397,21 +397,12 @@ class BlogPostSerializer(serializers.ModelSerializer):
         model = BlogPost
         fields = '__all__'
         
-# class NotificationsSerializer(serializers.ModelSerializer):
-#     sender = CustomUserSerializer()
-#     receiver = CustomUserSerializer()
-
-#     class Meta:
-#         model = Notifications
-#         fields = ['id', 'sender', 'receiver', 'subject', 'message', 'created_at','seen']
-        
-        
 class NotificationsSerializer(serializers.ModelSerializer):
     sender = CustomUserSerializer()
     receiver = CustomUserSerializer()
 
     class Meta:
-        model = NotificationsModel
+        model = Notifications
         fields = ['id', 'sender', 'receiver', 'subject', 'message', 'created_at','seen']
         
         
