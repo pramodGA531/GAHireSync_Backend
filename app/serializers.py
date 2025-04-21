@@ -25,7 +25,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
 
 class OrganizationSerializer(serializers.ModelSerializer):
     recruiters = CustomUserSerializer(many=True, read_only=True)
-    manager = CustomUserSerializer(read_only=True)  # Corrected line
+    # manager = CustomUserSerializer(read_only=True)  
 
     class Meta:
         model = Organization
