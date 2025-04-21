@@ -1,7 +1,6 @@
 export DJANGO_SUPERUSER_USERNAME=admin && \
 export DJANGO_SUPERUSER_EMAIL=admin@example.com && \
-export DJANGO_SUPERUSER_PASSWORD=your_secure_password && \
-python manage.py makemigrations app && \
+export DJANGO_SUPERUSER_PASSWORD=admin && \
 python manage.py migrate && \
 python manage.py createsuperuser --noinput \
   --username "$DJANGO_SUPERUSER_USERNAME" \
