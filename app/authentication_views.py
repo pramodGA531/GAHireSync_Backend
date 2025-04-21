@@ -331,14 +331,14 @@ HireSync Support Team
             message = template.render(context)
 
             send_custom_mail( subject = 'Reset Your Password – HireSync', body=message, to_email=[email])
-            notification = Notifications.objects.create(
-    sender='GA HireSync Team',
-    receiver=request.user,
-    subject="You have requested a password reset",
-    message=(
-        "Your password has been reset. If this wasn't you, please raise a support ticket or contact the support team immediately."
-    )
-)
+#             notification = Notifications.objects.create(
+#     sender='GA HireSync Team', # here 
+#     receiver=request.user,
+#     subject="You have requested a password reset",
+#     message=(
+#         "Your password has been reset. If this wasn't you, please raise a support ticket or contact the support team immediately."
+#     )
+# )
 
             return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
 
@@ -399,14 +399,14 @@ class changePassword(APIView):
                     fail_silently=False,
                 )
                 
-                notification = Notifications.objects.create(
-    sender='GA HireSync Team',
-    receiver=request.user,
-    subject=f"Your Password Has beed Changed  ",
-    message=(
-        f"Your Password Has beed Changed "
-    )
-)
+#                 notification = Notifications.objects.create(
+#     sender='GA HireSync Team',
+#     receiver=request.user,
+#     subject=f"Your Password Has beed Changed  ",
+#     message=(
+#         f"Your Password Has beed Changed "
+#     )
+# )
                 return Response({'success': True})
             else:
                 return Response({'success': False, 'message': 'New passwords do not match.'})
