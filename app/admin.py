@@ -151,3 +151,7 @@ class JobPostEditFieldsAdmin(admin.ModelAdmin):
 # @admin.register(Notifications)
 # class NotificationsAdmin(admin.ModelAdmin):
 #     list_display = ('sender','receiver','seen')
+
+@admin.register(NotificationsModel)
+class NotificationsAdmin(admin.ModelAdmin):
+    list_display = ('sender','receiver','seen')
