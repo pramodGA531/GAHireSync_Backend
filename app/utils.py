@@ -524,6 +524,7 @@ def send_email_verification_link(user, signup, role):
 
     token = email_verification_token.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
+    print("frontend url is ", frontend_url)
 
     link = f"{frontend_url}/verify-email/{uid}/{token}/" 
 
