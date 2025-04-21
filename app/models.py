@@ -779,7 +779,19 @@ class BlogPost(models.Model):
         return self.title
 
 
-class Notifications(models.Model):
+# class Notifications(models.Model):
+#     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)
+#     receiver = models.ForeignKey(CustomUser, related_name='received_notifications', on_delete=models.CASCADE,null=True, blank=True)
+#     editor = models.CharField(max_length=50, null=True, blank=True)
+#     subject = models.CharField(max_length=255)
+#     seen = models.BooleanField(default=False)
+#     message = models.TextField()
+#     created_at = models.DateTimeField(auto_now_add=True)
+
+#     def __str__(self):
+#         return f"From {self.sender} to {self.receiver}: {self.subject}"
+
+class NotificationsModel(models.Model):
     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)
     receiver = models.ForeignKey(CustomUser, related_name='received_notifications', on_delete=models.CASCADE,null=True, blank=True)
     editor = models.CharField(max_length=50, null=True, blank=True)
