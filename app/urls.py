@@ -114,11 +114,11 @@ urlpatterns = [
     path('recruiter/all-scheduled-interviews/',AllScheduledInterviews.as_view(), name='all-scheduled-interviews' ),
     path('recruiter/get-interview-marks/', GetIntervieweRemarks.as_view(), name='get-interview-remarks'),
 
-    path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('get_invoices/',Invoices.as_view()),
     path('update_invoices/',Invoices.as_view()),
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
+    path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('manager/information',OrganizationView.as_view(),name='org-info'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
@@ -154,5 +154,6 @@ urlpatterns = [
     path('jobpost/terms/',GetJobPostTerms.as_view(),name='job-terms'),
     
     path('notifications/',GetNotifications.as_view(),name='all-notifications'),
+    path('check-notifications/', check_notifications, name='check-notifications'),
 
 ]

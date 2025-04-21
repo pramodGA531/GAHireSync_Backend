@@ -20,6 +20,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .utils import *
 from django.core.files.base import ContentFile
+from django.http import JsonResponse
 
 
 
@@ -1250,3 +1251,11 @@ class AllApplicationsForJob(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def check_notifications(request):
+    try:
+        count = Notifications.objects.count()
+        return JsonResponse({'status': 'ok', 'count': count})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
