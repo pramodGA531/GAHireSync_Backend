@@ -1067,7 +1067,6 @@ HireSync Team
         f"You have been **shortlisted** for the position of **{job_application.job_id.job_title}**.\n\n"
         f"Company: {clientCompanyDetails.name_of_organization}\n\n"
         f"Please check your dashboard for more details and next steps.\n\n"
-        f"id::{job_application.id}\n"
         f"link::candidate/applications/"  # This will be parsed by frontend into a clickable Link
     )
 )

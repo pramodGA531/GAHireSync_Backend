@@ -107,7 +107,18 @@ class ClientSignupView(APIView):
 
                         try:
                             send_email_verification_link(user = user, signup = True, role="client")
-
+                            
+#                             notification = Notifications.objects.create(
+#     sender='GA HireSync Team',
+#     receiver=user,
+#     subject="Welcome to GA HireSync – Collaborate and Grow Together!",
+#     message=(
+#         "We're thrilled to have you on board with GA HireSync! "
+#         "Start collaborating, explore top talent, and grow your business. "
+#         "If you have any questions, our support team is always here to help. "
+#         "Let’s build something great together!"
+#     )
+# )
                         except Exception as e:
                             print(str(e))
                             return Response(
@@ -164,6 +175,18 @@ class AgencySignupView(APIView):
 
                     try:
                         send_email_verification_link(user, True , "manager")
+#                         notification = Notifications.objects.create(
+#     sender='GA HireSync Team',
+#     receiver=request.user,
+#     subject="Welcome to GA HireSync – Collaborate and Grow Together!",
+#     message=(
+#         "We're thrilled to have you on board with GA HireSync! "
+#         "Start collaborating, explore top talent, and grow your business. "
+#         "If you have any questions, our support team is always here to help. "
+#         "Let’s build something great together!"
+#     )
+# )
+
                     except Exception as e:
                         print(f"Error sending verification link: {str(e)}")
 
@@ -172,6 +195,52 @@ class AgencySignupView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def put(self, request, *args, **kwargs):
+        combined_values = request.data
+        org_code = combined_values.get('org_code')
+
+        try:
+            organization = Organization.objects.get(org_code=org_code)
+        except Organization.DoesNotExist:
+            return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with transaction.atomic():
+                # Update user (manager)
+                user = organization.manager
+                user_data = {
+                    'email': combined_values.get('email', user.email),
+                    'username': combined_values.get('username', user.username),
+                    'role': CustomUser.MANAGER,
+                }
+                if combined_values.get('password'):
+                    user.set_password(combined_values.get('password'))
+
+                user_serializer = CustomUserSerializer(user, data=user_data, partial=True)
+                if user_serializer.is_valid(raise_exception=True):
+                    user_serializer.save()
+
+                # Update organization
+                org_data = {
+                    'name': combined_values.get('name', organization.name),
+                    'contact_number': combined_values.get('contact_number', organization.contact_number),
+                    'website_url': combined_values.get('website_url', organization.website_url),
+                    'gst_number': combined_values.get('gst', organization.gst_number),
+                    'company_pan': combined_values.get('company_pan', organization.company_pan),
+                    'company_address': combined_values.get('company_address', organization.company_address),
+                    'manager': user.id,
+                }
+                org_serializer = OrganizationSerializer(organization, data=org_data, partial=True)
+                if org_serializer.is_valid(raise_exception=True):
+                    org_serializer.save()
+
+                return Response({"message": "Organization and manager details updated successfully"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class LoginView(APIView):
     def post(self, request):
@@ -262,6 +331,15 @@ HireSync Support Team
             message = template.render(context)
 
             send_custom_mail( subject = 'Reset Your Password – HireSync', body=message, to_email=[email])
+            notification = Notifications.objects.create(
+    sender='GA HireSync Team',
+    receiver=request.user,
+    subject="You have requested a password reset",
+    message=(
+        "Your password has been reset. If this wasn't you, please raise a support ticket or contact the support team immediately."
+    )
+)
+
             return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
 
 class ResetPasswordAPIView(APIView):
@@ -295,6 +373,7 @@ class ResetPasswordAPIView(APIView):
                     message,
                     [user.email],
                 )
+                
                 return Response({'success': 'Password has been reset successfully.'})
             else:
                 return Response({'error': 'Invalid token.'}, status=400)
@@ -319,6 +398,15 @@ class changePassword(APIView):
                     [user.email],
                     fail_silently=False,
                 )
+                
+                notification = Notifications.objects.create(
+    sender='GA HireSync Team',
+    receiver=request.user,
+    subject=f"Your Password Has beed Changed  ",
+    message=(
+        f"Your Password Has beed Changed "
+    )
+)
                 return Response({'success': True})
             else:
                 return Response({'success': False, 'message': 'New passwords do not match.'})

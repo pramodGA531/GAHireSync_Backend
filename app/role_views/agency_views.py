@@ -429,7 +429,6 @@ class AcceptJobPostView(APIView):
             
             action = request.GET.get('action')
 
-
             try:
                 job_post = JobPostings.objects.get(id = job_id)
                 if(action == 'accept'):
@@ -998,6 +997,18 @@ class ViewSelectedCandidates(APIView):
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
+ 
+ 
+# class OrganizationView(APIView):
+#     permission_classes = [IsManager]
+#     def get(self,request):
+#         try:
+#             user = request.user
+#             organization = Organization.objects.get(manager=user)
+#             serializer = OrganizationSerializer(organization)
+#             return Response(serializer.data,status=status.HTTP_200_OK)
+#         except ObjectDoesNotExist as e:
+#             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
 class AccountantsView(APIView):
     permission_classes = [IsManager]  # Only managers can access this view
@@ -1016,12 +1027,14 @@ class AccountantsView(APIView):
 
             # Serialize the list of accountants
             serializer = AccountantsSerializer(accountants, many=True)
+           
 
             # Return the serialized data
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Organization.DoesNotExist:
             return Response({"error": "Manager does not belong to any organization"}, status=status.HTTP_404_NOT_FOUND)
+        
     def post(self, request):
         email = request.data.get("email")
         username = request.data.get("username")
