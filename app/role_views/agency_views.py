@@ -997,21 +997,8 @@ class ViewSelectedCandidates(APIView):
         except Exception as e:
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
- 
- 
-# class OrganizationView(APIView):
-#     permission_classes = [IsManager]
-#     def get(self,request):
-#         try:
-#             user = request.user
-#             organization = Organization.objects.get(manager=user)
-#             serializer = OrganizationSerializer(organization)
-#             return Response(serializer.data,status=status.HTTP_200_OK)
-#         except ObjectDoesNotExist as e:
-#             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
-
 class AccountantsView(APIView):
-    permission_classes = [IsManager]  # Only managers can access this view
+    permission_classes = [IsManager]  
 
     def get(self, request):
         try:
