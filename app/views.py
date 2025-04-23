@@ -650,6 +650,20 @@ class Invoices(APIView):
                 html = generate_invoice(context)
                 html_list.append({"invoice": invoice, "html": html})
 
+            accountants = Accountants.objects.filter(organization__manager=request.user)
+            if not accountants.exists():
+                return Response({"message": "No accountants found for this organization"}, status=status.HTTP_404_NOT_FOUND)
+            serializer = AccountantsSerializer(accountants, many=True)
+
+            if invoices:
+                invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"],"payment_verification":invoice.payment_verification} 
+                            for invoice, html in zip(invoices, html_list)]
+            else:
+                invoice_data = []
+                
+            return Response({"invoices": invoice_data, "accountants": serializer.data}, status=status.HTTP_200_OK)
+
+
         elif request.user.role == "accountant":
             accountant=Accountants.objects.get(user=request.user)
             print(accountant.organization)
@@ -668,7 +682,7 @@ class Invoices(APIView):
                             for invoice, html in zip(invoices, html_list)]
             return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
 
-        return Response({"message": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
     
     def put(self, request):
         invoice_id = request.data.get('invoice_id')

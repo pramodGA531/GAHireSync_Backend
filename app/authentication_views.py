@@ -157,7 +157,6 @@ class AgencySignupView(APIView):
                     user.set_password(combined_values.get('password'))
                     user.save()
                     
-                    
                     org_data = {
                         'name': combined_values.get('name'),
                         'org_code': combined_values.get('org_code'),
@@ -168,24 +167,17 @@ class AgencySignupView(APIView):
                         'company_address': combined_values.get('company_address'),
                         'manager': user.id,
                     }
+
+                    print(org_data, "is the organizaiton data")
                     org_serializer = OrganizationSerializer(data=org_data)
                     
                     if org_serializer.is_valid(raise_exception=True):
+                        print("serializer is valid")
                         org_serializer.save()
+                        print("but not running this line")
 
                     try:
                         send_email_verification_link(user, True , "manager")
-#                         notification = Notifications.objects.create(
-#     sender='GA HireSync Team',
-#     receiver=request.user,
-#     subject="Welcome to GA HireSync – Collaborate and Grow Together!",
-#     message=(
-#         "We're thrilled to have you on board with GA HireSync! "
-#         "Start collaborating, explore top talent, and grow your business. "
-#         "If you have any questions, our support team is always here to help. "
-#         "Let’s build something great together!"
-#     )
-# )
 
                     except Exception as e:
                         print(f"Error sending verification link: {str(e)}")
