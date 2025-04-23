@@ -38,6 +38,7 @@ urlpatterns = [
     path('organization-terms/', OrganizationTermsView.as_view(), name='organization-terms'),
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
+    path("client/information/", ClientInfo.as_view(), name="client-info"),
     path('client/dashboard/',ClientDashboard.as_view(), name='client-dashboard-details'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
@@ -80,6 +81,9 @@ urlpatterns = [
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/select-candidate/', SelectCandidate.as_view(), name= 'shortlist-candidate'),
     path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
+    path('interviewer/jobs-interviews/', JobsInterviews.as_view(), name= 'job-interviews'),
+    
+    
 
     path('fetch-skills/', JobPostSkillsView.as_view(),name='get-jobpost-skills'),
 
@@ -119,6 +123,8 @@ urlpatterns = [
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
+    path('manager/clients-data/', ClientsData.as_view(), name='get-clients-data'),
+    
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('manager/information/',OrganizationView.as_view(),name='org-info'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
@@ -132,6 +138,8 @@ urlpatterns = [
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
     path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
+    
+    
  
     path('change-password/', ChangePassword.as_view(), name='change-password'),
     

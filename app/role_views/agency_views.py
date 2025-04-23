@@ -986,8 +986,12 @@ class ViewSelectedCandidates(APIView):
                 job = candidate.application.job_id
                 candidate_json = {
                     "candidate_name" : candidate.candidate.name.username,
-                    "date_of_joining": candidate.joining_date,
+                    "joining_date": candidate.joining_date,
                     "joining_status": candidate.joining_status,
+                    "accepted_ctc":candidate.ctc,
+                    "candidate_acceptance":candidate.candidate_acceptance,
+                    "candidate_joining_status":candidate.joining_status,
+                    "actual_ctc":job.ctc,
                     "client_name": job.username.username,
                     "job_title": job.job_title,
                 }
@@ -1083,3 +1087,72 @@ class OrganizationView(APIView):
             return Response(serializer.data,status=status.HTTP_200_OK)
         except ObjectDoesNotExist as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
+        
+        
+class ClientsData(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            user = request.user
+            job_id = request.GET.get('id')
+
+            if job_id:
+                try:
+                    # Step 1: Get the specific job
+                    job = JobPostings.objects.get(id=job_id, organization__manager=user)
+
+                    # Step 2: Fetch all jobs of that client under the same manager
+                    jobs = JobPostings.objects.filter(username=job.username, organization__manager=user)
+
+                    # Step 3: Get client details only once
+                    client = ClientDetails.objects.filter(user=job.username).first()
+
+                    if not client:
+                        return Response({'error': 'Client not found for this job.'}, status=404)
+
+                    # Step 4: Serialize all the jobs
+                    jobs_data = JobPostingsSerializer(jobs, many=True).data
+
+                    # Step 5: Prepare final response
+                    data = {
+                        'client_username': client.username,
+                        'organization_name': client.name_of_organization,
+                        'contact_number': client.contact_number,
+                        'website_url': client.website_url,
+                        'gst_number': client.gst_number,
+                        'company_address': client.company_address,
+                        'jobs': jobs_data  # All jobs serialized
+                    }
+
+                    return Response(data, status=200)
+
+                except JobPostings.DoesNotExist:
+                    return Response({'error': 'Job not found or not authorized.'}, status=404)
+            else:
+                jobs = JobPostings.objects.filter(organization__manager=user)
+                data = []
+                added_clients = set()  # To track unique client usernames
+
+                for job_item in jobs:
+                    client = ClientDetails.objects.filter(user=job_item.username).first()
+                    if client and client.username not in added_clients:
+                        data.append({
+                            'job_code': job_item.jobcode,
+                            'job_title': job_item.job_title,
+                            'job_id': job_item.id,
+                            'client_username': client.username,
+                            'organization_name': client.name_of_organization,
+                            'contact_number': client.contact_number,
+                            'website_url': client.website_url,
+                            'gst_number': client.gst_number,
+                            'company_address': client.company_address,
+                        })
+                        added_clients.add(client.username)  # Mark this client as added
+
+                return Response(data, status=200)
+
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
