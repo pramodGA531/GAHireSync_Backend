@@ -282,6 +282,7 @@ class JobEditStatusAPIView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 class OrgJobEdits(APIView):
+    permission_classes = [IsManager]
     def get(self, request):
         try:
             user = request.user

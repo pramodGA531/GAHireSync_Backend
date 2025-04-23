@@ -786,6 +786,7 @@ class Notifications(models.Model):
     seen = models.BooleanField(default=False)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    category = models.CharField(max_length=30, null=True, blank=True)
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.subject}"
