@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
+from celery.schedules import crontab, schedule
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -92,24 +93,45 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+
+
+ENVIRONMENT = os.getenv('environment', 'production')
+
+if ENVIRONMENT == 'localhost':
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    EMAIL_HOST = "smtp.gmail.com"
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
+    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+    DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
 
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.getenv('DB_NAME'),
-#         'USER': os.getenv('DB_USER'),
-#         'PASSWORD': os.getenv('DB_PASSWORD'),
-#         'HOST': os.getenv('DB_HOST'),
-#         'PORT': os.getenv('DB_PORT'),
-#     }
-# }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME'),
+            'USER': os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST': os.getenv('DB_HOST'),
+            'PORT': os.getenv('DB_PORT'),
+        }
+    }
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "mail.gaconsulting.in"
+    EMAIL_PORT = 465
+    EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
+    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
+    EMAIL_USE_TLS = False
+    EMAIL_USE_SSL = True
+    DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
 
 
 # Password validation
@@ -181,33 +203,11 @@ SIMPLE_JWT = {
 } 
 
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
-DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
-
-# EMAIL_HOST = "smtp.gmail.com"
-
-# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-# EMAIL_HOST = "mail.gaconsulting.in"
-# EMAIL_PORT = 465
-# EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
-# EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
-# EMAIL_USE_TLS = False
-# EMAIL_USE_SSL = True
-# DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
-
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 # CELERY SET UP HERE 
 
-from celery.schedules import crontab, schedule
-# RMS_BACKEND/settings.py
-# Celery settings
+
 CELERY_BROKER_URL = 'amqp://localhost'  # RabbitMQ default URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
