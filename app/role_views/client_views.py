@@ -393,9 +393,10 @@ HireSync Team
 
                 self.addTermsAndConditions(job_posting)
                 
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
                     sender=request.user,
                     receiver=organization.manager,
+                    category = Notifications.CategoryChoices.CREATE_JOB,
                     subject=f"New Job Request by {request.user.username}",
                     message = (
     f"🔔 New Job Request\n\n"
@@ -527,6 +528,17 @@ class getClientJobposts(APIView):
 # Edit Requests for the Job
 
 # Edit Requests For Created Job posts
+
+class EditJobsCountView(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            notifications = Notifications.objects.filter(receiver = request.user, seen = False, category = Notifications.CategoryChoices.EDIT_JOB).count()
+            return Response({"count":notifications}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response(status=status.HTTP_400_BAD_REQUEST, errorData = (str(e)))
 class JobEditRequestsView(APIView):
     def get(self, request):
         try:
@@ -649,15 +661,16 @@ The Recruitment Team
                 to_email=[manager_mail]
             )
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
                 sender=request.user,
-                receiver=job_post.organization.manager,  # The recruiter who submitted the profile
+                receiver=job_post.organization.manager, 
+                category = Notifications.CategoryChoices.ACCEPT_JOB_EDIT,
                 subject=f"Client has taken action on your job request for the position: {job_post.job_title}",
                 message=(
                     f" Job Post Update\n\n"
                     f"The client has reviewed and taken action on your job request for the position: *{job_post.job_title}*.\n\n"
                     f"please check"
-                    f"id::{job_post.id}"  # for frontend to convert into a clickable <Link />
+                    f"id::{job_post.id}"  
                     f"link::agency/postings/"
                 )
             )
@@ -702,15 +715,16 @@ The Recruitment Team
                 body=client_email_message,
                 to_email=[manager_mail]
             )
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
                 sender=request.user,
-                receiver=job.organization.manager,  # The recruiter who submitted the profile
+                receiver=job.organization.manager, 
+                category = Notifications.CategoryChoices.ACCEPT_JOB_EDIT,
                 subject=f"Client has taken action on your job request for the position: {job.job_title}",
                 message=(
                     f" Job Post Update\n\n"
                     f"The client has reviewed and taken action on your job request for the position: *{job.job_title}*.\n\n"
                     f"please check"
-                    f"id::{job.id}"  # for frontend to convert into a clickable <Link />
+                    f"id::{job.id}"  
                     f"link::agency/postings/"
                 )
             )
@@ -826,34 +840,7 @@ class InterviewersView(APIView):
                 
                 client.interviewers.add(new_user)
 
-                subject = "Account Created on HireSync"
-                message = f"""
-Dear {username},
-
-Welcome to HireSync! Your interviewer account has been successfully created.
-
-Here are your account details:
-Username: {username}
-Email: {email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-x
-Login Link: https://gahiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-
-                send_mail(
-                    subject=subject,
-                    message=message,
-                    from_email='',
-                    recipient_list=[email],
-                    fail_silently=False,
-                )
+                send_email_verification_link(new_user, True, "interviewer", password = password)
 
                 return Response(
                     {"message": "Interviewer account created successfully, and email sent."},
@@ -955,9 +942,10 @@ class RejectApplicationView(APIView):
             job_application.next_interview = None
             job_application.save()
             clientCompanyDetails=ClientDetails.objects.get(user=request.user)
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
-    receiver=job_application.sender,  # The recruiter who submitted the profile
+    receiver=job_application.sender, 
+    category = Notifications.CategoryChoices.REJECT_CANDIDATE, 
     subject=f"Profile for {job_application.job_id.job_title} Rejected by Client",
     message=(
         f"Update:\n\n"
@@ -967,7 +955,7 @@ class RejectApplicationView(APIView):
         f"You may suggest other candidates for this role.\n\n"
         f"feedback by client: {job_application.feedback}"
         f"id::\n"
-        f"link::recruiter/postings/"  # Parsed into a clickable Link on frontend
+        f"link::recruiter/postings/" 
     )
 )
 
@@ -1019,7 +1007,7 @@ class AcceptApplicationView(APIView):
                 email =candidate_email,
             )
     
-            return candidate_profile,new_user
+            return candidate_profile,new_user, password
         else:
             raise serializers.ValidationError(user_serializer.errors)
         
@@ -1040,7 +1028,7 @@ class AcceptApplicationView(APIView):
                 job_application.status = 'processing'
                 job_application.round_num = 1
                 job_application.feedback = request.data.get('feedback')
-                candidate ,customCand= self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                candidate ,customCand, password   = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
 
                 link = f"{frontend_url}/candidate/applications"
                 message = f"""
@@ -1048,6 +1036,12 @@ class AcceptApplicationView(APIView):
 Dear {candidate.name.username},
 Great news! You have been shortlisted for the {job_application.job_id.job_title} role at {job_application.job_id.username}.
 Next steps: [Interview scheduling details]
+
+Login Credentials:
+
+email: {candidate.name.email}
+password : {password}
+
 🔗 {link}
 Good luck!
 
@@ -1059,22 +1053,24 @@ HireSync Team
                 job_application.save()
                 clientCompanyDetails=ClientDetails.objects.get(user=request.user)
                 
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
+    category = Notifications.CategoryChoices.SHORTLIST_APPLICATION,
     subject=f"Shortlisted for {job_application.job_id.job_title}",
     message=(
         f"✅ Congratulations!\n\n"
         f"You have been **shortlisted** for the position of **{job_application.job_id.job_title}**.\n\n"
         f"Company: {clientCompanyDetails.name_of_organization}\n\n"
         f"Please check your dashboard for more details and next steps.\n\n"
-        f"link::candidate/applications/"  # This will be parsed by frontend into a clickable Link
+        f"link::candidate/applications/" 
     )
 )
                 
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
     sender=request.user,
-    receiver=job_application.sender,  # Recruiter who submitted the profile
+    receiver=job_application.sender,  
+    category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     subject=f"Profile for {job_application.job_id.job_title} Accepted by Client",
     message=(
         f"✅ Great News!\n\n"
@@ -1083,15 +1079,9 @@ HireSync Team
         f"Client: {clientCompanyDetails.name_of_organization}\n\n"
         f"Schedule interview as per candidate and interviewer availability.\n\n"
         f"id::\n"
-        f"link::recruiter/schedule_applications/"  # Parsed into a clickable Link on frontend
+        f"link::recruiter/schedule_applications/"  
     )
 )
-                
-                
-                
-                
-                
-                # notificaion here 
 
             return Response({"message":"Candidate successfully selected to next round"}, status = status.HTTP_200_OK)
             
@@ -1235,49 +1225,7 @@ class ScheduledInterviewsForJobId(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-# Get all interview details
-# class ClientInterviewsView(APIView):
-#     permission_classes = [IsClient]
-#     def get(self, request):
-#         try:
-#             if request.GET.get('job_id'):
-#                 job_id = request.GET.get('job_id')
-#                 interviewer_details = InterviewerDetails.objects.filter(job_id = job_id)
-#                 rounds_list = []
-#                 for round in interviewer_details:
-#                     rounds_list.append({
-#                         "interviewer_name": round.name.username,
-#                         "interviewer_email": round.name.email,
-#                         "round_num": round.round_num,
-#                         "mode_of_interview": round.mode_of_interview,
-#                         "type_of_interview": round.type_of_interview,
-#                     })
-#                 scheduled_interviews = InterviewSchedule.objects.filter(job_id = job_id)
-#                 interviews_list = []
-#                 for interview in scheduled_interviews:
-#                     interviews_list.append({
-#                         "interviewer_name": interview.interviewer.name.username,
-#                         "round_num": interview.round_num,
-#                         "status": interview.status,
-#                         "meet_link":interview.meet_link,
-#                         "candidate_name": interview.candidate.candidate_name,
-#                         "scheduled_date": interview.scheduled_date,
-#                         "scheduled_time": f"{interview.from_time} - {interview.to_time}",
-#                         "mode_of_interview": interview.interviewer.mode_of_interview,
-#                         "type_of_interview": interview.interviewer.type_of_interview,
-#                     })
-
-#                 return Response({"scheduled_interviews": interviews_list,"interviewers": rounds_list }, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             print(str(e))
-#             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-
-
-
+        
 class ClientInterviewsView(APIView):
     permission_classes = [IsClient]
 
@@ -1287,17 +1235,13 @@ class ClientInterviewsView(APIView):
             rounds_list = []
             interviews_list = []
 
-            # 👇 if job_id is provided, filter for that job
             if job_id:
                 job_ids = [job_id]
             else:
-                # 👇 otherwise, fetch all job IDs posted by the current client
                 client = request.user
                 job_ids = JobPostings.objects.filter(username=client).values_list('id', flat=True)
 
-            # 🔁 Iterate over all job IDs
             for jid in job_ids:
-                # Fetch interviewer rounds
                 interviewer_details = InterviewerDetails.objects.filter(job_id=jid)
                 job = JobPostings.objects.get(id=jid)
                 serialized_job = JobPostingsSerializer(job).data
@@ -1311,9 +1255,7 @@ class ClientInterviewsView(APIView):
                         "type_of_interview": round.type_of_interview,
                     })
 
-                # Fetch interview schedules
                 scheduled_interviews = InterviewSchedule.objects.filter(job_id=jid)
-               # here is the JobPostingsSerializer serializer so, do that work 
                 for interview in scheduled_interviews:
                     interviews_list.append({
                         "job_id": serialized_job,
@@ -1336,8 +1278,6 @@ class ClientInterviewsView(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        
 
 class CandidatesOnHold(APIView):
     permission_classes = [IsClient]
@@ -1411,18 +1351,11 @@ class HandleSelect(APIView):
             
             customCand=CustomUser.objects.get(email=candidate.email)
             
-            # here need to send the notficiations to the recruiter ,client , candidate 
             
-            # notification moto is you have cleared all the rounds joining date and the agreed ctc,
-            
-            # 
-
-            # send email and sms notifications here
-            
-            
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
+    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     subject=f"You Have Selected for position {application.job_id.job_title}",
     message = (
     f"Dear {customCand.username},\n\n"
@@ -1434,9 +1367,10 @@ class HandleSelect(APIView):
     f"link::candidate/selected_jobs/"
 )
 )
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
-    receiver=application.sender,  # Assuming recruiter is the sender
+    receiver=application.sender, 
+    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     subject=f"Candidate {customCand.username} Selected for the Position {application.job_id.job_title}",
     message=(
         f"congrates Dear Recruiter"
@@ -2053,9 +1987,10 @@ class CandidateLeftView(APIView):
             candidate.save()
             
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=candidate.application.sender,
+    category = Notifications.CategoryChoices.CANDIDATE_LEFT,
     subject=f"Candidate {candidate.candidate.name.username} is left",
     message=(
         f"Application Update\n\n"
@@ -2064,9 +1999,10 @@ class CandidateLeftView(APIView):
         f"Reason for leaving: {candidate.left_reason}\n\n"
     )
 )           
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=candidate.application.job_id.organization.manager,
+    category = Notifications.CategoryChoices.CANDIDATE_LEFT,
     subject=f"Candidate {candidate.candidate.name.username} is left",
     message=(
         f"Application Update\n\n"
@@ -2098,9 +2034,10 @@ class CandidateJoined(APIView):
             jobs_filled_applications = JobApplication.objects.filter(job_id = candidate.application.job_id)
             jobs_filled = SelectedCandidates.objects.filter(application__in = jobs_filled_applications, joining_status = 'joined').count()
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=candidate.application.sender,
+    category = Notifications.CategoryChoices.CANDIDATE_JOINED,
     subject=f"Candidate {request.user.username} Has Successfully Joined",
     message=(
         f"Joining Confirmation\n\n"
@@ -2442,11 +2379,13 @@ class DeleteJobPost(APIView):
     permission_classes = [IsClient]
     def delete(self, request):
         try:
-            job_id = request.GET.get('job_id')
-            job_post = JobPostings.objects.get(id = job_id)
+            id = request.GET.get('id')
+            job_post = JobPostings.objects.get(id = id)  
+
             if job_post.username != request.user:
                 return Response({"error":"You are not authorized to delete this job"}, status = status.HTTP_200_OK)
-            if job_post.is_approved:
+            
+            if job_post.approval_status == 'accepted':
                 return Response({"error":"Job is approved by manager, unable to delete this job"}, status = status.HTTP_400_BAD_REQUEST)
             
             job_post.delete()
@@ -2454,7 +2393,7 @@ class DeleteJobPost(APIView):
         
         except Exception as e:
             print(str(e))  
-            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         
         
@@ -2480,4 +2419,63 @@ class DeleteJobPost(APIView):
 #             print(str(e))  
 #             return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
 
+
+class ClientAllAlerts(APIView):
+    def get(self, request):
+        try:
+            all_alerts = Notifications.objects.filter(seen=False, receiver=request.user)
+            reject_terms = 0
+            accept_terms = 0
+            accept_job = 0
+            edit_job = 0
+            reject_job = 0
+            onhold_candidate = 0
+            send_application = 0
+            select_candidate = 0
+            accepted_ctc = 0
+            candidate_accepted = 0
+            candidate_rejected = 0
+
+            for alert in all_alerts:
+                if alert.category == Notifications.CategoryChoices.REJECT_TERMS:
+                    reject_terms += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPT_TERMS:
+                    accept_terms += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPT_JOB:
+                    accept_job += 1
+                elif alert.category == Notifications.CategoryChoices.EDIT_JOB:
+                    edit_job += 1
+                elif alert.category == Notifications.CategoryChoices.REJECT_JOB:
+                    reject_job += 1
+                elif alert.category == Notifications.CategoryChoices.SEND_APPLICATION:
+                    send_application += 1
+                elif alert.category == Notifications.CategoryChoices.SELECT_CANDIDATE:
+                    select_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPTED_CTC:
+                    accepted_ctc += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_ACCEPTED:
+                    candidate_accepted += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_REJECTED:
+                    candidate_rejected += 1
+                elif alert.category == Notifications.CategoryChoices.ONHOLD_CANDIDATE:
+                    onhold_candidate +=1
+
+            data = {
+                "reject_terms": reject_terms,
+                "accept_terms": accept_terms,
+                "accept_job": accept_job,
+                "edit_job": edit_job,
+                "reject_job": reject_job,
+                "send_application": send_application,
+                "candidate_accepted": candidate_accepted,
+                "candidate_rejected": candidate_rejected,
+                "onhold_candidate": onhold_candidate,
+                "total_alerts": all_alerts.count()
+            }
+
+            return Response({"data":data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

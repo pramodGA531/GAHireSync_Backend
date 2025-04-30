@@ -168,13 +168,10 @@ class AgencySignupView(APIView):
                         'manager': user.id,
                     }
 
-                    print(org_data, "is the organizaiton data")
                     org_serializer = OrganizationSerializer(data=org_data)
                     
                     if org_serializer.is_valid(raise_exception=True):
-                        print("serializer is valid")
                         org_serializer.save()
-                        print("but not running this line")
 
                     try:
                         send_email_verification_link(user, True , "manager")

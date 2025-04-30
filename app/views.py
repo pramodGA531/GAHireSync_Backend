@@ -166,6 +166,7 @@ class NegotiateTermsView(APIView):
         if user.role == "manager":
             organization = Organization.objects.get(manager=user)
             negotiationrequests = NegotiationRequests.objects.filter(organization=organization)
+
         elif user.role == "client":
             client = ClientDetails.objects.get(user=user)
             negotiationrequests = NegotiationRequests.objects.filter(client=client)
@@ -218,12 +219,10 @@ HireSync Team
                 from_email='',
                 recipient_list=[organization.manager.email]
             )
-            print("request.user",request.user)
-            print("organization.manager it's a user of the Organization" ,organization.manager)
-            print("Notifications",Notifications)
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
                         sender=request.user,
+                        category = Notifications.CategoryChoices.NEGOTIATE_TERMS,
                         receiver=organization.manager,
                         subject="Negotiation Request",
                         message="You have received a new negotiation request.",
@@ -280,15 +279,11 @@ HireSync Team
                     message=client_email_message,
                     from_email="",
                     recipient_list=[negotiation_request.client.user.email]
-                )
-                # here i need to send the notification to from agency to the client accept notification here find the emails of the client and the agency 
-                
-                
+                )                
                 
             elif data.get('status') == "rejected":
                 negotiation_request.is_accepted = False
                 negotiation_request.save()
-
                 
                 client_email_message = f"""
 Dear {negotiation_request.client.user.first_name},
@@ -1158,7 +1153,6 @@ class GetJobPostTerms(APIView):
 class GetNotifications(APIView):
     def get(self, request):
         try:
-            # Check if the 'count' query parameter is provided
             count_param = request.query_params.get('count', None)
 
             # If count is requested, filter for unseen notifications and return the count
@@ -1177,15 +1171,11 @@ class GetNotifications(APIView):
     def put(self, request):
         try:
             notification_ids = request.data.get('notification_ids', [])
-            print("Received IDs:", notification_ids)
-            print("Request user:", request.user)
 
             notifications = Notifications.objects.filter(
                 id__in=notification_ids,
                 receiver=request.user
             )
-            print("Matching notifications:", notifications)
-            print("Query Count:", notifications.count())
 
             if notifications.exists():
                 notifications.update(seen=True)
@@ -1294,3 +1284,22 @@ class ChangePassword(APIView):
             else:
                 return Response({"error": " Old password,New password and confirm password are required"}, status=status.HTTP_400)
                                     
+class NotificationStatusChange(APIView):
+    def put(self, request):
+        try:
+            user = request.user
+            category = request.data.get('category')
+            
+            if(type(category) == list):
+                notifications = Notifications.objects.filter(receiver = user, seen = False, category__in = category)
+            else:
+                notifications = Notifications.objects.filter(receiver = user,seen = False, category = category)
+
+            for notification in notifications:
+                notification.seen = True
+                notification.save()
+            return Response({"message":"Status updated successfully"}, status = status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -500,9 +500,10 @@ class CandidateAcceptJob(APIView):
             customCand =selected_candidate.candidate.name
             application=selected_candidate.application
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=application.sender,
+    category = Notifications.CategoryChoices.CANDIDATE_ACCEPTED,
     subject=f"Hey, Recruiter Candidate Accepts the offer position {application.job_id.job_title}",
     message=(
         f"Offer Acceptance Notification\n\n"
@@ -514,9 +515,10 @@ class CandidateAcceptJob(APIView):
     )
 )
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=application.job_id.username,
+    category = Notifications.CategoryChoices.CANDIDATE_ACCEPTED,
     subject=f"Cand Accepted the offer role {application.job_id.job_title}",
     message=(
         f"Offer Acceptance Notification\n\n "
@@ -610,3 +612,40 @@ class CandidateReConfirmation(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class CandidateAllAlerts(APIView):
+    def get(self, request):
+        try:
+            all_alerts = Notifications.objects.filter(seen=False, receiver=request.user)
+            schedule_interview = 0
+            promote_candidate = 0
+            reject_candidate = 0
+            select_candidate = 0
+            accepted_ctc = 0
+
+            for alert in all_alerts:
+                if alert.category == Notifications.CategoryChoices.SCHEDULE_INTERVIEW:
+                    schedule_interview += 1
+                elif alert.category == Notifications.CategoryChoices.PROMOTE_CANDIDATE:
+                    promote_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.REJECT_CANDIDATE:
+                    reject_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.SELECT_CANDIDATE:
+                    select_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPTED_CTC:
+                    accepted_ctc += 1
+
+            data = {
+                "schedule_interview": schedule_interview,
+                "promote_candidate": promote_candidate,
+                "reject_candidate": reject_candidate,
+                "select_candidate": select_candidate,
+                "accepted_ctc": accepted_ctc,
+                "total_alerts": all_alerts.count()
+            }
+
+            return Response({"data":data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

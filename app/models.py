@@ -780,13 +780,42 @@ class BlogPost(models.Model):
 
 
 class Notifications(models.Model):
+
+    class CategoryChoices(models.TextChoices):
+        NEGOTIATE_TERMS = 'negotiated_terms','NegotiatedTerms'                  #manager
+        REJECT_TERMS = 'reject_terms','RejectTerms'                             #client
+        ACCEPT_TERMS = 'accept_terms', 'AcceptTerms'                            #client
+        CREATE_JOB = 'create_job','CreateJob'                                   #manager
+        ASSIGN_INTERVIEWER = 'assign_interviewer', 'AssignInterviewer'          #interviewer
+        ACCEPT_JOB = 'accept_job','AcceptJob'                                   #client
+        EDIT_JOB = 'edit_job','EditJob'                                         #client
+        ACCEPT_JOB_EDIT = 'accept_job_edit', 'AcceptJobEdit'                    #manager
+        REJECT_JOB_EDIT = 'reject_job_edit', 'RejectJobEdit'                    #manager
+        PARTIAL_EDIT = 'partial_job_edit', "PartialJobEdit"                     #manager
+        REJECT_JOB = 'reject_job','RejectJob'                                   #client
+        ASSIGN_JOB = 'assign_job', 'AssignJob'                                  #recruiter
+        SEND_APPLICATION = 'send_application','SendApplication'                 #client
+        SHORTLIST_APPLICATION = 'shortlist_application','ShortlistApplication'  #recruiter
+        SCHEDULE_INTERVIEW = 'schedule_interview','ScheduleInterview'           #interviewer, candidate
+        PROMOTE_CANDIDATE = 'promote_candidate', 'PromoteCandidate'             #candidate, recruiter
+        REJECT_CANDIDATE = 'reject_candidate', 'RejectCandidate'                #candidate, recruiter
+        ONHOLD_CANDIDATE = 'onhold_candidate', 'OnHoldCandidate'                #client
+        SELECT_CANDIDATE =  'select_candidate', 'SelectCandidate'               #client, recruiter
+        ACCEPTED_CTC = 'accepted_ctc', 'AcceptedCTC'                            #candidate, recruiter
+        CANDIDATE_ACCEPTED = 'candidate_accepted', 'CandidateAccepted'          #client, recruiter
+        CANDIDATE_REJECTED = 'candidate_rejected', 'CandidateRejected'          #client, recruiter
+        CANDIDATE_LEFT = 'candidate_left', 'CandidateLeft'                      #recruiter, manager  
+        CANDIDATE_JOINED = 'candidate_joined', 'CandidateJoined'                #recruiter, manager
+
+ 
     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)
     receiver = models.ForeignKey(CustomUser, related_name='received_notifications', on_delete=models.CASCADE,null=True, blank=True)
     subject = models.CharField(max_length=255)
     seen = models.BooleanField(default=False)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-    category = models.CharField(max_length=30, null=True, blank=True)
+    category = models.CharField(max_length=60, choices=CategoryChoices.choices, null=True, blank=True)
+
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.subject}"

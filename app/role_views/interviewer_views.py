@@ -374,10 +374,11 @@ class PromoteCandidateView(APIView):
             application.save()
             customCand=CustomUser.objects.get(email=candidate.email)
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
+    category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     receiver=application.sender,
-    subject=f"Candidate {customCand.username} has been shortlisted for the role {application.job_id.job_title}",
+    subject=f"Candidate {customCand.username} has been qualified for the next round {application.job_id.job_title}",
     message=(
         f"Candidate Promotion Notice\n\n"
         f"Client: {request.user.username}\n"
@@ -389,9 +390,10 @@ class PromoteCandidateView(APIView):
 )
             
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
+    category = Notifications.CategoryChoices.PROMOTE_CANDIDATE,
     subject=f"Congratulations {customCand.username}! You have qualified for the next round for the role {application.job_id.job_title}",
     message=(
         f"Interview Progress Update\n\n"
@@ -442,8 +444,9 @@ class RejectCandidate(APIView):
             
             customCand=CustomUser.objects.get(email=candidate.email)
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
                     sender=request.user,
+                    category = Notifications.CategoryChoices.REJECT_CANDIDATE,
                     receiver=application.sender,
                     subject=f"Candidate {customCand.username} is rejected for the role {application.job_id.job_title}",
                     message = (
@@ -457,9 +460,10 @@ class RejectCandidate(APIView):
 )
 )
             
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
+    category = Notifications.CategoryChoices.REJECT_CANDIDATE,
     subject=f"Update on your application for the role {application.job_id.job_title}",
     message=(
         f"Application Update\n\n"
@@ -474,7 +478,7 @@ class RejectCandidate(APIView):
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
 
-# Directly shortlist the candidate and send the notification to the client, recruiter
+
 class SelectCandidate(APIView):
     permission_classes = [IsInterviewer]
 
@@ -576,9 +580,10 @@ HireSync.
                 application.save()
                 customCand=CustomUser.objects.get(email=candidate.email)
                 
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
+    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     subject=f"Update on your application for the role {application.job_id.job_title}",
     message=(
         f"Application Update\n\n"
@@ -591,9 +596,10 @@ HireSync.
         f"Best wishes,\n"
     )
 )
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
     sender=request.user,
     receiver=application.job_id.username,
+    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     subject=f"Profile cleared all interviews for {application.job_id.job_title} — Final Confirmation Needed",
     message=(
         f"Application Update\n\n"
@@ -605,8 +611,9 @@ HireSync.
     )
 )           
                 
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
     sender=request.user,
+    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     receiver=application.sender,
     subject=f"Candidate {customCand.username} has cleared all interviews for the role {application.job_id.job_title}",
     message=(
@@ -628,6 +635,27 @@ HireSync.
                     return self.sendAlert(application.job_id.id)
 
             return Response({"message":"Candidate selected"},status = status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+
+class InterviewerAllAlerts(APIView):
+    def get(self, request):
+        try:
+            all_notifications = Notifications.objects.filter(seen = False, receiver = request.user)
+            new_jobs = 0 
+            scheduled_interviews = 0
+            for notification in all_notifications:
+                if notification.category == 'assign_interviewer':
+                    new_jobs+=1
+                else:
+                    scheduled_interviews+=1
+
+            data = {
+                "new_jobs":new_jobs,
+                "scheduled_interviews":scheduled_interviews
+            }
+            return Response({"data":data}, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)

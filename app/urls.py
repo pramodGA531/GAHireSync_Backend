@@ -40,6 +40,7 @@ urlpatterns = [
 
     path('client/dashboard/',ClientDashboard.as_view(), name='client-dashboard-details'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
+    path('client/edit-job-count/', EditJobsCountView.as_view(), name='count-of-number-of-edit-requests'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
     path('client/get-resumes/',GetResumeView.as_view(),name = 'get-resumes'),
     path('client/reject-application/',RejectApplicationView.as_view(), name ='reject-application'),
@@ -68,6 +69,7 @@ urlpatterns = [
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
     path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
+    path('client/all-alerts/', ClientAllAlerts.as_view(), name='client-all-alerts'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
@@ -80,6 +82,7 @@ urlpatterns = [
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/select-candidate/', SelectCandidate.as_view(), name= 'shortlist-candidate'),
     path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
+    path('interviewer/all-alerts/', InterviewerAllAlerts.as_view(), name='interviewer-all-alerts'),
 
     path('fetch-skills/', JobPostSkillsView.as_view(),name='get-jobpost-skills'),
 
@@ -96,6 +99,7 @@ urlpatterns = [
     path('candidate/selected-jobs/', SelectedJobsCandidate.as_view(), name = 'list-of-selected-jobs'),
     path('candidate/handle-accepted/', CandidateAcceptJob.as_view(), name='handle-select'),
     path('candidate/handle-rejected/', CandidateRejectJob.as_view(), name='handle-reject'),
+    path('candidate/all-alerts/', CandidateAllAlerts.as_view(), name='candidate-all-alerts'),
 
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
     path('rec-job-summary/', RecSummery.as_view(), name='rec-job-posting'),
@@ -105,6 +109,7 @@ urlpatterns = [
     
 
     path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
+    path('recruiter/all-alerts/', RecruiterAllAlerts.as_view(), name='recruiter-all-alerts'),
     path('recruiter/schedule_interview/pending_application/', ScheduleInterview.as_view(), name='schedule-interviews'),
     path('recruiter/candidate-selected-jobs/', ReConfirmResumes.as_view(), name = 'list-of-cadidate-selected-jobs'),
     path('recruiter/reconfirmation-accept/', AcceptReconfirmResumes.as_view(), name='handle-select'),
@@ -119,6 +124,7 @@ urlpatterns = [
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
+    path('manager/all-alerts/', ManagerAllAlerts.as_view(), name='manager-all-alerts'),
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('manager/information/',OrganizationView.as_view(),name='org-info'),
     path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
@@ -157,5 +163,6 @@ urlpatterns = [
     
     path('notifications/',GetNotifications.as_view(),name='all-notifications'),
     path('check-notifications/', check_notifications, name='check-notifications'),
+    path('update-notification-seen/',NotificationStatusChange.as_view(), name='notification-viewed' )
 
 ]

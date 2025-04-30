@@ -170,8 +170,9 @@ HireSync Team
 """ 
                 send_custom_mail(f"New Candidate Submitted – {job.job_title}",message, {job.username.email})
                 
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
     sender=request.user,
+    category = Notifications.CategoryChoices.SEND_APPLICATION,
     receiver=job.username,
     subject=f"Resumes Sent for the Role: {job.job_title}",
     message=(
@@ -384,9 +385,10 @@ class ScheduleInterview(APIView):
             ClientDetail=ClientDetails.objects.get(user=application.job_id.username)
                 
             customCand=CustomUser.objects.get(email=application.resume.candidate_email)
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
+    category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     subject=f"Interview Scheduled for {application.job_id.job_title} ",
     message = (
     f"Interview Scheduled\n\n"
@@ -399,9 +401,10 @@ class ScheduleInterview(APIView):
     f"Please check the details here: link::candidate/upcoming_interviews/"
 )
 )
-            notification = Notifications.objects.create(
+            Notifications.objects.create(
     sender=request.user,
-    receiver=interviewer.name,  # Assuming this is the User object of the interviewer
+    receiver=interviewer.name, 
+    category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     subject=f"Interview Scheduled with {customCand.username}",
     message=(
         f"Interview Assignment\n\n"
@@ -763,5 +766,63 @@ class RecSummaryMetrics(APIView):
             "joined_candidates_count": joined_candidates_count
         })
 
+
+class RecruiterAllAlerts(APIView):
+    def get(self, request):
+        try:
+            all_alerts = Notifications.objects.filter(seen=False, receiver=request.user)
+            assign_job = 0
+            shortlist_candidate = 0
+            promote_candidate = 0
+            reject_candidate = 0
+            select_candidate = 0
+            join_candidate = 0
+            accepted_ctc = 0
+            candidate_accepted = 0
+            candidate_rejected = 0
+            candidate_left = 0
+            schedule_interview = 0
+
+            for alert in all_alerts:
+                if alert.category == Notifications.CategoryChoices.ASSIGN_JOB:
+                    assign_job += 1
+                elif alert.category == Notifications.CategoryChoices.SHORTLIST_APPLICATION:
+                    shortlist_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.PROMOTE_CANDIDATE:
+                    promote_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.SCHEDULE_INTERVIEW:
+                    schedule_interview += 1
+                elif alert.category == Notifications.CategoryChoices.REJECT_CANDIDATE:
+                    reject_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.SELECT_CANDIDATE:
+                    select_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_JOINED:
+                    join_candidate += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPTED_CTC:
+                    accepted_ctc += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_ACCEPTED:
+                    candidate_accepted += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_REJECTED:
+                    candidate_rejected += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_LEFT:
+                    candidate_left += 1
+
+            data = {
+                "assign_job": assign_job,
+                "shortlist_candidate": shortlist_candidate,
+                "promote_candidate": promote_candidate,
+                "reject_candidate": reject_candidate,
+                "select_candidate": select_candidate,
+                "join_candidate": join_candidate,
+                "accepted_ctc": accepted_ctc,
+                "candidate_accepted": candidate_accepted,
+                "candidate_rejected": candidate_rejected,
+                "candidate_left": candidate_left,
+                "schedule_interview": schedule_interview,
+                "total_alerts": all_alerts.count()
+            }
+
+            return Response({"data":data}, status=status.HTTP_200_OK)
         
-        
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
