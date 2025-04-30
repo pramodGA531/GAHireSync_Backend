@@ -206,8 +206,10 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 # CELERY SET UP HERE 
 
 from celery.schedules import crontab, schedule
+
 # RMS_BACKEND/settings.py
 # Celery settings
+
 CELERY_BROKER_URL = 'amqp://localhost'  # RabbitMQ default URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -218,6 +220,7 @@ CELERY_TIMEZONE = 'Asia/Kolkata'  # Set time zone to India Standard Time (IST)
 # Optional: set up periodic task schedule using Celery beat (we will do this in tasks.py)
 
 CELERY_BEAT_SCHEDULE = {
+    
     # 'run-task-every-10-seconds': {
     #     'task': 'app.tasks.my_function',
     #     'schedule': timedelta(seconds=10),  
@@ -226,16 +229,18 @@ CELERY_BEAT_SCHEDULE = {
     #     'task': 'app.tasks.invoice_generated',
     #     'schedule': crontab(minute=38, hour=16), # here need to add the data not only the time 
     # },
+    
     'daily_tasks':{
         'task': 'app.tasks.daily_tasks_runner',
         # 'schedule':timedelta(seconds=30),
         'schedule':crontab(minute=43, hour=10), # set up celery cmds in the production 
     }
+    
 }
 
 
-#DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520
+# This is for the to maximize the size of the request Header 
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520 
 
 
 
