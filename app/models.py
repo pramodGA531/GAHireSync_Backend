@@ -126,6 +126,7 @@ class ClientDetails(models.Model):
         return self.name_of_organization
 
 
+
 # Job Postings Model
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
@@ -222,7 +223,7 @@ class JobPostEditFields(models.Model):
 
     edit_id = models.ForeignKey(JobPostingsEditedVersion, on_delete= models.CASCADE)
     field_name = models.CharField(max_length=50)
-    field_value = models.CharField(max_length=100)
+    field_value = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 
     def clean(self):
@@ -738,7 +739,7 @@ class Tickets(models.Model):
 
     raised_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_raised")
     category = models.CharField(max_length=50)  
-    description = models.TextField()
+    description = models.TextField(default='')
     assigned_to = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="tickets_assigned", null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')

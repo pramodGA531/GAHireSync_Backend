@@ -69,6 +69,10 @@ urlpatterns = [
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
     path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
+    path('client/orgs-data/', OrgsData.as_view(), name='orgs-data'),
+    
+    
+
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
@@ -122,6 +126,7 @@ urlpatterns = [
     path('update_invoices/',Invoices.as_view()),
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
+    path('manager/clients-data/', ClientsData.as_view(), name='get-invoices'),
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('manager/clients-data/', ClientsData.as_view(), name='get-clients-data'),
     
