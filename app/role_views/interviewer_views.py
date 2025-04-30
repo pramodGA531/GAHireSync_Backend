@@ -583,7 +583,7 @@ HireSync.
                 Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
-    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
+    category = Notifications.CategoryChoices.ONHOLD_CANDIDATE,
     subject=f"Update on your application for the role {application.job_id.job_title}",
     message=(
         f"Application Update\n\n"

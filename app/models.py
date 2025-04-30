@@ -798,7 +798,7 @@ class Notifications(models.Model):
         SHORTLIST_APPLICATION = 'shortlist_application','ShortlistApplication'  #recruiter
         SCHEDULE_INTERVIEW = 'schedule_interview','ScheduleInterview'           #interviewer, candidate
         PROMOTE_CANDIDATE = 'promote_candidate', 'PromoteCandidate'             #candidate, recruiter
-        REJECT_CANDIDATE = 'reject_candidate', 'RejectCandidate'                #candidate, recruiter
+        REJECT_CANDIDATE = 'reject_candidate', 'RejectCandidate'                #candidate, recruite    r
         ONHOLD_CANDIDATE = 'onhold_candidate', 'OnHoldCandidate'                #client
         SELECT_CANDIDATE =  'select_candidate', 'SelectCandidate'               #client, recruiter
         ACCEPTED_CTC = 'accepted_ctc', 'AcceptedCTC'                            #candidate, recruiter

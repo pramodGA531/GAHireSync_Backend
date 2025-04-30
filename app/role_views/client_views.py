@@ -1024,6 +1024,9 @@ class AcceptApplicationView(APIView):
             except JobApplication.DoesNotExist:
                 return Response({"error":"There is no application with that id"}, status=status.HTTP_400_BAD_REQUEST)
             
+            client = ClientDetails.objects.get(user = request.user)
+            company_name = client.name_of_organization
+
             with transaction.atomic():
                 job_application.status = 'processing'
                 job_application.round_num = 1
@@ -1034,7 +1037,7 @@ class AcceptApplicationView(APIView):
                 message = f"""
 
 Dear {candidate.name.username},
-Great news! You have been shortlisted for the {job_application.job_id.job_title} role at {job_application.job_id.username}.
+Great news! You have been shortlisted for the {job_application.job_id.job_title} role at {company_name}.
 Next steps: [Interview scheduling details]
 
 Login Credentials:
