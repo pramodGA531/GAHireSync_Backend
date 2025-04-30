@@ -25,11 +25,11 @@ class CustomUserSerializer(serializers.ModelSerializer):
 
 class OrganizationSerializer(serializers.ModelSerializer):
     recruiters = CustomUserSerializer(many=True, read_only=True)
-    manager = CustomUserSerializer(read_only=True)  # Corrected line
+    # manager = CustomUserSerializer(queryset=CustomUser.objects.all())  
 
     class Meta:
         model = Organization
-        exclude = ['gst_number']
+        exclude = ['gst_number', 'company_pan']
         
 
 

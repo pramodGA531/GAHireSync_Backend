@@ -483,7 +483,8 @@ class getClientJobposts(APIView):
                     job_json = {
                         "job_id": job.id,
                         "job_title": job.job_title,
-                        "created_at": job.created_at
+                        "created_at": job.created_at,
+                        "job_code": job.jobcode
                     }
                     jobs_list.append(job_json)
                 return Response(jobs_list, status=status.HTTP_200_OK)
