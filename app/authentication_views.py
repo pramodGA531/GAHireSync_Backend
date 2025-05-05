@@ -108,17 +108,6 @@ class ClientSignupView(APIView):
                         try:
                             send_email_verification_link(user = user, signup = True, role="client")
                             
-#                             notification = Notifications.objects.create(
-#     sender='GA HireSync Team',
-#     receiver=user,
-#     subject="Welcome to GA HireSync – Collaborate and Grow Together!",
-#     message=(
-#         "We're thrilled to have you on board with GA HireSync! "
-#         "Start collaborating, explore top talent, and grow your business. "
-#         "If you have any questions, our support team is always here to help. "
-#         "Let’s build something great together!"
-#     )
-# )
                         except Exception as e:
                             print(str(e))
                             return Response(
@@ -130,6 +119,101 @@ class ClientSignupView(APIView):
         
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class ClientInfo(APIView):
+    
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        try:
+            request_user = request.user  # Correct variable naming
+
+            user = CustomUser.objects.get(id=request_user.id)  # Correct lookup: id=request_user.i
+            client_details = ClientDetails.objects.get(user=user)
+            user_serializer = CustomUserSerializer(user)
+            client_serializer = ClientDetailsSerializer(client_details)
+            combined_data = {
+                "user": user_serializer.data,
+                "client_details": client_serializer.data
+            }
+
+            return Response(combined_data, status=status.HTTP_200_OK)
+
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        except ClientDetails.DoesNotExist:
+            return Response({"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    def put(self, request, *args, **kwargs):
+        combined_values = request.data
+        requestUser=request.user
+        try:
+            with transaction.atomic():
+                user_id = combined_values.get('user_id')
+                user = get_object_or_404(CustomUser, id=requestUser.id)
+
+                # Update user fields
+                user_serializer = CustomUserSerializer(
+                    user,
+                    data={
+                        'email': combined_values.get('email', user.email),
+                        'username': combined_values.get('username', user.username),
+                        'role': CustomUser.CLIENT,
+                        'credit': user.credit,  # Keeping existing credit unless you want to change
+                    },
+                    partial=True
+                )
+
+                if user_serializer.is_valid(raise_exception=True):
+                    user = user_serializer.save()
+
+                    # Update password if provided
+                    password = combined_values.get('password')
+                    if password:
+                        user.set_password(password)
+                        user.save()
+
+                # Update Client Details
+                client_details = get_object_or_404(ClientDetails, user=user)
+
+                client_data = {
+                    'username': user.username,
+                    'user': user.id,
+                    'name_of_organization': combined_values.get('name_of_organization', client_details.name_of_organization),
+                    'designation': combined_values.get('designation', client_details.designation),
+                    'contact_number': combined_values.get('contact_number', client_details.contact_number),
+                    'website_url': combined_values.get('website_url', client_details.website_url),
+                    'gst_number': combined_values.get('gst', client_details.gst_number),
+                    'company_pan': combined_values.get('company_pan', client_details.company_pan),
+                    'company_address': combined_values.get('company_address', client_details.company_address)
+                }
+
+                client_serializer = ClientDetailsSerializer(
+                    client_details,
+                    data=client_data,
+                    partial=True
+                )
+
+                if client_serializer.is_valid(raise_exception=True):
+                    client_serializer.save()
+
+                return Response({
+                    "message": "User and client details updated successfully",
+                    "updated_user": user_serializer.data,
+                    "updated_client": client_serializer.data
+                }, status=status.HTTP_200_OK)
+
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        except ClientDetails.DoesNotExist:
+            return Response({"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(str(e))  # Log the error for debugging
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
 class AgencySignupView(APIView):
     """
@@ -168,9 +252,7 @@ class AgencySignupView(APIView):
                         'company_address': combined_values.get('company_address'),
                         'manager': user.id,
                     }
-
-                    print(org_data, " is the organization data")
-
+                    
                     org_serializer = OrganizationSerializer(data=org_data)
                     
                     if org_serializer.is_valid(raise_exception=True):
@@ -321,15 +403,7 @@ HireSync Support Team
             message = template.render(context)
 
             send_custom_mail( subject = 'Reset Your Password – HireSync', body=message, to_email=[email])
-#             notification = Notifications.objects.create(
-#     sender='GA HireSync Team', # here 
-#     receiver=request.user,
-#     subject="You have requested a password reset",
-#     message=(
-#         "Your password has been reset. If this wasn't you, please raise a support ticket or contact the support team immediately."
-#     )
-# )
-
+            
             return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
 
 class ResetPasswordAPIView(APIView):

@@ -38,6 +38,7 @@ urlpatterns = [
     path('organization-terms/', OrganizationTermsView.as_view(), name='organization-terms'),
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
+    path("client/information/", ClientInfo.as_view(), name="client-info"),
     path('client/dashboard/',ClientDashboard.as_view(), name='client-dashboard-details'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
     path('client/edit-job-count/', EditJobsCountView.as_view(), name='count-of-number-of-edit-requests'),
@@ -69,6 +70,10 @@ urlpatterns = [
     path('client/selected-candidates/', SelectedCandidatesView.as_view(), name='candidates-selected'),
     path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
+    path('client/orgs-data/', OrgsData.as_view(), name='orgs-data'),
+    
+    
+
     path('client/all-alerts/', ClientAllAlerts.as_view(), name='client-all-alerts'),
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
@@ -82,7 +87,6 @@ urlpatterns = [
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/select-candidate/', SelectCandidate.as_view(), name= 'shortlist-candidate'),
     path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
-    path('interviewer/all-alerts/', InterviewerAllAlerts.as_view(), name='interviewer-all-alerts'),
 
     path('fetch-skills/', JobPostSkillsView.as_view(),name='get-jobpost-skills'),
 
@@ -124,7 +128,10 @@ urlpatterns = [
     path('update_invoices/',Invoices.as_view()),
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
+    path('manager/clients-data/', ClientsData.as_view(), name='get-invoices'),
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
+    path('manager/clients-data/', ClientsData.as_view(), name='get-clients-data'),
+    
     path('manager/all-alerts/', ManagerAllAlerts.as_view(), name='manager-all-alerts'),
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('manager/information/',OrganizationView.as_view(),name='org-info'),
@@ -139,6 +146,8 @@ urlpatterns = [
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
     path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
+    
+    
  
     path('change-password/', ChangePassword.as_view(), name='change-password'),
     

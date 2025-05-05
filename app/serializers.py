@@ -69,6 +69,7 @@ class NegotiationSerializer(serializers.ModelSerializer):
         fields = '__all__' 
 
 class InterviewerDetailsSerializer(serializers.ModelSerializer):
+    
     name = CustomUserSerializer()
     class Meta:
         model = InterviewerDetails
@@ -310,7 +311,7 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
     rctr = CustomUserSerializer(many=True)
     job_id=JobPostingsSerializer()
     class Meta:
-        model = InterviewSchedule
+        model = InterviewSchedule # JobPostingsSerializer
         fields = "__all__"
 
 class CandidateCertificateSerializer(serializers.ModelSerializer):

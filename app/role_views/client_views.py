@@ -2069,7 +2069,6 @@ class CandidateLeftView(APIView):
 class CandidateJoined(APIView):
     permission_classes = [IsClient]
     def post(self, request):
-        print("Entered")
         try:
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
@@ -2087,7 +2086,7 @@ class CandidateJoined(APIView):
     subject=f"Candidate {request.user.username} Has Successfully Joined",
     message=(
         f"Joining Confirmation\n\n"
-        f"We are pleased to inform you that the candidate {request.user.username} "
+        f"We are pleased to inform you that the candidate {candidate.candidate.name.username} "
         f"has successfully joined for the position of {candidate.application.job_id.job_title}.\n\n"
     )
 )
@@ -2439,9 +2438,62 @@ class DeleteJobPost(APIView):
         
         except Exception as e:
             print(str(e))  
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-        
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class OrgsData(APIView):
+    permission_classes = [IsClient]
+
+    def get(self, request):
+        try:
+            user = request.user
+            job_id = request.GET.get('id')
+
+            if job_id:
+                try:
+                    job = JobPostings.objects.get(id=job_id, username=user)
+                    jobs = JobPostings.objects.filter(username=user, organization__manager=job.organization.manager)
+                    # fetch the organizations details Organization.objects.filter()
+                    org = Organization.objects.filter(manager=job.organization.manager).first()
+                    if not org:
+                        return Response({'error': 'Organization not found for this job.'}, status=404)
+                    jobs_data = JobPostingsSerializer(jobs, many=True).data
+                    data = {
+                        'manager_username': org.manager.username,
+                        'organization_name': org.name,
+                        'contact_number': org.contact_number,
+                        'website_url': org.website_url,
+                        'gst_number': org.gst_number,
+                        'company_address': org.company_address,
+                        'jobs': jobs_data 
+                    }
+                    return Response(data, status=200)
+                except JobPostings.DoesNotExist:
+                    return Response({'error': 'Job not found or not authorized.'}, status=404)
+            else:
+                jobs = JobPostings.objects.filter(username=user)
+                data = []
+    
+                for job_item in jobs:
+                    org = Organization.objects.filter(manager=job_item.organization.manager).first()
+                    job_serialized = JobPostingsSerializer(job_item).data
+    
+                    if org:
+                        data.append({
+                            'job_details': job_serialized,
+                            'manager_username': org.manager.username,
+                            'organization_name': org.name,
+                            'contact_number': org.contact_number,
+                            'website_url': org.website_url,
+                            'gst_number': org.gst_number,
+                            'company_address': org.company_address,
+                        })
+    
+                return Response(data, status=200)
+    
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+    
         
 # class AllJobPosts(APIView):
 #     permission_classes = [IsClient]

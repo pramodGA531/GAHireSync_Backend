@@ -463,11 +463,16 @@ class SelectedJobsCandidate(APIView):
             selected_jobs_list = []
             for selected_job in selected_jobs:
                 job = selected_job.application.job_id
+                companyDetail=ClientDetails.objects.get(user=job.username)
                 details_json = {
                     "job_title": job.job_title,
-                    "job_description": job.job_description,
+                    "job_description": job.job_description,# i need company name , agency code other_benefits,name_of_organization
+                    "company":companyDetail.name_of_organization,
+                    "org_code":job.organization.org_code,
                     "job_ctc": job.ctc,
+                    "joining_status":selected_job.joining_status,
                     "agreed_ctc": selected_job.ctc,
+                    "other_benfits":selected_job.other_benefits,
                     "joining_date": selected_job.joining_date,
                     "selected_candidate_id": selected_job.id,
                     "candidate_acceptance": selected_job.candidate_acceptance,

@@ -381,13 +381,13 @@ class PromoteCandidateView(APIView):
     sender=request.user,
     category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     receiver=application.sender,
-    subject=f"Candidate {customCand.username} has been qualified for the next round {application.job_id.job_title}",
+    subject=f"Candidate {customCand.username} has been cleared interview {application.round_num-1} for the role {application.job_id.job_title}",
     message=(
         f"Candidate Promotion Notice\n\n"
         f"Client: {request.user.username}\n"
         f"Position: {application.job_id.job_title}\n\n"
-        f"The candidate {customCand.username} has successfully cleared round {application.round_num}. "
-        f"Please schedule interview {application.round_num + 1} availability of candidate and interviewer\n\n"
+        f"The candidate {customCand.username} has successfully cleared round {application.round_num-1}. "
+        f"Please schedule interview {application.round_num} availability of candidate and interviewer\n\n"
         f"link::recruiter/schedule_applications/"
     )
 )
@@ -401,9 +401,9 @@ class PromoteCandidateView(APIView):
     message=(
         f"Interview Progress Update\n\n"
         f"Dear {customCand.username},\n\n"
-        f"Congratulations! You have successfully cleared round {application.round_num} "
+        f"Congratulations! You have successfully cleared round {application.round_num-1} "
         f"for the position of {application.job_id.job_title}.\n\n"
-        f"We will be scheduling your next interview (Round {application.round_num + 1}) soon. "
+        f"We will be scheduling your next interview (Round {application.round_num}) soon. "
         f"Our team will contact you regarding your availability.\n\n"
         f"Stay tuned!\n\n"
     )
@@ -663,3 +663,50 @@ class InterviewerAllAlerts(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+
+
+class JobsInterviews(APIView):
+    permission_classes = [IsInterviewer]
+
+    def get(self, request):
+        user = request.user
+        interviews = InterviewerDetails.objects.filter(name=user)
+
+        data = []
+        for interview in interviews:
+            # Try to fetch the InterviewSchedule record
+            interview_schedule = InterviewSchedule.objects.filter(
+                job_id=interview.job_id,
+                interviewer=interview
+            ).first()
+
+            # Common InterviewerDetails data
+            interview_data = {
+                "job_code": interview.job_id.jobcode if interview.job_id else None,
+                "job_title": interview.job_id.job_title if interview.job_id else None,
+                "round_num": interview.round_num,
+                "mode_of_interview": interview.mode_of_interview,
+                "type_of_interview": interview.type_of_interview,
+            }
+
+            if interview_schedule:
+                # If schedule exists, add schedule info
+                interview_data.update({
+                    "scheduled": True,
+                    "scheduled_date": interview_schedule.scheduled_date,
+                    "from_time": interview_schedule.from_time,
+                    "to_time": interview_schedule.to_time,
+                    "meet_link": interview_schedule.meet_link,
+                    "status": interview_schedule.status,
+                })
+            else:
+                # If no schedule exists
+                interview_data.update({
+                    "scheduled": False,
+                    "message": "Not scheduled yet"
+                })
+
+            data.append(interview_data)
+
+        return Response(data, status=200)
