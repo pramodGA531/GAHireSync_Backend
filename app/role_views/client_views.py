@@ -260,6 +260,18 @@ class JobPostingView(APIView):
             
         return Response({"message": "Job post terms added successfully", "terms_id": job_post_terms.id}, status=status.HTTP_201_CREATED)
         
+    def generate_unique_jobcode(self, user):
+        try:
+            job_count = JobPostings.objects.filter(username=user).count()
+
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+
+            jobcode = f"JOB-{user.username.upper()}-{timestamp}-{job_count + 1:03d}"
+            return jobcode
+
+        except Exception as e:
+            print(str(e))
+            return None
 
     def post(self, request):
         data = request.data
@@ -272,15 +284,11 @@ class JobPostingView(APIView):
         if not organization:
             return Response({"error": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
         
+        generated_job_code = self.generate_unique_jobcode(request.user)
 
-        job_code = data.get('job_code')
-        if not job_code:
-            return Response({"error":"Please send us the jobcode"}, status=status.HTTP_400_BAD_REQUEST)
-
-        job_postings = JobPostings.objects.filter(jobcode=job_code, username=username)
-        if job_postings.exists():
-            return Response({"error":"This Jobcode is already exists in your company"}, status=status.HTTP_400_BAD_REQUEST)
-
+        if not generated_job_code:
+                return Response({"error": "Failed to generate job code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         try:
             with transaction.atomic():
                 interview_rounds = data.get('interview_rounds', [])
@@ -294,7 +302,7 @@ class JobPostingView(APIView):
                 job_posting = JobPostings.objects.create(
                     username=username,
                     organization=organization,
-                    jobcode = job_code,
+                    jobcode = generated_job_code,
                     job_title=data.get('job_title', ''),
                     job_department=data.get('job_department'),
                     job_description=data.get('job_description'),
@@ -409,10 +417,6 @@ HireSync Team
 )
                 )
             
-                
-                # clientTerms = ClientTermsAcceptance.objects.filter(client=client,organization=organization,valid_until__gte=timezone.now())
-                # if clientTerms.count() < 0:
-                #     ClientTermsAcceptance.objects.create(client=client,organization=organization,service_fee = acceptedterms.service_fee,replacement_clause = acceptedterms.replacement_clause,invoice_after = acceptedterms.invoice_after,payment_within = acceptedterms.payment_within,interest_percentage = acceptedterms.interest_percentage)
             return Response(
                 {"message": "Job and interview rounds created successfully", "job_id": job_posting.id},
                 status=status.HTTP_201_CREATED
@@ -1463,8 +1467,6 @@ class ReopenJob(APIView):
                 "job_title": job_post.job_title,
                 "job_description": job_post.job_description,
                 "job_department": job_post.job_department,
-                # "primary_skills": job_post.primary_skills,
-                # "secondary_skills": job_post.secondary_skills,
                 "ctc": job_post.ctc,
                 "rounds_of_interview": job_post.rounds_of_interview,
                 "job_id": job_post.id,
@@ -1483,6 +1485,20 @@ class ReopenJob(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def generate_unique_jobcode(self, user):
+        try:
+            job_count = JobPostings.objects.filter(username=user).count()
+
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+
+            jobcode = f"JOB-{user.username.upper()}-{timestamp}-{job_count + 1:03d}"
+            return jobcode
+
+        except Exception as e:
+            print(str(e))
+            return None
+    
 
     def post(self, request):
         try:
@@ -1503,7 +1519,13 @@ class ReopenJob(APIView):
             new_positions = request.data.get('num_of_positions', job_post.num_of_positions)
             new_ctc_range = request.data.get('ctc', job_post.ctc)
             new_job_close_duration = request.data.get('job_close_duration', job_post.job_close_duration)
-            
+
+            generated_job_code = self.generate_unique_jobcode(request.user)
+
+            if not generated_job_code:
+
+                return Response({"error": "Failed to generate job code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                        
             with transaction.atomic():
                 try:
                     new_job_post = JobPostings.objects.create(
@@ -1511,14 +1533,12 @@ class ReopenJob(APIView):
                         num_of_positions=new_positions,  
                         job_close_duration=new_job_close_duration,  
                         status='opened',  
-
+                        jobcode = generated_job_code,
                         username=job_post.username,
                         organization=job_post.organization,
                         job_title=job_post.job_title,
                         job_department=job_post.job_department,
                         job_description=job_post.job_description,
-                        primary_skills=job_post.primary_skills,
-                        secondary_skills=job_post.secondary_skills,
                         years_of_experience=job_post.years_of_experience,
                         rounds_of_interview=job_post.rounds_of_interview,
                         job_locations=job_post.job_locations,
@@ -1547,10 +1567,33 @@ class ReopenJob(APIView):
                         languages=job_post.languages,
                         approval_status='pending'
                     )
+
                 except IntegrityError:
                     return Response({"error": "Database integrity error while creating job post"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 except ValidationError as e:
                     return Response({"error": f"Invalid job post data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+                actual_primary_skills = SkillMetricsModel.objects.filter(job_id = job_id, is_primary = True)
+                actual_secondary_skills = SkillMetricsModel.objects.filter(job_id = job_id, is_primary = False)
+
+                for skill in actual_primary_skills:
+                    SkillMetricsModel.objects.create(
+                        job_id = new_job_post,
+                        skill_name= skill.skill_name,
+                        metric_type = skill.metric_type,
+                        metric_value= skill.metric_value,
+                        is_primary = True
+                    )
+
+                for skill in actual_secondary_skills:
+                    SkillMetricsModel.objects.create(
+                        job_id = new_job_post.id,
+                        skill_name= skill.skill_name,
+                        metric_type = skill.metric_type,
+                        metric_value= skill.metric_value,
+                        is_primary = False
+                    )
+
 
                 interviewer_details = request.data.get('interviewer_details', [])
 
@@ -1578,7 +1621,7 @@ class ReopenJob(APIView):
 
         except Exception as e:
             print(str(e))
-            return Response({"error": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class TodayJoingings(APIView):
     def get(self, request):

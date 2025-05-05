@@ -122,6 +122,7 @@ class ScheduledInterviewsView(APIView):
                         interview_details_json = {
                             "job_id" : scheduled_interview.job_id.id,
                             "job_title": scheduled_interview.job_id.job_title,
+                            "job_department": scheduled_interview.job_id.job_department,
                             "interviewer_name" : scheduled_interview.interviewer.name.username,
                             "candidate_name" : scheduled_interview.candidate.candidate_name,
                             "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
@@ -336,10 +337,12 @@ class PrevInterviewRemarksView(APIView):
 # Promote Candidate to next round
 class PromoteCandidateView(APIView):
     def post(self, request):
-        # print(request.data.get("meet_link"))
         try:
             resume_id = int(request.GET.get('id'))
             round_num = int(request.GET.get('round_num'))
+            remarks = request.data.get("remarks")
+            if remarks == '':
+                return Response({"error":"Please enter remarks and promote the candidate"}, status=status.HTTP_400_BAD_REQUEST)
             try:
                 application = JobApplication.objects.get(resume__id = resume_id)
             except JobApplication.DoesNotExist:
@@ -527,9 +530,6 @@ HireSync.
                 from_email='',
                 recipient_list=[manager_email, recruiters_emails]
             )
-            
-            
-
 
             return Response({"message":"Candidate Selected Successfully"}, status=status.HTTP_200_OK)
 
@@ -538,12 +538,16 @@ HireSync.
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
     def post(self, request):
-        print("Called this function")
         try:
             resume_id = request.GET.get('id')
             round_num = request.GET.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
 
+
+            remarks = request.data.get('remarks')
+            print(remarks, " are the remarks")
+            if remarks == None:
+                return Response({"error":"Please enter remarks"}, status=status.HTTP_400_BAD_REQUEST)
 
             num_of_postings_completed = JobApplication.objects.filter(job_id = application.job_id, status = 'selected').count()
             req_postings = JobPostings.objects.get(id= application.job_id.id).num_of_positions
@@ -561,7 +565,7 @@ HireSync.
 
             with transaction.atomic():
 
-                remarks = CandidateEvaluation.objects.create(
+                remarks_candidate = CandidateEvaluation.objects.create(
                     primary_skills_rating = primary_skills,
                     secondary_skills_ratings = secondary_skills,
                     candidate = candidate,

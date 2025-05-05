@@ -116,6 +116,7 @@ urlpatterns = [
     path('recruiter/reconfirmation-reject/', RejectReconfirmResumes.as_view(), name='handle-reject'),
     path('recruiter/organization-applications/', OrganizationApplications.as_view(), name='organization-all-applications'),
     path('recruiter/resumesent/',ResumesSent.as_view(),name="resumes-sent"),
+    path('recruiter/complete-application/',CompleteApplicationDetailsView.as_view(),name="resumes-sent"),
     path('recruiter/all-scheduled-interviews/',AllScheduledInterviews.as_view(), name='all-scheduled-interviews' ),
     path('recruiter/get-interview-marks/', GetIntervieweRemarks.as_view(), name='get-interview-remarks'),
 
