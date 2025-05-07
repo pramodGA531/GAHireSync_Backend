@@ -166,7 +166,7 @@ class GetOrganizationTermsView(APIView):
             )
 
             negotiation_request = NegotiationRequests.objects.filter(
-                client__user=user, organization=organization, is_accepted=False
+                client__user=user, organization=organization, status = 'pending'
             )
 
             if clientTerms.count() > 0:
@@ -176,6 +176,8 @@ class GetOrganizationTermsView(APIView):
 
             terms_serializer = OrganizationTermsSerializer(organization_terms)
             terms_data = terms_serializer.data
+
+
 
             negotiated_data = (
                 NegotiationSerializer(negotiation_request.first()).data if negotiation_request.exists() else None
@@ -335,7 +337,6 @@ class JobPostingView(APIView):
                     num_of_positions = data.get('num_of_positions'),
                     job_close_duration  = job_close_duration,
                     status='opened',
-                    is_approved=False,
                     created_at=None
                 )
 
@@ -512,6 +513,7 @@ class getClientJobposts(APIView):
                         "total_candidates": applications_count,
                         "company": job.organization.name,
                         "status": job.status,
+                        "reason": job.reason,
                         "positions_closed": f"{closed}/{job.num_of_positions}",
                         "ctc":job.ctc,
                         "job_close_duration": job.job_close_duration,
@@ -809,7 +811,7 @@ class InterviewersView(APIView):
                     "rounds_alloted": rounds_alloted_count,
                     "scheduled_interviews": scheduled_count,
                     "rounds_completed": rounds_completed,
-                    "id":interviewer.id
+                    "id":interviewer.id,
                 }
 
                 interviewers_list.append(interviewer_json)
@@ -862,9 +864,16 @@ class InterviewersView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-
-
-# Handling Candidates Applicaitons
+    def delete(self, request):
+        try:
+            interviewer_id = request.GET.get('interviewer_id')
+            CustomUser.objects.get(id = interviewer_id).delete()
+            return Response({"message":"Interviewer removed successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 # Get all the applicaitons
 class GetResumeView(APIView):
@@ -988,7 +997,7 @@ class AcceptApplicationView(APIView):
         if existing_user:
             candidate_profile = CandidateProfile.objects.get(name=existing_user)
 
-            return candidate_profile, existing_user
+            return candidate_profile, existing_user, None
 
 
         password = generate_random_password()
@@ -1290,8 +1299,8 @@ class CandidatesOnHold(APIView):
     permission_classes = [IsClient]
     def get(self, request):
         try:
-            if request.GET.get('job_id'):
-                job_id = request.GET.get('job_id')
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
                 applications_on_hold = JobApplication.objects.filter(job_id = job_id, status = 'hold').select_related('resume')
 
                 application_list = [
@@ -1553,7 +1562,6 @@ class ReopenJob(APIView):
                         decision_maker_email=job_post.decision_maker_email,
                         bond=job_post.bond,
                         rotational_shift=job_post.rotational_shift,
-                        is_approved=False,
                         age=job_post.age,
                         gender=job_post.gender,
                         visa_status=job_post.visa_status,
@@ -1900,7 +1908,12 @@ class SelectedCandidatesView(APIView):
     permission_classes = [IsClient]
     def get(self, request):
         try:
-            applications = JobApplication.objects.filter(job_id__username = request.user,status = 'selected').select_related('selected_candidates')
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
+                job_id = int(job_id)
+                applications = JobApplication.objects.filter(job_id = request.GET.get('job_id'),status = 'selected').select_related('selected_candidates')
+            else:
+                applications = JobApplication.objects.filter(job_id__username = request.user,status = 'selected').select_related('selected_candidates')
             candidates_list = []
             for application in applications:
                 candidate = getattr(application, "selected_candidates", None)
@@ -1923,7 +1936,12 @@ class ShortlistedCandidatesView(APIView):
     permission_classes = [IsClient]
     def get(self,request):
         try:
-            applications = JobApplication.objects.filter(job_id__username = request.user, status = 'processing')
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
+                job_id = int(job_id)
+                applications = JobApplication.objects.filter(job_id = request.GET.get('job_id'),status = 'processing' )
+            else:   
+                applications = JobApplication.objects.filter(job_id__username = request.user, status = 'processing')
             applications_list = []
             for application in applications:
                 applications_list.append(
@@ -1947,9 +1965,16 @@ class AllJoinedCandidates(APIView):
 
     def get(self, request):
         try:
-            applications = JobApplication.objects.filter(
-                job_id__username=request.user
-            ).select_related("selected_candidates") 
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
+                job_id = int(job_id)
+                applications = JobApplication.objects.filter(
+                    job_id = request.GET.get('job_id')
+                ).select_related("selected_candidates") 
+            else:
+                applications = JobApplication.objects.filter(
+                    job_id__username=request.user
+                ).select_related("selected_candidates") 
 
             candidates_list = []
 
@@ -1984,7 +2009,12 @@ class CandidateLeftView(APIView):
     permission_classes = [ IsClient]
     def get(self, request):
         try:
-            applications= JobApplication.objects.filter(job_id__username = request.user).select_related("selected_candidates")
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
+                job_id = int(job_id)
+                applications= JobApplication.objects.filter(job_id = request.GET.get('job_id')).select_related("selected_candidates")
+            else:
+                applications= JobApplication.objects.filter(job_id__username = request.user).select_related("selected_candidates")
             selected_candidates_list = []
             for application in applications:
                 selected_candidate  = getattr(application ,"selected_candidates",None)
@@ -2393,7 +2423,6 @@ class ViewCandidateDetails(APIView):
                 {
                     "institution_name": education.institution_name,
                     "field_of_study": education.field_of_study,
-                    
                     "start_date": education.start_date,
                     "end_date": education.end_date,
                     "degree": education.degree
@@ -2408,8 +2437,8 @@ class ViewCandidateDetails(APIView):
                 "phone": candidate_profile.phone_num,
                 "experiences": candidate_experiences,  
                 "education": candidate_education,  
-                "resume": candidate_profile.resume,
-                "profile": candidate_profile.profile,
+                "resume": candidate_profile.resume.url if candidate_profile.resume else None,
+                "profile": candidate_profile.profile.url if candidate_profile.profile else None,
                 "reviews": review_list,
             }
 

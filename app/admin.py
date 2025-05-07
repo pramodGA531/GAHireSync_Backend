@@ -152,3 +152,7 @@ class JobPostEditFieldsAdmin(admin.ModelAdmin):
 class NotificationsAdmin(admin.ModelAdmin):
     list_display = ('sender','receiver','seen')
 
+@admin.register(NegotiationRequests)
+class NegotiationRequestsAdmin(admin.ModelAdmin):
+    list_display = ('client','organization','status')
+

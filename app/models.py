@@ -131,7 +131,7 @@ class ClientDetails(models.Model):
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
-    jobcode = models.CharField(max_length=10,default='jcd0')
+    jobcode = models.CharField(max_length=40,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
@@ -152,7 +152,6 @@ class JobPostings(models.Model):
     bond = models.TextField(max_length=255, )
     rotational_shift = models.BooleanField()
     status = models.CharField(max_length=10, default='opened')      # (opened) or (closed)
-    is_approved = models.BooleanField(default=True)
     assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     age = models.CharField(max_length=255 )
@@ -169,6 +168,7 @@ class JobPostings(models.Model):
     num_of_positions = models.IntegerField(default=1)
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
+    reason = models.TextField(default="" , null=True, blank=True)
 
     class Meta:
         unique_together = ('username', 'jobcode') 
@@ -360,7 +360,6 @@ class CandidateResume(models.Model):
 
     def __str__(self):
         return self.candidate_name
-# Primary skills and secondary skills along with experience of the candidate w.r.t job post
 
 class CandidateSkillSet(models.Model):
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, related_name='skills')
@@ -488,17 +487,29 @@ class ClientTermsAcceptance(models.Model):
 
 
 class NegotiationRequests(models.Model):
+
+    ACCEPTED = 'accepted'
+    REJECTED = 'rejected'
+    PENDING = 'pending'
+
+    STATUS_CHOICES = [
+        (ACCEPTED, 'accepted'),
+        (PENDING, 'pending'),
+        (REJECTED, 'rejected')
+    ]
+    
     client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="negotiation_client_terms")
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
     replacement_clause = models.IntegerField(default=90)
-    description = models.TextField(default = '')
+    description = models.TextField(default = '', blank=True, null=True)
     invoice_after = models.IntegerField(default=30)
     payment_within = models.IntegerField(default=7)
     interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
     requested_date = models.DateTimeField(auto_now_add=True)
-    is_accepted = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     accepted_date = models.DateTimeField(auto_now=True)
+    reason = models.TextField(null=True, default="", blank=True)
 
     def __str__(self):
         return f"negotiation by {self.client.name_of_organization}"

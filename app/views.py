@@ -42,64 +42,6 @@ class GetUserDetails(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
-class AcceptJobPostView(APIView):
-    permission_classes = [IsManager]
-    def post(self, request):
-        try:
-            job_id = int(request.GET.get('id'))
-
-            if not job_id:
-                return Response({"error": "Job post id is required"}, status=status.HTTP_400_BAD_REQUEST) 
-            
-            action = request.GET.get('action')
-
-
-            try:
-                job_post = JobPostings.objects.get(id = job_id)
-                if(action == 'accept'):
-                    job_post.approval_status  = "accepted"
-                    notification = Notifications.objects.create(
-    sender=request.user,
-    receiver=job_post.username,
-    subject=f"Job Post Accepted by {request.user.username}",
-    message=(
-        f"✅ Job Request Accepted\n\n"
-        f"Your job request for the position of **{job_post.job_title}** has been accepted by "
-        f"{request.user.username}.\n\n"
-        f"The organization has started reviewing and shortlisting suitable profiles for this role. "
-        f"You will be notified once candidates are shortlisted or selected.\n\n"
-        f"Thank you for using our platform! 🙌"
-    )
-)
-                elif(action == 'reject'):
-                    job_post.approval_status  = "rejected"
-                    notification = Notifications.objects.create(
-    sender=request.user,
-    receiver=job_post.username,
-    subject=f"Job Post Rejected by {request.user.username}",
-    message=(
-        f"Job Request Rejected\n\n"
-        f"Your job request for the position of **{job_post.job_title}** has been reviewed by "
-        f"{request.user.username} and was not accepted.\n\n"
-        f"This could be due to internal requirements or job role mismatch.\n\n"
-        f"You may consider submitting a new job request with updated details if needed.\n\n"
-        f"Thank you for understanding."
-    )
-)
-
-                job_post.save()
-                return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
-            except JobPostings.DoesNotExist:
-                return Response({"error":"Job post does not exists"}, status = status.HTTP_400_BAD_REQUEST)
-
-
-        except Exception as e:
-            print("error is ",str(e))
-            return Response(
-                {"detail": f"An error occurred: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 class OrganizationTermsView(APIView):
     
     permission_classes = [IsAuthenticated]   
@@ -247,7 +189,7 @@ HireSync Team
 
             
             if data.get('status') == "accepted":
-                negotiation_request.is_accepted = True
+                negotiation_request.status = "accepted"
                 negotiation_request.save()
 
                 
@@ -282,7 +224,9 @@ HireSync Team
                 )                
                 
             elif data.get('status') == "rejected":
-                negotiation_request.is_accepted = False
+                negotiation_request.status = "rejected"
+                reject_reason = data.get('reason')
+                negotiation_request.reason = reject_reason
                 negotiation_request.save()
                 
                 client_email_message = f"""

@@ -53,6 +53,7 @@ urlpatterns = [
     path('client/add-interviewers/', InterviewersView.as_view(), name='add-interviewers'),
     path('client/job-post/interviews/', ClientInterviewsView.as_view(), name='client-interviewes'),
     path('client/get-interviewers/', InterviewersView.as_view(), name='get-interviewers'),
+    path('client/remove-interviewer/', InterviewersView.as_view(), name='remove-interviewer'),
     path('client/closed-jobslist/',ClosedJobsClient.as_view(), name='list-of-closed-jobs' ),
     path('client/reopen-job/', ReopenJob.as_view(), name='reopen-new-job'),
     path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
@@ -71,6 +72,7 @@ urlpatterns = [
     path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
     path('client/orgs-data/', OrgsData.as_view(), name='orgs-data'),
+
     
     
 

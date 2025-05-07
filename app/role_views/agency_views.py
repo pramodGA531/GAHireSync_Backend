@@ -45,9 +45,9 @@ class AgencyJobApplications(APIView):
                     "job_title": app.job_id.job_title,
                     "job_department": app.job_id.job_department,
                     "job_description": app.job_id.job_description,
-                    "application_status": app.status,
+                    "application_status": app.status,   
+                    "feedback": app.feedback,
                 }
-                for app in applications
                 for app in applications
             ]
 
@@ -60,7 +60,7 @@ class AgencyJobApplications(APIView):
             return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            
     def delete(self, request, *args, **kwargs):
         try:
             user = request.user
@@ -422,7 +422,7 @@ class OrgJobEdits(APIView):
 
 class AcceptJobPostView(APIView):
     permission_classes = [IsManager]
-    def post(self, request):
+    def put(self, request):
         try:
             job_id = int(request.GET.get('id'))
 
@@ -435,8 +435,42 @@ class AcceptJobPostView(APIView):
                 job_post = JobPostings.objects.get(id = job_id)
                 if(action == 'accept'):
                     job_post.approval_status  = "accepted"
+                
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=job_post.username,
+                        category = Notifications.CategoryChoices.ACCEPT_JOB,
+                        subject=f"Job Post Accepted by {request.user.username}",
+                        message=(
+                            f"✅ Job Request Accepted\n\n"
+                            f"Your job request for the position of **{job_post.job_title}** has been accepted by "
+                            f"{request.user.username}.\n\n"
+                            f"The organization has started reviewing and shortlisting suitable profiles for this role. "
+                            f"You will be notified once candidates are shortlisted or selected.\n\n"
+                            f"Thank you for using our platform! 🙌"
+                        )
+                    )
+
+
                 elif(action == 'reject'):
                     job_post.approval_status  = "rejected"
+                    reason = request.data.get('reason')
+
+                    job_post.reason = reason
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=job_post.username,
+                        category = Notifications.CategoryChoices.REJECT_JOB,
+                        subject=f"Job Post Rejected by {request.user.username}",
+                        message=(
+                            f"Job Request Rejected\n\n"
+                            f"Your job request for the position of **{job_post.job_title}** has been reviewed by "
+                            f"{request.user.username} and was not accepted.\n\n"
+                            f"This could be due to internal requirements or job role mismatch.\n\n"
+                            f"You may consider submitting a new job request with updated details if needed.\n\n"
+                            f"Thank you for understanding."
+                        )
+                    )
 
                 job_post.save()
                 return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
@@ -639,7 +673,7 @@ class RecruitersList(APIView):
     def get(self, request):
         try:
             if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "User is not authenticated"}, sxxtatus=status.HTTP_400_BAD_REQUEST)
 
             if request.user.role != 'manager':  
                 return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
@@ -672,11 +706,7 @@ class InvoicesAPIView(APIView):
         try:
             organization = Organization.objects.get(manager = request.user)
             jobs= JobPostings.objects.filter(organization = organization).filter(status = 'closed')
-            print(request.user)
-            # print(f"fetch  the jobid's-> joined application (by filtering) 
-            #       1)jobid's terms and conditions(  fields => % of ctc , duration to generate invoice ,tax type by using the state variable,orgization details ,client details ) 
-            #       2) joined application agreed ctc model for the SelectedCandidates ctc and joining date those all things")
-                
+            
             if not jobs.exists():
                 return Response({"noJobs": True}, status=status.HTTP_200_OK)
             
@@ -702,10 +732,6 @@ class InvoicesAPIView(APIView):
                 }
 
                 invoice = generate_invoice(context)
-                # buffer = generate_invoice(context)
-                # buffer.seek(0)
-
-                # pdf_base64 = base64.b64encode(buffer.read()).decode('utf-8')
 
                 invoices.append({"invoice":invoice, "job_title":job.job_title, "job_id":job.id})
 
