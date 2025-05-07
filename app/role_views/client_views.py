@@ -1045,6 +1045,9 @@ class AcceptApplicationView(APIView):
                 job_application.round_num = 1
                 job_application.feedback = request.data.get('feedback')
                 candidate ,customCand, password   = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                candidate ,customCand= self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                clientCompanyDetails=ClientDetails.objects.get(user=request.user)
+                
 
                 link = f"{frontend_url}/candidate/applications"
                 message = f"""
@@ -1067,7 +1070,6 @@ HireSync Team
 """             
                 send_custom_mail("Congratulations! You’ve Been Shortlisted", body = message, to_email = [candidate.name.email])
                 job_application.save()
-                clientCompanyDetails=ClientDetails.objects.get(user=request.user)
                 
                 Notifications.objects.create(
     sender=request.user,

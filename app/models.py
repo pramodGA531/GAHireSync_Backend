@@ -40,7 +40,6 @@ class CustomUser(AbstractUser):
         (MANAGER, "manager"),
         (INTERVIEWER, "interviewer"),
         (ACCOUNTANT,"accountant"),
-        
     ]
 
     email = models.EmailField(unique=True)
@@ -49,9 +48,9 @@ class CustomUser(AbstractUser):
     credit = models.IntegerField(default=0)
     organization = models.ForeignKey("Organization", on_delete=models.CASCADE, null=True, blank=True)
     is_verified = models.BooleanField(default = False)
-    
+    is_first_login = models.BooleanField(default=True)
     objects = CustomUserManager()
-
+    
     def __str__(self):
         return self.username
 
@@ -343,7 +342,7 @@ class CandidateResume(models.Model):
     resume = models.FileField(upload_to='Resumes/')
     candidate_name = models.CharField(max_length=100)
     candidate_email = models.EmailField(null=True, )
-    contact_number = models.CharField(max_length=15, null=True, )
+    contact_number = models.CharField(max_length=15, null=True,)
     alternate_contact_number = models.CharField(max_length=15, null=True, blank=True)
     other_details = models.CharField(max_length=100, null=True, blank=True, )
     current_organisation = models.CharField(max_length=100, null=True, blank=True)

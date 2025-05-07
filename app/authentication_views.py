@@ -313,30 +313,47 @@ class AgencySignupView(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
+from django.utils.timezone import now
 class LoginView(APIView):
     def post(self, request):
-        email = request.data.get("email")
-        if email is not None:
-            email = email.strip()
-        password = request.data.get("password")
-        if password is not None:
-            password = password.strip()
+        email = request.data.get("email", "").strip()
+        password = request.data.get("password", "").strip()
+        
         user = authenticate(request, email=email, password=password)
+
         if user is not None:
-            if user.is_verified == False:
-                return Response({"error":"Your email is not verified yet, please verify your email","not_verified":True},status=status.HTTP_400_BAD_REQUEST)
+            if not user.is_verified:
+                return Response({
+                    "error": "Your email is not verified yet, please verify your email",
+                    "not_verified": True
+                }, status=status.HTTP_400_BAD_REQUEST)
             
+            # ✅ Only for MANAGER role: Flip is_first_login if still True
+            first_login_flag = True
+            if user.role == CustomUser.MANAGER:
+                if user.is_first_login:
+                    first_login_flag = True
+                    user.is_first_login = False  # Flip it so next time it's False
+                    user.save()
+                else:
+                    first_login_flag = False
+
             user_details = {
                 "username": user.username,
-                "role":user.role,
-                "id":user.id,
+                "role": user.role,
+                "id": user.id,
+                "is_first_login": first_login_flag if user.role == CustomUser.MANAGER else None
             }
             
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
 
-            return Response({'access_token': access_token,'role':user.role, "user_details": user_details}, status=status.HTTP_200_OK)
+            return Response({
+                'access_token': access_token,
+                'role': user.role,
+                "user_details": user_details
+            }, status=status.HTTP_200_OK)
+
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class VerifyTokenView(APIView):

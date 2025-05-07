@@ -39,6 +39,7 @@ class AgencyJobApplications(APIView):
                 {
                     "candidate_name": app.resume.candidate_name,
                     "application_id": app.id,
+                    "job_id":app.id,
                     "job_title": app.job_id.job_title,
                     "job_department": app.job_id.job_department,
                     "job_description": app.job_id.job_description,
@@ -96,7 +97,7 @@ class AgencyDashboardAPI(APIView):
             recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, assigned_to=None).count()
             jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(job_id__organization__manager=user).count()  
             opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
-
+            closed_jobs = JobPostings.objects.filter(organization__name=agency_name, status='closed').count()
             upcoming_interviews = []
             applications = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).order_by('-next_interview__scheduled_date')[:20]
 
@@ -142,7 +143,8 @@ class AgencyDashboardAPI(APIView):
                 "interviews_scheduled": interviews_scheduled,
                 "recruiter_allocation_pending": recruiter_allocation_pending,
                 "jobpost_edit_requests": jobpost_edit_requests,
-                "opened_jobs": opened_jobs
+                "opened_jobs": opened_jobs,
+                "closed_jobs":closed_jobs,
             }
 
             return Response({"data":data, "latest_jobs":jobs_details, "upcoming_interviews":upcoming_interviews }, status=status.HTTP_200_OK)
