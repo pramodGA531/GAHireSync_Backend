@@ -520,11 +520,10 @@ def send_custom_mail(subject, body, to_email):
 
 
 
-def send_email_verification_link(user, signup, role):
+def send_email_verification_link(user, signup, role, password = None):
 
     token = email_verification_token.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    print("frontend url is ", frontend_url)
 
     link = f"{frontend_url}/verify-email/{uid}/{token}/" 
 
@@ -591,6 +590,8 @@ Congratulations! Your recruiter account on HireSync has been successfully create
 
 You can now send applications/schedule interviews seamlessly.
 
+Password : {password}
+
 Verify your account 
 🔗 {link}
 
@@ -608,6 +609,8 @@ Dear {user.username},
 Congratulations! Your interviewer account on HireSync has been successfully created.
 
 You can now send conduct interviews seamlessly.
+
+Password : {password}
 
 Verify your account 
 🔗 {link}

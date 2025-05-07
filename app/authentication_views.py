@@ -227,6 +227,7 @@ class AgencySignupView(APIView):
         if Organization.objects.filter(org_code=org_code).exists():
             return Response({"error": "Organization with the give code already exists"}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            print(combined_values.get('company_pan'), " These are the combined values")
             with transaction.atomic():
                 user_serializer = CustomUserSerializer(data={
                     'email': combined_values.get('email'),
@@ -255,9 +256,7 @@ class AgencySignupView(APIView):
                     org_serializer = OrganizationSerializer(data=org_data)
                     
                     if org_serializer.is_valid(raise_exception=True):
-                        print("serializer is valid")
                         org_serializer.save()
-                        print("but not running this line")
 
                     try:
                         send_email_verification_link(user, True , "manager")
@@ -282,7 +281,6 @@ class AgencySignupView(APIView):
 
         try:
             with transaction.atomic():
-                # Update user (manager)
                 user = organization.manager
                 user_data = {
                     'email': combined_values.get('email', user.email),
@@ -296,7 +294,6 @@ class AgencySignupView(APIView):
                 if user_serializer.is_valid(raise_exception=True):
                     user_serializer.save()
 
-                # Update organization
                 org_data = {
                     'name': combined_values.get('name', organization.name),
                     'contact_number': combined_values.get('contact_number', organization.contact_number),

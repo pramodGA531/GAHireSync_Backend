@@ -130,7 +130,7 @@ class ClientDetails(models.Model):
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
-    jobcode = models.CharField(max_length=10,default='jcd0')
+    jobcode = models.CharField(max_length=40,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     job_title = models.CharField(max_length=255, )
     job_department = models.CharField(max_length=100, )
@@ -151,7 +151,6 @@ class JobPostings(models.Model):
     bond = models.TextField(max_length=255, )
     rotational_shift = models.BooleanField()
     status = models.CharField(max_length=10, default='opened')      # (opened) or (closed)
-    is_approved = models.BooleanField(default=True)
     assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     age = models.CharField(max_length=255 )
@@ -168,6 +167,7 @@ class JobPostings(models.Model):
     num_of_positions = models.IntegerField(default=1)
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
+    reason = models.TextField(default="" , null=True, blank=True)
 
     class Meta:
         unique_together = ('username', 'jobcode') 
@@ -359,8 +359,6 @@ class CandidateResume(models.Model):
 
     def __str__(self):
         return self.candidate_name
-    
-# Primary skills and secondary skills along with experience of the candidate w.r.t job post
 
 class CandidateSkillSet(models.Model):
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, related_name='skills')
@@ -488,17 +486,29 @@ class ClientTermsAcceptance(models.Model):
 
 
 class NegotiationRequests(models.Model):
+
+    ACCEPTED = 'accepted'
+    REJECTED = 'rejected'
+    PENDING = 'pending'
+
+    STATUS_CHOICES = [
+        (ACCEPTED, 'accepted'),
+        (PENDING, 'pending'),
+        (REJECTED, 'rejected')
+    ]
+    
     client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="negotiation_client_terms")
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
     replacement_clause = models.IntegerField(default=90)
-    description = models.TextField(default = '')
+    description = models.TextField(default = '', blank=True, null=True)
     invoice_after = models.IntegerField(default=30)
     payment_within = models.IntegerField(default=7)
     interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
     requested_date = models.DateTimeField(auto_now_add=True)
-    is_accepted = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     accepted_date = models.DateTimeField(auto_now=True)
+    reason = models.TextField(null=True, default="", blank=True)
 
     def __str__(self):
         return f"negotiation by {self.client.name_of_organization}"
@@ -781,13 +791,42 @@ class BlogPost(models.Model):
 
 
 class Notifications(models.Model):
+
+    class CategoryChoices(models.TextChoices):
+        NEGOTIATE_TERMS = 'negotiated_terms','NegotiatedTerms'                  #manager
+        REJECT_TERMS = 'reject_terms','RejectTerms'                             #client
+        ACCEPT_TERMS = 'accept_terms', 'AcceptTerms'                            #client
+        CREATE_JOB = 'create_job','CreateJob'                                   #manager
+        ASSIGN_INTERVIEWER = 'assign_interviewer', 'AssignInterviewer'          #interviewer
+        ACCEPT_JOB = 'accept_job','AcceptJob'                                   #client
+        EDIT_JOB = 'edit_job','EditJob'                                         #client
+        ACCEPT_JOB_EDIT = 'accept_job_edit', 'AcceptJobEdit'                    #manager
+        REJECT_JOB_EDIT = 'reject_job_edit', 'RejectJobEdit'                    #manager
+        PARTIAL_EDIT = 'partial_job_edit', "PartialJobEdit"                     #manager
+        REJECT_JOB = 'reject_job','RejectJob'                                   #client
+        ASSIGN_JOB = 'assign_job', 'AssignJob'                                  #recruiter
+        SEND_APPLICATION = 'send_application','SendApplication'                 #client
+        SHORTLIST_APPLICATION = 'shortlist_application','ShortlistApplication'  #recruiter
+        SCHEDULE_INTERVIEW = 'schedule_interview','ScheduleInterview'           #interviewer, candidate
+        PROMOTE_CANDIDATE = 'promote_candidate', 'PromoteCandidate'             #candidate, recruiter
+        REJECT_CANDIDATE = 'reject_candidate', 'RejectCandidate'                #candidate, recruite    r
+        ONHOLD_CANDIDATE = 'onhold_candidate', 'OnHoldCandidate'                #client
+        SELECT_CANDIDATE =  'select_candidate', 'SelectCandidate'               #client, recruiter
+        ACCEPTED_CTC = 'accepted_ctc', 'AcceptedCTC'                            #candidate, recruiter
+        CANDIDATE_ACCEPTED = 'candidate_accepted', 'CandidateAccepted'          #client, recruiter
+        CANDIDATE_REJECTED = 'candidate_rejected', 'CandidateRejected'          #client, recruiter
+        CANDIDATE_LEFT = 'candidate_left', 'CandidateLeft'                      #recruiter, manager  
+        CANDIDATE_JOINED = 'candidate_joined', 'CandidateJoined'                #recruiter, manager
+
+ 
     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)
     receiver = models.ForeignKey(CustomUser, related_name='received_notifications', on_delete=models.CASCADE,null=True, blank=True)
     subject = models.CharField(max_length=255)
     seen = models.BooleanField(default=False)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-    category = models.CharField(max_length=30, null=True, blank=True)
+    category = models.CharField(max_length=60, choices=CategoryChoices.choices, null=True, blank=True)
+
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.subject}"

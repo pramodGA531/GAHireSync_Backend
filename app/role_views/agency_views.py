@@ -46,7 +46,8 @@ class AgencyJobApplications(APIView):
                     "job_title": app.job_id.job_title,
                     "job_department": app.job_id.job_department,
                     "job_description": app.job_id.job_description,
-                    "application_status": app.status,
+                    "application_status": app.status,   
+                    "feedback": app.feedback,
                 }
                 for app in applications
             ]
@@ -60,7 +61,7 @@ class AgencyJobApplications(APIView):
             return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            
     def delete(self, request, *args, **kwargs):
         try:
             user = request.user
@@ -392,8 +393,9 @@ class OrgJobEdits(APIView):
                         )
     
                         skill_metric.save()
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
                                     sender=request.user,
+                                    category = Notifications.CategoryChoices.EDIT_JOB,
                                     receiver=job.username,
                                     subject=f"Job Edit Request",
                                     message = (
@@ -422,7 +424,7 @@ class OrgJobEdits(APIView):
 
 class AcceptJobPostView(APIView):
     permission_classes = [IsManager]
-    def post(self, request):
+    def put(self, request):
         try:
             job_id = int(request.GET.get('id'))
 
@@ -435,8 +437,42 @@ class AcceptJobPostView(APIView):
                 job_post = JobPostings.objects.get(id = job_id)
                 if(action == 'accept'):
                     job_post.approval_status  = "accepted"
+                
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=job_post.username,
+                        category = Notifications.CategoryChoices.ACCEPT_JOB,
+                        subject=f"Job Post Accepted by {request.user.username}",
+                        message=(
+                            f"✅ Job Request Accepted\n\n"
+                            f"Your job request for the position of **{job_post.job_title}** has been accepted by "
+                            f"{request.user.username}.\n\n"
+                            f"The organization has started reviewing and shortlisting suitable profiles for this role. "
+                            f"You will be notified once candidates are shortlisted or selected.\n\n"
+                            f"Thank you for using our platform! 🙌"
+                        )
+                    )
+
+
                 elif(action == 'reject'):
                     job_post.approval_status  = "rejected"
+                    reason = request.data.get('reason')
+
+                    job_post.reason = reason
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=job_post.username,
+                        category = Notifications.CategoryChoices.REJECT_JOB,
+                        subject=f"Job Post Rejected by {request.user.username}",
+                        message=(
+                            f"Job Request Rejected\n\n"
+                            f"Your job request for the position of **{job_post.job_title}** has been reviewed by "
+                            f"{request.user.username} and was not accepted.\n\n"
+                            f"This could be due to internal requirements or job role mismatch.\n\n"
+                            f"You may consider submitting a new job request with updated details if needed.\n\n"
+                            f"Thank you for understanding."
+                        )
+                    )
 
                 job_post.save()
                 return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
@@ -469,14 +505,14 @@ class JobEditActionView(APIView):
                             setattr(job,field.field_name, field.field_value)
                             field.status = 'accepted'
                             field.save()
-                        print('entered here')
                         job_edit_request.status = "accepted"
                         job_edit_request.save()
                 job.approval_status = 'accepted'
                 job.save()
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
                     sender=request.user,
                     receiver=job.username,
+                    category = Notifications.CategoryChoices.ACCEPT_JOB,
                     subject=f"Job {job.job_title} request has been approved by {request.user}",
                     message=(
                         f"Dear {job.username},\n\n"
@@ -491,9 +527,10 @@ class JobEditActionView(APIView):
             if action == 'reject':
                 job.approval_status = 'reject'
                 job.save()
-                notification = Notifications.objects.create(
+                Notifications.objects.create(
                     sender=request.user,
                     receiver=job.username,
+                    category = Notifications.CategoryChoices.REJECT_JOB,
                     subject=f"Job {job.job_title} request has been rejected by {request.user}",
                     message=(
                         f"Dear {job.username},\n\n"
@@ -557,7 +594,7 @@ class RecruitersView(APIView):
 
                 org.recruiters.add(new_user)
 
-                send_email_verification_link(new_user, True, "recruiter")
+                send_email_verification_link(new_user, True, "recruiter", password = password)
 
                 return Response(
                     {"message": "Recruiter account created successfully, and email sent."},
@@ -608,6 +645,7 @@ HireSync Team
                     notification = Notifications.objects.create(
                     sender=request.user,
                     receiver=recruiter,
+                    category = Notifications.CategoryChoices.ASSIGN_JOB,
                     subject=f"New Job Assigned by Manager",
                     message=(
         f"📢 New Job Assignment\n\n"
@@ -615,10 +653,12 @@ HireSync Team
         f"Position: **{job.job_title}**\n"
         f"Client: {job.username}\n\n"
         f"Please begin reviewing profiles and shortlisting suitable candidates for this role.\n\n"
-        f"id::{job.id}"  # for frontend to convert into a clickable <Link />
+        f"id::{job.id}"  
         f"link::'recruiter/postings/"
     )
                 )
+                    notification.category = Notifications.CategoryChoices.ASSIGN_JOB
+                    notification.save()
 
                 return Response({"detail": "Recruiters Assigned Successfully"}, status=status.HTTP_200_OK)
         except Organization.DoesNotExist:
@@ -631,12 +671,11 @@ HireSync Team
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Get All Recruiters 
 class RecruitersList(APIView):
     def get(self, request):
         try:
             if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "User is not authenticated"}, sxxtatus=status.HTTP_400_BAD_REQUEST)
 
             if request.user.role != 'manager':  
                 return Response({"error": "You are not allowed to run this view"}, status=status.HTTP_403_FORBIDDEN)
@@ -669,11 +708,7 @@ class InvoicesAPIView(APIView):
         try:
             organization = Organization.objects.get(manager = request.user)
             jobs= JobPostings.objects.filter(organization = organization).filter(status = 'closed')
-            print(request.user)
-            # print(f"fetch  the jobid's-> joined application (by filtering) 
-            #       1)jobid's terms and conditions(  fields => % of ctc , duration to generate invoice ,tax type by using the state variable,orgization details ,client details ) 
-            #       2) joined application agreed ctc model for the SelectedCandidates ctc and joining date those all things")
-                
+            
             if not jobs.exists():
                 return Response({"noJobs": True}, status=status.HTTP_200_OK)
             
@@ -699,10 +734,6 @@ class InvoicesAPIView(APIView):
                 }
 
                 invoice = generate_invoice(context)
-                # buffer = generate_invoice(context)
-                # buffer.seek(0)
-
-                # pdf_base64 = base64.b64encode(buffer.read()).decode('utf-8')
 
                 invoices.append({"invoice":invoice, "job_title":job.job_title, "job_id":job.id})
 
@@ -1064,6 +1095,49 @@ class OrganizationView(APIView):
             return Response(serializer.data,status=status.HTTP_200_OK)
         except ObjectDoesNotExist as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        
+class ManagerAllAlerts(APIView):
+    def get(self, request):
+        try:
+            all_alerts = Notifications.objects.filter(seen=False, receiver=request.user)
+            negotiate_terms = 0
+            create_job = 0
+            accept_job_edit = 0
+            reject_job_edit = 0
+            partial_edit = 0
+            candidate_joined = 0
+            candidate_left = 0
+
+            for alert in all_alerts:
+                if alert.category == Notifications.CategoryChoices.NEGOTIATE_TERMS:
+                    negotiate_terms += 1
+                elif alert.category == Notifications.CategoryChoices.CREATE_JOB:
+                    create_job += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPT_JOB_EDIT:
+                    accept_job_edit += 1
+                elif alert.category == Notifications.CategoryChoices.REJECT_JOB_EDIT:
+                    reject_job_edit += 1
+                elif alert.category == Notifications.CategoryChoices.PARTIAL_EDIT:
+                    partial_edit += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_JOINED:
+                    candidate_joined += 1
+                elif alert.category == Notifications.CategoryChoices.CANDIDATE_LEFT:
+                    candidate_left += 1
+
+            data = {
+                "negotiate_terms": negotiate_terms,
+                "create_job": create_job,
+                "accept_job_edit": accept_job_edit,
+                "reject_job_edit": reject_job_edit,
+                "partial_edit": partial_edit,
+                "total_alerts": all_alerts.count()
+            }
+
+            return Response({"data":data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         
         

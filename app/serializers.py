@@ -29,7 +29,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        exclude = ['gst_number', 'company_pan']
+        exclude = ['gst_number']
         
 
 
