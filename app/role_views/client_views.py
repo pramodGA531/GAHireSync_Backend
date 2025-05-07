@@ -1041,12 +1041,14 @@ class AcceptApplicationView(APIView):
                 job_application.round_num = 1
                 job_application.feedback = request.data.get('feedback')
                 candidate ,customCand= self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
+                clientCompanyDetails=ClientDetails.objects.get(user=request.user)
+                
 
                 link = f"{frontend_url}/candidate/applications"
                 message = f"""
 
 Dear {candidate.name.username},
-Great news! You have been shortlisted for the {job_application.job_id.job_title} role at {job_application.job_id.username}.
+Great news! You have been shortlisted for the {job_application.job_id.job_title} role at {clientCompanyDetails.name_of_organization}.
 Next steps: [Interview scheduling details]
 🔗 {link}
 Good luck!
@@ -1057,7 +1059,6 @@ HireSync Team
 """             
                 send_custom_mail("Congratulations! You’ve Been Shortlisted", body = message, to_email = [candidate.name.email])
                 job_application.save()
-                clientCompanyDetails=ClientDetails.objects.get(user=request.user)
                 
                 notification = Notifications.objects.create(
     sender=request.user,
@@ -1068,7 +1069,7 @@ HireSync Team
         f"You have been **shortlisted** for the position of **{job_application.job_id.job_title}**.\n\n"
         f"Company: {clientCompanyDetails.name_of_organization}\n\n"
         f"Please check your dashboard for more details and next steps.\n\n"
-        f"link::candidate/applications/"  # This will be parsed by frontend into a clickable Link
+        f"link::candidate/applications/"  
     )
 )
                 
