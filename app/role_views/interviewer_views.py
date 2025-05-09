@@ -353,7 +353,9 @@ class PromoteCandidateView(APIView):
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
+            print("user name is ", application.resume.candidate_name)
             candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
+            print("But not entered here")
 
             remarks = CandidateEvaluation.objects.create(
                 primary_skills_rating = primary_skills,

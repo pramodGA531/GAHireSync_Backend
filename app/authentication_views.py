@@ -318,7 +318,11 @@ class LoginView(APIView):
     def post(self, request):
         email = request.data.get("email", "").strip()
         password = request.data.get("password", "").strip()
-        
+        try:
+            custom_user = CustomUser.objects.get(email = email)
+        except CustomUser.DoesNotExist:
+            return Response({"error":"User doesnot exist with this email"}, status=status.HTTP_400_BAD_REQUEST)
+
         user = authenticate(request, email=email, password=password)
 
         if user is not None:
@@ -328,12 +332,11 @@ class LoginView(APIView):
                     "not_verified": True
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # ✅ Only for MANAGER role: Flip is_first_login if still True
             first_login_flag = True
             if user.role == CustomUser.MANAGER:
                 if user.is_first_login:
                     first_login_flag = True
-                    user.is_first_login = False  # Flip it so next time it's False
+                    user.is_first_login = False
                     user.save()
                 else:
                     first_login_flag = False

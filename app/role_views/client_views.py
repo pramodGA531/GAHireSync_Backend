@@ -1045,7 +1045,6 @@ class AcceptApplicationView(APIView):
                 job_application.round_num = 1
                 job_application.feedback = request.data.get('feedback')
                 candidate ,customCand, password   = self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
-                candidate ,customCand= self.create_user_and_profile(candidate_email=resume.candidate_email, candidate_name= resume.candidate_name)
                 clientCompanyDetails=ClientDetails.objects.get(user=request.user)
                 
 

@@ -401,10 +401,29 @@ class CandidateApplicationsView(APIView):
                 return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
 
             user = CustomUser.objects.get(username = request.user)
-            candidate_resume = CandidateResume.objects.filter(candidate_name = user.username, candidate_email = user.email)
+            candidate_resume = CandidateResume.objects.filter( candidate_email = user.email)
             applications= JobApplication.objects.filter(resume__in = candidate_resume)
-            applications_serialized = JobApplicationSerializer(applications, many=True)
-            return Response({"data":applications_serialized.data}, status=status.HTTP_200_OK)
+
+            application_details = []
+            for application in applications:
+                if application.next_interview and (application.next_interview.status == 'scheduled' or application.next_interview.status == 'pending') :
+                    next_interview = f"Next Interview on {application.next_interview.scheduled_date} from {application.next_interview.from_time} to {application.next_interview.to_time}"
+                else:
+                    next_interview = '-'
+                application_details.append(
+                    {
+                        "job_title": application.job_id.job_title,
+                        "application_status": application.status,
+                        "sender": application.sender.username,
+                        "receiver": application.receiver.username,
+                        "round_number": application.round_num,
+                        "next_interview" : next_interview,
+                        "job_id": application.job_id.id,
+                        "application_id": application.id,
+                    }
+                )
+
+            return Response({"data":application_details}, status=status.HTTP_200_OK)
 
         except Exception as e:
             print(str(e))
@@ -477,6 +496,7 @@ class SelectedJobsCandidate(APIView):
                     "selected_candidate_id": selected_job.id,
                     "candidate_acceptance": selected_job.candidate_acceptance,
                     "recruiter_acceptance": selected_job.recruiter_acceptance,
+                    "job_id": selected_job.application.job_id.id,
                 }
                 selected_jobs_list.append(details_json)
 

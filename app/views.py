@@ -1,17 +1,10 @@
-from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import *
 from .serializers import *
-from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings 
 from django.core.mail import send_mail
-from rest_framework.parsers import MultiPartParser, FormParser
-from datetime import datetime
-from django.http import HttpResponse
-from django.template.loader import render_to_string
 from django.shortcuts import render
 from .permissions import *
 from .authentication_views import *
@@ -21,6 +14,7 @@ from django.shortcuts import get_object_or_404
 from .utils import *
 from django.core.files.base import ContentFile
 from django.http import JsonResponse
+from collections import defaultdict
 
 
 
@@ -1247,3 +1241,98 @@ class NotificationStatusChange(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class CompleteApplicationDetailsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self , request):
+        try:
+
+            application_id = request.GET.get('application_id')
+            application = JobApplication.objects.get(id = application_id)
+
+            candidate_evaluations = CandidateEvaluation.objects.filter(job_application  = application)
+            candidate_evaluation_json = []
+
+            primary_skills = CandidateSkillSet.objects.filter(candidate = application.resume, is_primary = True)
+            primary_skill_json = []
+            for skill in primary_skills:
+                primary_skill_json.append({
+                    "skill_name": skill.skill_name,
+                    "skill_type": skill.skill_metric,
+                    "value": skill.metric_value
+                })
+
+            secondary_skills = CandidateSkillSet.objects.filter(candidate = application.resume, is_primary = False)
+            secondary_skill_json = []
+            for skill in secondary_skills:
+                secondary_skill_json.append({
+                    "skill_name": skill.skill_name,
+                    "skill_type": skill.skill_metric,
+                    "value": skill.metric_value
+                })
+
+            upcoming_interview = None
+
+            if application.next_interview != None:
+                upcoming_interview = application.next_interview
+            
+            if upcoming_interview !=None:
+                next_interview_json = {
+                    "interviewer_name": upcoming_interview.interviewer.name.username,
+                    "interview_date": upcoming_interview.scheduled_date,
+                    "interview_time":f"{upcoming_interview.from_time} - {upcoming_interview.to_time}" 
+                }
+
+            else:
+                next_interview_json = {}
+            
+
+            candidate_evaluation_json = defaultdict(list)
+
+            for candidate in candidate_evaluations:
+                candidate_evaluation_json[candidate.round_num].append({
+                    "primary_skills_rating": json.dumps(candidate.primary_skills_rating),
+                    "secondary_skills_rating": json.dumps(candidate.secondary_skills_ratings),
+                    "remarks": candidate.remarks,
+                    "interviewer_name": candidate.interview_schedule.interviewer.name.username,
+                    "status": candidate.status,
+                })
+
+            candidate_evaluation_json = dict(candidate_evaluation_json)
+
+            application_json = {
+                "application_id":application.id,
+                "job_title":application.job_id.job_title,
+                "job_department":application.job_id.job_department,
+                "rounds_of_interview" : application.job_id.rounds_of_interview,
+                "current_round": application.round_num,
+                "deadline":application.job_id.job_close_duration,
+                "candidate_name": application.resume.candidate_name,
+                "candidate_email": application.resume.candidate_email,
+                "candidate_phone": application.resume.contact_number,
+                "application_status": application.status,
+                "upcoming_interview": next_interview_json,
+                "primary_skills":primary_skill_json,
+                "secondary_skills": secondary_skill_json,
+                "current_ctc": application.resume.current_ctc,
+                "expected_ctc" : application.resume.expected_ctc,
+                "current_job": application.resume.current_organisation,
+                "current_job_location": application.resume.current_job_location,
+                "current_job_type": application.resume.current_job_type,
+                "highest_qualification": application.resume.highest_qualification,
+                "date_of_birth": application.resume.date_of_birth,
+                "notice_period": application.resume.notice_period,
+                "joining_days_required": application.resume.joining_days_required,
+                "resume": application.resume.resume.url if application.resume.resume != None else "",
+                "created_at": application.created_at,
+                "other_details":application.resume.other_details,
+                "candidate_evaluation": candidate_evaluation_json,
+            }
+
+            return Response({"application_data": application_json}, status=status.HTTP_200_OK)
+
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST) 

@@ -437,6 +437,7 @@ class GetIntervieweRemarks(APIView):
                 "primary_skills_rating": interview_remarks.primary_skills_rating,
                 "secondary_skills_rating": interview_remarks.secondary_skills_ratings,
                 "remarks": interview_remarks.remarks,
+                "status":interview_remarks.status,
             }
 
             return Response(remarks_json, status=status.HTTP_200_OK)
@@ -823,87 +824,5 @@ class RecruiterAllAlerts(APIView):
 
             return Response({"data":data}, status=status.HTTP_200_OK)
         
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class CompleteApplicationDetailsView(APIView):
-    permission_classes = [IsRecruiter]
-    
-    def get(self , request):
-        try:
-
-            application_id = request.GET.get('application_id')
-            application = JobApplication.objects.get(id = application_id)
-
-            candidate_evaluations = CandidateEvaluation.objects.filter(job_application  = application)
-            candidate_evaluation_json = []
-
-            primary_skills = CandidateSkillSet.objects.filter(candidate = application.resume, is_primary = True)
-            primary_skill_json = []
-            for skill in primary_skills:
-                primary_skill_json.append({
-                    "skill_name": skill.skill_name,
-                    "skill_type": skill.skill_metric,
-                    "value": skill.metric_value
-                })
-
-            secondary_skills = CandidateSkillSet.objects.filter(candidate = application.resume, is_primary = False)
-            secondary_skill_json = []
-            for skill in secondary_skills:
-                secondary_skill_json.append({
-                    "skill_name": skill.skill_name,
-                    "skill_type": skill.skill_metric,
-                    "value": skill.metric_value
-                })
-
-            upcoming_interview = None
-
-            if application.next_interview != None:
-                upcoming_interview = application.next_interview
-            
-            if upcoming_interview !=None:
-                next_interview_json = {
-                    "interviewer_name": upcoming_interview.interviewer.name.username,
-                    "interview_date": upcoming_interview.scheduled_date,
-                    "interview_time":f"{upcoming_interview.from_time} - {upcoming_interview.to_time}" 
-                }
-
-            else:
-                next_interview_json = {}
-            
-
-            application_json = {
-                "application_id":application.id,
-                "job_title":application.job_id.job_title,
-                "job_department":application.job_id.job_department,
-                "rounds_of_interview" : application.job_id.rounds_of_interview,
-                "current_round": application.round_num,
-                "deadline":application.job_id.job_close_duration,
-                "candidate_name": application.resume.candidate_name,
-                "candidate_email": application.resume.candidate_email,
-                "candidate_phone": application.resume.contact_number,
-                "application_status": application.status,
-                "upcoming_interview": next_interview_json,
-                "primary_skills":primary_skill_json,
-                "secondary_skills": secondary_skill_json,
-                "current_ctc": application.resume.current_ctc,
-                "expected_ctc" : application.resume.expected_ctc,
-                "highest_qualification": application.resume.highest_qualification,
-            }
-
-            for candidate in candidate_evaluations:
-                candidate_evaluation_json.append({
-                    "primary_skills_rating": json.dumps(candidate.primary_skills_rating),
-                    "secondary_skills_rating": json.dumps(candidate.secondary_skills_ratings),
-                    "remarks": candidate.remarks,
-                    "interviewer_name":candidate.interview_schedule.interviewer.name.username,
-                    "round_num" : candidate.round_num,
-                    "status": candidate.status,
-                })
-
-            return Response({"application_data": application_json, "candidate_evaluations":candidate_evaluation_json}, status=status.HTTP_200_OK)
-
-
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
