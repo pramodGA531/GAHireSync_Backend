@@ -941,10 +941,8 @@ class RecruiterTaskTrackingView(APIView):
             all_recruiters = organization.recruiters.all()
             recruiters_list = [{"name": recruiter.username} for recruiter in all_recruiters]
 
-            print(recruiters_list)
-
             recent_activities = []
-            resumes = JobApplication.objects.filter(sender__in=all_recruiters).order_by('-updated_at')[:6]
+            resumes = JobApplication.objects.filter(attached_to__in=all_recruiters).order_by('-updated_at')[:6]
             for resume in resumes:
                 task = ""
                 if resume.status == 'pending':
@@ -954,7 +952,7 @@ class RecruiterTaskTrackingView(APIView):
                 
 
                 time_diff = now() - resume.updated_at
-                print(time_diff.seconds)
+                
                 if time_diff.seconds < 60:
                     thumbnail = f"Updated {time_diff.seconds} seconds ago"
                 elif time_diff.seconds < 3600:
@@ -966,7 +964,7 @@ class RecruiterTaskTrackingView(APIView):
 
 
                 recent_activities.append({
-                    "name": resume.sender.username,
+                    "name": resume.attached_to.username,
                     "job_title": resume.job_id.job_title,
                     "task": task,
                     "thumbnail": thumbnail
@@ -1151,22 +1149,17 @@ class ClientsData(APIView):
 
             if job_id:
                 try:
-                    # Step 1: Get the specific job
                     job = JobPostings.objects.get(id=job_id, organization__manager=user)
 
-                    # Step 2: Fetch all jobs of that client under the same manager
                     jobs = JobPostings.objects.filter(username=job.username, organization__manager=user)
 
-                    # Step 3: Get client details only once
                     client = ClientDetails.objects.filter(user=job.username).first()
 
                     if not client:
                         return Response({'error': 'Client not found for this job.'}, status=404)
 
-                    # Step 4: Serialize all the jobs
                     jobs_data = JobPostingsSerializer(jobs, many=True).data
 
-                    # Step 5: Prepare final response
                     data = {
                         'client_username': client.username,
                         'organization_name': client.name_of_organization,
@@ -1174,7 +1167,8 @@ class ClientsData(APIView):
                         'website_url': client.website_url,
                         'gst_number': client.gst_number,
                         'company_address': client.company_address,
-                        'jobs': jobs_data  # All jobs serialized
+                        'jobs': jobs_data,
+                        
                     }
 
                     return Response(data, status=200)
@@ -1200,7 +1194,7 @@ class ClientsData(APIView):
                             'gst_number': client.gst_number,
                             'company_address': client.company_address,
                         })
-                        added_clients.add(client.username)  # Mark this client as added
+                        added_clients.add(client.username)  
 
                 return Response(data, status=200)
 

@@ -49,7 +49,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class ClientDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientDetails 
-        exclude = ['gst_number']
+        fields = '__all__'
 
     
 
@@ -177,6 +177,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
     resume = CandidateResumeSerializer()
     # cand_id=CandidateResumeWithoutContactSerializer()
     sender=CustomUserSerializer()
+    attached_to = CustomUserSerializer()
     receiver=CustomUserSerializer()
     class Meta:
         model = JobApplication

@@ -61,10 +61,9 @@ urlpatterns = [
     path('client/on-hold/', CandidatesOnHold.as_view(), name= 'candidates-on-hold' ),
     path('client/today-joinings/', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
     path('client/joined-candidates/', AllJoinedCandidates.as_view(), name='all-joined-candidates'),
-    path('client/update-joining-status/', UpdateJoiningStatus.as_view(), name='update-joining-status-of-candidate'),
     path('client/candidate-left/', CandidateLeftView.as_view(), name='updating-joining-status-of-candidate-as-left'),
-    path('client/candidate/', ViewCandidateDetails.as_view(), name='view-candidate'),
     path('client/candidate-joined/', CandidateJoined.as_view(), name='updating-joining-status-of-candidate-as-joined'),
+    path('client/candidate/', ViewCandidateDetails.as_view(), name='view-candidate'),
     path('client/replacements/', ReplacementsView.as_view(), name='apply-replacement-and-get-all-replacements'),
     path('client/replace-candidate/', ReplaceCandidate.as_view(), name='candidate-replacing'),
     path('client/compare-list-view/', CompareListView.as_view(), name='candidate-replacing'),
@@ -131,7 +130,6 @@ urlpatterns = [
     
     path('manager/clients-data/', ClientsData.as_view(), name='get-invoices'),
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
-    path('manager/clients-data/', ClientsData.as_view(), name='get-clients-data'),
     
     path('manager/all-alerts/', ManagerAllAlerts.as_view(), name='manager-all-alerts'),
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),

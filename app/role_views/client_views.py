@@ -957,7 +957,7 @@ class RejectApplicationView(APIView):
             clientCompanyDetails=ClientDetails.objects.get(user=request.user)
             Notifications.objects.create(
     sender=request.user,
-    receiver=job_application.sender, 
+    receiver=job_application.attached_to, 
     category = Notifications.CategoryChoices.REJECT_CANDIDATE, 
     subject=f"Profile for {job_application.job_id.job_title} Rejected by Client",
     message=(
@@ -1086,7 +1086,7 @@ HireSync Team
                 
                 Notifications.objects.create(
     sender=request.user,
-    receiver=job_application.sender,  
+    receiver=job_application.attached_to,  
     category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     subject=f"Profile for {job_application.job_id.job_title} Accepted by Client",
     message=(
@@ -1386,7 +1386,7 @@ class HandleSelect(APIView):
 )
             Notifications.objects.create(
     sender=request.user,
-    receiver=application.sender, 
+    receiver=application.attached_to, 
     category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     subject=f"Candidate {customCand.username} Selected for the Position {application.job_id.job_title}",
     message=(
@@ -1665,7 +1665,7 @@ class TodayJoingings(APIView):
                         # "resume_id": application.resume.id,
                         "job_id": application.job_id.id,
                         "status": application.status,
-                        "sender_id": application.sender.username,
+                        "sender_id": application.attached_to.username,
                         "receiver_id": application.receiver.username,
                         "feedback": application.feedback
                     },
@@ -1815,7 +1815,6 @@ class AllJoinedCandidates(APIView):
 class CandidateLeftView(APIView):
     def post(self, request):
         try:
-            print('entered here')
             reason = request.data.get('reason')
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
@@ -1830,7 +1829,6 @@ class CandidateLeftView(APIView):
             application = candidate.application
             application.status = 'left'
             application.save()
-            print(candidate.joining_status)
             return Response({"message":"Candidate status updated successfully"},status = status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
@@ -1926,6 +1924,7 @@ class SelectedCandidatesView(APIView):
                         "job_title": candidate.application.job_id.job_title,
                         "joining_status": candidate.joining_status,
                         "joining_date": candidate.joining_date,
+                        "job_status": application.job_id.status,
                     })
 
             return Response(candidates_list, status = status.HTTP_200_OK)
@@ -1953,6 +1952,7 @@ class ShortlistedCandidatesView(APIView):
                         "current_status": application.round_num,
                         "agency": application.job_id.organization.name,
                         "next_interview": application.next_interview.scheduled_date if application.next_interview else "No Interviews",
+                        "job_status": application.job_id.status,
                     }
                 )
             return Response(applications_list, status=status.HTTP_200_OK)
@@ -2020,7 +2020,6 @@ class CandidateLeftView(APIView):
             for application in applications:
                 selected_candidate  = getattr(application ,"selected_candidates",None)
                 if selected_candidate and selected_candidate.joining_status == "left":
-                    print("entered")
                     selected_candidates_list.append(
                         {
                             "candidate_name": application.resume.candidate_name,
@@ -2031,6 +2030,7 @@ class CandidateLeftView(APIView):
                             "left_date": selected_candidate.resigned_date,
                             "replacement_status": selected_candidate.replacement_status,
                             "id":selected_candidate.id,
+                            "job_status": application.job_id.status,
                         }
                     )
             return Response(selected_candidates_list, status = status.HTTP_200_OK)
@@ -2042,7 +2042,7 @@ class CandidateLeftView(APIView):
             reason = request.data.get('reason')
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
-            candidate.joining_status = 'left'      # by default candidate resigned date is considered as today
+            candidate.joining_status = 'left'      
             candidate.resigned_date = date.today()
             candidate.left_reason = reason
             candidate.save()
@@ -2066,7 +2066,7 @@ class CandidateLeftView(APIView):
             
             Notifications.objects.create(
     sender=request.user,
-    receiver=candidate.application.sender,
+    receiver=candidate.application.attached_to,
     category = Notifications.CategoryChoices.CANDIDATE_LEFT,
     subject=f"Candidate {candidate.candidate.name.username} is left",
     message=(
@@ -2101,18 +2101,38 @@ class CandidateJoined(APIView):
     permission_classes = [IsClient]
     def post(self, request):
         try:
-            candidate_id = request.GET.get('candidate_id')
-            candidate = SelectedCandidates.objects.get(id = candidate_id)
-            candidate.joining_status = "joined"
-            candidate.save()
 
-            job_openings = candidate.application.job_id.num_of_positions
-            jobs_filled_applications = JobApplication.objects.filter(job_id = candidate.application.job_id)
-            jobs_filled = SelectedCandidates.objects.filter(application__in = jobs_filled_applications, joining_status = 'joined').count()
+            with transaction.atomic():
+
+                candidate_id = request.GET.get('candidate_id')
+                candidate = SelectedCandidates.objects.get(id = candidate_id)
+                candidate.joining_status = "joined"
+                candidate.save()
+
+                job_openings = candidate.application.job_id.num_of_positions
+
+                job_applications = JobApplication.objects.filter(job_id = candidate.application.job_id)
+
+                jobs_filled = SelectedCandidates.objects.filter(application__in = job_applications.count, joining_status = 'joined').count()
+
+                if job_openings>jobs_filled:
+                    return Response({"message":"Status updated successfully"}, status=status.HTTP_200_OK)
             
-            Notifications.objects.create(
+                # send_mass_email here that all the postings are filled here and best of luck for next time
+
+                job_post = candidate.application.job_id
+                job_post.status = 'closed'
+                job_post.save()
+
+                for application in job_applications:
+                    if application.next_interview:
+                        application.next_interview.status = "cancelled"
+                        application.next_interview.save()
+
+            
+                Notifications.objects.create(
     sender=request.user,
-    receiver=candidate.application.sender,
+    receiver=candidate.application.attached_to,
     category = Notifications.CategoryChoices.CANDIDATE_JOINED,
     subject=f"Candidate {request.user.username} Has Successfully Joined",
     message=(
@@ -2121,17 +2141,6 @@ class CandidateJoined(APIView):
         f"has successfully joined for the position of {candidate.application.job_id.job_title}.\n\n"
     )
 )
-
-            if job_openings>jobs_filled:
-                return Response({"message":"Status updated successfully"}, status=status.HTTP_200_OK)
-            
-            # send_mass_email here that all the postings are filled here and best of luck for next time
-
-            job_post = candidate.application.job_id
-            job_post.status = 'closed'
-            job_post.save()
-            
-         
             return Response({"message":"All Job openings are filled, job post is closed successfully"}, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -2292,7 +2301,7 @@ class CompareListView(APIView):
                     "id":application.id,
                     "resume_id": resume.id,
                     "candidate_name": resume.candidate_name,
-                    "sender": application.sender.username,
+                    "sender": application.attached_to.username,
                     "other_details": resume.other_details,
                     "notice_period": resume.notice_period,
                     "expected_ctc": resume.expected_ctc,
@@ -2361,7 +2370,7 @@ class ViewCompleteResume(APIView):
                     "id":application.id,
                     "resume_id": resume.id,
                     "candidate_name": resume.candidate_name,
-                    "sender": application.sender.username,
+                    "sender": application.attached_to.username,
                     "other_details": resume.other_details,
                     "notice_period": resume.notice_period,
                     "expected_ctc": resume.expected_ctc,

@@ -17,6 +17,8 @@ from app.utils import generate_invoice
 from django.db.models import Q
 from ..utils import *
 from django.http import JsonResponse
+from django.core.files.base import File
+from django.core.files.storage import default_storage
 
 
 # Recruiter Profile
@@ -50,6 +52,7 @@ class RecruiterProfileView(APIView):
 # Sending Candidate profile to the Job post
 class CandidateResumeView(APIView):
     parser_classes = (MultiPartParser, FormParser)
+    permission_classes = [IsRecruiter]
 
 
     def post(self, request):
@@ -58,17 +61,30 @@ class CandidateResumeView(APIView):
             if not job_id:
                 return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            user = request.user
-            if not user or user.role != 'recruiter':
-                return Response({"error": "You are not allowed to handle this request"}, status=status.HTTP_403_FORBIDDEN)
-
             job = JobPostings.objects.get(id=job_id)
+
+            if job.status == 'closed':
+                return Response({"error":"Job post is closed, unable to share the applications"}, status=status.HTTP_400_BAD_REQUEST)
+            
             receiver = job.username
 
-            if 'resume' not in request.FILES:
-                return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
-
             data = request.data
+            user = request.user
+
+            if data.get('resume') == "draggedId":
+                application = JobApplication.objects.get(id= data.get('application_id')).resume
+                actual_resume_path = application.resume.name
+
+                with default_storage.open(actual_resume_path, 'rb') as f:
+                    new_file = File(f)
+
+            elif 'resume' in request.FILES:
+                new_file = request.FILES['resume']
+
+            else: 
+                return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+
             date_string = data.get('date_of_birth', '')
 
             try:
@@ -88,7 +104,6 @@ class CandidateResumeView(APIView):
             ).exists():
                 return Response({"error": "Candidate application is submitted previously"}, status=status.HTTP_400_BAD_REQUEST)
 
-            #check job application of this user, with this id
             try:
                 resumes =  CandidateResume.objects.filter(candidate_name = data.get('candidate_name'))
                 application = JobApplication.objects.get(job_id = job_id, resume__in = resumes)
@@ -97,9 +112,8 @@ class CandidateResumeView(APIView):
                     return Response({"error":"Job application already posted for this email id"}, status=status.HTTP_400_BAD_REQUEST)
             except JobApplication.DoesNotExist:
 
-            # Create a CandidateResume instance
                 candidate_resume = CandidateResume.objects.create(
-                    resume=request.FILES['resume'],
+                    resume=new_file if new_file else request.FILES['resume'],
                     candidate_name=data.get('candidate_name'),
                     candidate_email = data.get('candidate_email'),
                     contact_number=data.get('contact_number'),
@@ -154,6 +168,7 @@ class CandidateResumeView(APIView):
                     job_id=job,
                     status='pending',
                     sender=user,
+                    attached_to = user,
                     receiver=receiver,
                 )
                 
@@ -229,7 +244,7 @@ class ScheduleInterview(APIView):
             if not request.GET.get('application_id'):
                 user = request.user
                 pending_arr = []
-                applications = JobApplication.objects.filter(sender = user, status = 'processing')
+                applications = JobApplication.objects.filter(attached_to = user, status = 'processing')
                 for application in applications:
                     if  application.next_interview and application.next_interview.status != 'pending':
                         continue
@@ -371,7 +386,7 @@ class ScheduleInterview(APIView):
                         Add to Google Calendar
                     </a>
                 </p>
-                <p>Best Regards,<br>{application.sender.username}</p>
+                <p>Best Regards,<br>{application.attached_to.username}</p>
             </body>
             </html>
             """
@@ -532,7 +547,7 @@ class ReConfirmResumes(APIView):
     permission_classes = [IsRecruiter]
     def get(self, request):
         try:
-            job_applications = JobApplication.objects.filter(sender = request.user, status = 'selected')
+            job_applications = JobApplication.objects.filter(attached_to = request.user, status = 'selected')
             selected_candidates = SelectedCandidates.objects.filter(application__in = job_applications)
             print("selected_candidates",selected_candidates)
             candidates_list = []
@@ -605,7 +620,7 @@ class RecJobDetails(APIView):
             job = JobPostings.objects.get(id=job_id, organization=org)
             serializer = JobPostingsSerializer(job)
 
-            resume_count = JobApplication.objects.filter(job_id = job_id, sender = user).count()
+            resume_count = JobApplication.objects.filter(job_id = job_id, attached_to = user).count()
 
             try:
                 summary = summarize_jd(job)
@@ -696,7 +711,7 @@ class ResumesSent(APIView):
         if not job_posting:
             return Response({"error": "Job posting not found or not assigned to you"}, status=404)
 
-        applications = JobApplication.objects.filter(job_id=job_posting, sender=user)
+        applications = JobApplication.objects.filter(job_id=job_posting, attached_to=user)
 
         applications_data = [
             {
@@ -736,26 +751,22 @@ class RecSummaryMetrics(APIView):
         print("calling this function")
         rctr_id = request.GET.get("rctr_id")
         try:
-            rctr_obj = CustomUser.objects.get(id=rctr_id)  # Fetch recruiter
+            rctr_obj = CustomUser.objects.get(id=rctr_id)  
         except ObjectDoesNotExist:
             return Response({"error": "Recruiter not found"}, status=404)
 
-        # Count of applications sent by recruiter
-        applications_count = JobApplication.objects.filter(sender=rctr_obj).count()
+        applications_count = JobApplication.objects.filter(attached_to=rctr_obj).count()
 
-        # Count of interviews scheduled by recruiter
         interviews_count = InterviewSchedule.objects.filter(rctr=rctr_obj).count()
 
-        # Count of job postings assigned to recruiter
         job_postings_count = JobPostings.objects.filter(assigned_to=rctr_obj).count()
 
-        # Count of selected candidates with 'pending' and 'joined' statuses
         pending_candidates_count = SelectedCandidates.objects.filter(
-            application__sender=rctr_obj, joining_status="pending"
+            application__attached_to=rctr_obj, joining_status="pending"
         ).count()
 
         joined_candidates_count = SelectedCandidates.objects.filter(
-            application__sender=rctr_obj, joining_status="joined"
+            application__attached_to=rctr_obj, joining_status="joined"
         ).count()
 
         return Response({

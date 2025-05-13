@@ -346,8 +346,10 @@ class PromoteCandidateView(APIView):
             try:
                 application = JobApplication.objects.get(resume__id = resume_id)
             except JobApplication.DoesNotExist:
-                print("query doesnot exist")
                 return Response({"error":"Job application matching query doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if application.job_id.status == 'closed':
+                return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
 
             primary_skills = request.data.get('primary_skills')
             secondary_skills = request.data.get('secondary_skills')
@@ -382,7 +384,7 @@ class PromoteCandidateView(APIView):
             Notifications.objects.create(
     sender=request.user,
     category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
-    receiver=application.sender,
+    receiver=application.attached_to,
     subject=f"Candidate {customCand.username} has been cleared interview {application.round_num-1} for the role {application.job_id.job_title}",
     message=(
         f"Candidate Promotion Notice\n\n"
@@ -423,6 +425,9 @@ class RejectCandidate(APIView):
             round_num = request.data.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
 
+            if application.job_id.status == 'closed':
+                return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
+
             primary_skills = request.data.get('primary_skills', '')
             secondary_skills = request.data.get('secondary_skills', '')
             remarks = request.data.get('remarks', "")
@@ -452,7 +457,7 @@ class RejectCandidate(APIView):
             Notifications.objects.create(
                     sender=request.user,
                     category = Notifications.CategoryChoices.REJECT_CANDIDATE,
-                    receiver=application.sender,
+                    receiver=application.attached_to,
                     subject=f"Candidate {customCand.username} is rejected for the role {application.job_id.job_title}",
                     message = (
     f"Candidate Rejection Notice\n\n"
@@ -544,6 +549,9 @@ HireSync.
             resume_id = request.GET.get('id')
             round_num = request.GET.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
+            
+            if application.job_id.status == 'closed':
+                return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
 
 
             remarks = request.data.get('remarks')
@@ -620,7 +628,7 @@ HireSync.
                 Notifications.objects.create(
     sender=request.user,
     category = Notifications.CategoryChoices.SELECT_CANDIDATE,
-    receiver=application.sender,
+    receiver=application.attached_to,
     subject=f"Candidate {customCand.username} has cleared all interviews for the role {application.job_id.job_title}",
     message=(
         f"Candidate Progress Update\n\n"

@@ -414,7 +414,7 @@ class CandidateApplicationsView(APIView):
                     {
                         "job_title": application.job_id.job_title,
                         "application_status": application.status,
-                        "sender": application.sender.username,
+                        "sender": application.attached_to.username,
                         "receiver": application.receiver.username,
                         "round_number": application.round_num,
                         "next_interview" : next_interview,
@@ -527,7 +527,7 @@ class CandidateAcceptJob(APIView):
             
             Notifications.objects.create(
     sender=request.user,
-    receiver=application.sender,
+    receiver=application.attached_to,
     category = Notifications.CategoryChoices.CANDIDATE_ACCEPTED,
     subject=f"Hey, Recruiter Candidate Accepts the offer position {application.job_id.job_title}",
     message=(

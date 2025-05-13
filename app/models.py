@@ -441,7 +441,7 @@ class JobApplication(models.Model):
     resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, choices= STATUS, default='applied')
-    sender = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
+    attached_to = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
     receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
     message = models.TextField(null=True, blank=True)
     round_num = models.IntegerField(default=0)
@@ -450,6 +450,7 @@ class JobApplication(models.Model):
     feedback = models.TextField(blank= True,default= None ,  null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now = True,)
+    sender = models.ForeignKey(CustomUser, related_name='Actual_sender', on_delete=models.CASCADE, null=True, limit_choices_to={'role':"recruiter"})
     class Meta:
         unique_together = ('job_id','resume')
 

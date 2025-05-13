@@ -500,7 +500,7 @@ class CandidateStatusForJobView(APIView):
 
             response_data = {
                 "current_stage": job_application.status,
-                "recruiter_name": job_application.sender.username if job_application.sender else None,
+                "recruiter_name": job_application.attached_to.username if job_application.attached_to else None,
                 "num_of_rounds": InterviewerDetails.objects.filter(job_id=job_details).count(),
                 "matched_skills": matched_skills,
                 "unmatched_skills": unmatched_skills,
