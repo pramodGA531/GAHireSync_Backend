@@ -59,6 +59,9 @@ urlpatterns = [
     path('client/scheduled-interviews/<int:job_id>/', ScheduledInterviewsForJobId.as_view(), name='scheduled_interviews'),
     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('client/on-hold/', CandidatesOnHold.as_view(), name= 'candidates-on-hold' ),
+    path('client/cand-request/', CandidatesRequestedDate.as_view(), name= 'candidates-request' ),
+    
+    
     path('client/today-joinings/', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
     path('client/joined-candidates/', AllJoinedCandidates.as_view(), name='all-joined-candidates'),
     path('client/candidate-left/', CandidateLeftView.as_view(), name='updating-joining-status-of-candidate-as-left'),
@@ -104,6 +107,7 @@ urlpatterns = [
     path('candidate/selected-jobs/', SelectedJobsCandidate.as_view(), name = 'list-of-selected-jobs'),
     path('candidate/handle-accepted/', CandidateAcceptJob.as_view(), name='handle-select'),
     path('candidate/handle-rejected/', CandidateRejectJob.as_view(), name='handle-reject'),
+    path('candidate/handle-edit/', CandidateEditRequestUpdate.as_view(), name='handle-edit'),
     path('candidate/all-alerts/', CandidateAllAlerts.as_view(), name='candidate-all-alerts'),
 
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),

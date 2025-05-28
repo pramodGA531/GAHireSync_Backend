@@ -14,10 +14,9 @@ def invoice_validate(request=None):
     joined_candidates = SelectedCandidates.objects.filter(joining_status="joined")
     yesterday = now().date() - timedelta(days=1)  
 
-    for joined_candidate in joined_candidates:
+    for joined_candidate in joined_candidates: 
         application = joined_candidate.application
         job = application.job_id
-
         try:
             # Get job terms
             terms = JobPostTerms.objects.get(job_id=job.id)
@@ -59,10 +58,14 @@ def invoice_validate(request=None):
 
     return JsonResponse({"status": "success"}, safe=False) if request else None
 
-
-
+def remainders():
+    # This function is called every day at 8:00 AM to send reminders for invoices that
+    # are due today or have been due in the past 7 days but haven't been sent
+    print("fetch the all requests what are the img messages need to remaind")
+    
+    
 def calculate_send_invoice(job,application,method,invoice):
-    print("Fetching organization_email and client_email for invoice.")
+    # print("Fetching organization_email and client_email for invoice.")
     context=create_invoice_context(invoice)
     if method=="generate":
         subject=f"Invoice is generated here" 

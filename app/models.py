@@ -132,8 +132,8 @@ class JobPostings(models.Model):
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
     jobcode = models.CharField(max_length=40,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
-    job_title = models.CharField(max_length=255, )
-    job_department = models.CharField(max_length=100, )
+    job_title = models.CharField(max_length=255,)
+    job_department = models.CharField(max_length=100,)
     job_description = models.TextField()
     years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
@@ -154,7 +154,7 @@ class JobPostings(models.Model):
     assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     age = models.CharField(max_length=255 )
-    gender = models.CharField(max_length = 100 ,) 
+    gender = models.CharField(max_length = 100,) 
     visa_status = models.CharField(max_length=100, )
     passport_availability = models.CharField(max_length=50,)
     time_period = models.CharField(max_length=50 ,default=" ",blank=True )
@@ -171,8 +171,7 @@ class JobPostings(models.Model):
 
     class Meta:
         unique_together = ('username', 'jobcode') 
-    
-    
+     
     def get_locations(self):
         return self.job_locations.split(",") if self.job_locations else []
     
@@ -679,6 +678,8 @@ class SelectedCandidates(models.Model):
     recruiter_acceptance = models.BooleanField(default=True)
     feedback  = models.CharField(max_length=250, blank=True)
     left_reason = models.CharField(max_length=200, blank=True)
+    edit_request=models.CharField(max_length=200,blank=True)
+    client_accept_request=models.BooleanField(default=False)
     is_replacement_eligible = models.BooleanField(default= False)
     replacement_status = models.CharField(max_length=50, default='no', choices=REPLACEMENT_STATUS_CHOICES)
     is_replaced = models.BooleanField(default=False)
@@ -794,13 +795,17 @@ class BlogPost(models.Model):
 
 
 class Notifications(models.Model):
-
+    
+    # Here in these we Missed the 1) Action Need Field 2) Action (Boolean Field) 3) Action taken Time
+    
+    # Here I need that to track the requests that if the request are trigger any of the Action then Need To change that requests action for the remainders that would give the appropriate remainders if based on the actions if the action is done then no need to do send the remainder if the action is not done then we need to Send the Remainders 
+    
     class CategoryChoices(models.TextChoices):
         NEGOTIATE_TERMS = 'negotiated_terms','NegotiatedTerms'                  #manager
         REJECT_TERMS = 'reject_terms','RejectTerms'                             #client
         ACCEPT_TERMS = 'accept_terms', 'AcceptTerms'                            #client
         CREATE_JOB = 'create_job','CreateJob'                                   #manager
-        ASSIGN_INTERVIEWER = 'assign_interviewer', 'AssignInterviewer'          #interviewer
+        ASSIGN_INTERVIEWER = 'assign_interviewer','AssignInterviewer'          #interviewer
         ACCEPT_JOB = 'accept_job','AcceptJob'                                   #client
         EDIT_JOB = 'edit_job','EditJob'                                         #client
         ACCEPT_JOB_EDIT = 'accept_job_edit', 'AcceptJobEdit'                    #manager
@@ -825,11 +830,10 @@ class Notifications(models.Model):
     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)
     receiver = models.ForeignKey(CustomUser, related_name='received_notifications', on_delete=models.CASCADE,null=True, blank=True)
     subject = models.CharField(max_length=255)
-    seen = models.BooleanField(default=False)
+    seen = models.BooleanField(default=False) # If Not Seen Then Need 
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.CharField(max_length=60, choices=CategoryChoices.choices, null=True, blank=True)
-
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.subject}"

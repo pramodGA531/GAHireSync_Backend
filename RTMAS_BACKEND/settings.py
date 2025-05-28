@@ -230,9 +230,12 @@ CELERY_BEAT_SCHEDULE = {
     'daily_tasks':{
         'task': 'app.tasks.daily_tasks_runner',
         # 'schedule':timedelta(seconds=30),
-        'schedule':crontab(minute=43, hour=10), # set up celery cmds in the production 
-    }
-    
+        'schedule':crontab(minute=22, hour=10), # set up celery cmds in the production 
+    },
+    'send_reminders_every_10_minutes': {
+        'task': 'app.tasks.remainders_task',
+        'schedule': crontab(minute='*'),  # every 10 minutes
+    },
 }
 
 
