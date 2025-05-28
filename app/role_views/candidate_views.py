@@ -497,6 +497,8 @@ class SelectedJobsCandidate(APIView):
                     "candidate_acceptance": selected_job.candidate_acceptance,
                     "recruiter_acceptance": selected_job.recruiter_acceptance,
                     "job_id": selected_job.application.job_id.id,
+                    "edit_request":selected_job.edit_request,
+                    "client_accept_request":selected_job.client_accept_request,
                 }
                 selected_jobs_list.append(details_json)
 
@@ -582,10 +584,41 @@ class CandidateRejectJob(APIView):
             return Response({"message":"Your feedback send to client successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   
-        
-        
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST) 
+          
+from datetime import date
+class CandidateEditRequestUpdate(APIView): 
+    permission_classes = [IsCandidate]
 
+    def post(self, request):
+        try:
+            id = request.GET.get('selected_candidate_id')
+            user = request.user
+            selected_candidate = SelectedCandidates.objects.get(id=id)
+
+            if user != selected_candidate.candidate.name:
+                return Response({"error": "Users are not matching"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # ✅ Prevent re-submission if already filled
+            if selected_candidate.edit_request:
+                return Response({"error": "Edit request has already been submitted and cannot be changed."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            edit_request_note = request.data.get('edit_request')
+            if not edit_request_note:
+                return Response({"error": "Edit request note is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            selected_candidate.edit_request = f"{edit_request_note} on {date.today().isoformat()}"
+            selected_candidate.save()
+            
+            # here I need to write the notifications for the rctr and the client , manager 
+
+
+            return Response({"message": "Edit request submitted successfully."}, status=status.HTTP_200_OK)
+
+        except SelectedCandidates.DoesNotExist:
+            return Response({"error": "Selected candidate not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class CandidateReConfirmation(APIView):
     # print("CALLING THIS FUNCTION")
     permission_classes = [IsAuthenticated, IsCandidate]  # Ensure authentication
