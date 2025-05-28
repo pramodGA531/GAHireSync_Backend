@@ -393,12 +393,14 @@ class InterviewSchedule(models.Model):
     PENDING = 'pending'
     COMPLETED = 'completed'
     CANCELLED = 'cancelled'
+    RESCHEDULE = 'reschedule'
 
     STATUS_CHOICES = [
         (SCHEDULED, 'scheduled'),
         (PENDING, 'pending'),
         (COMPLETED, 'completed'),
         (CANCELLED ,'cancelled'),
+        (RESCHEDULE, 'reschedule'),
     ]
     id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)

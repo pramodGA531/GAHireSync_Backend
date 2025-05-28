@@ -250,7 +250,7 @@ class ScheduleInterview(APIView):
                         continue
                     interviewer = InterviewerDetails.objects.get(job_id = application.job_id, round_num = application.round_num).name.username
                     pending_arr.append({
-                        "application_id" : application.id,
+                        "application_id" : application.id, 
                         "job_title" : application.job_id.job_title,
                         "round_num" : application.round_num,
                         "candidate_name": application.resume.candidate_name ,

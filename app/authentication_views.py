@@ -330,7 +330,7 @@ class LoginView(APIView):
                 return Response({
                     "error": "Your email is not verified yet, please verify your email",
                     "not_verified": True
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status=status.HTTP_200_OK)
             
             first_login_flag = True
             if user.role == CustomUser.MANAGER:

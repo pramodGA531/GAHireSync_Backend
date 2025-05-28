@@ -71,11 +71,9 @@ urlpatterns = [
     path('client/shortlisted-candidates/', ShortlistedCandidatesView.as_view(), name='candidates-selected'),
     path('client/delete-job-post/', DeleteJobPost.as_view(), name='delete-job-post'),
     path('client/orgs-data/', OrgsData.as_view(), name='orgs-data'),
-
-    
-    
-
     path('client/all-alerts/', ClientAllAlerts.as_view(), name='client-all-alerts'),
+    path('client/interviewer-details/', InterviewerRoundsView.as_view(), name='client-all-alerts'),
+
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
 
@@ -145,6 +143,9 @@ urlpatterns = [
     path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
     path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
     path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
+    path('manager/recruiter/jobs/',RecruiterJobsView.as_view(), name='manager-tracking-recruiters'),
+    path('manager/remove-recruiter/',RemoveRecruiter.as_view(), name='manager-tracking-recruiters'),
+
     
     
  

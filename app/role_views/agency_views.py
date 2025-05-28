@@ -952,7 +952,7 @@ class RecruiterTaskTrackingView(APIView):
                 
 
                 time_diff = now() - resume.updated_at
-                
+
                 if time_diff.seconds < 60:
                     thumbnail = f"Updated {time_diff.seconds} seconds ago"
                 elif time_diff.seconds < 3600:
@@ -1178,8 +1178,7 @@ class ClientsData(APIView):
             else:
                 jobs = JobPostings.objects.filter(organization__manager=user)
                 data = []
-                added_clients = set()  # To track unique client usernames
-
+                added_clients = set()  
                 for job_item in jobs:
                     client = ClientDetails.objects.filter(user=job_item.username).first()
                     if client and client.username not in added_clients:
@@ -1200,4 +1199,104 @@ class ClientsData(APIView):
 
 
         except Exception as e:
-            return Response({'error': str(e)}, status=500)
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RecruiterJobsView(APIView):
+    permission_classes = [IsManager]
+    
+    def get(self, request):
+        try:
+            recruiter_id = request.GET.get('rec_id')
+            recruiter = CustomUser.objects.get(id = recruiter_id)
+            recruiter_jobs = JobPostings.objects.filter(assigned_to = recruiter)
+            job_details_json = []
+
+
+            if not recruiter_jobs.exists():
+                return Response({"data":None,"recruiters": None }, status=status.HTTP_200_OK)
+
+            organization = Organization.objects.filter(id = recruiter_jobs[0].organization.id)
+
+            recruiters_list = CustomUser.objects.filter(
+                recruiting_organization__in=organization
+            ).exclude(id=recruiter.id).distinct()
+
+            recruiters_json = []
+            for recruiter in recruiters_list:
+                recruiters_json.append({
+                    "recruiter_name": recruiter.username,
+                    "id": recruiter.id
+                })
+
+            for job in recruiter_jobs:
+
+                assigned_recruiters = job.assigned_to.all()
+                assigned_list = []
+                for member in assigned_recruiters:
+                    assigned_list.append({
+                        "recruiter_name":member.username,
+                        "id": member.id
+                    })
+
+                job_details_json.append({
+                    "job_title": job.job_title,
+                    "job_id": job.id,
+                    "resumes_sent": JobApplication.objects.filter(job_id = job.id, sender = recruiter).count(),
+                    "assigned_list": assigned_list,
+                })
+            
+            return Response({"data":job_details_json, "recruiters":recruiters_json}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RemoveRecruiter(APIView):
+    permission_classes = [IsManager]
+    def post(self, request):
+        try:
+            rec_id = request.GET.get('rec_id')
+            if not rec_id:
+                return Response({"error": "Recruiter ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            recruiter_to_remove = get_object_or_404(CustomUser, id=rec_id)
+            reassignment_data = request.data
+
+            with transaction.atomic():
+            
+                for entry in reassignment_data:
+                    job_id = entry.get("job_id")
+                    new_rec_id = entry.get("selected_recruiter_id")
+
+                    if not job_id or not new_rec_id:
+                        continue  
+
+                    job = get_object_or_404(JobPostings, id=job_id)
+                    new_recruiter = get_object_or_404(CustomUser, id=new_rec_id)
+                    job.assigned_to.remove(recruiter_to_remove)
+
+                    if new_recruiter not in job.assigned_to.all():
+                        job.assigned_to.add(new_recruiter)
+
+                    applications = JobApplication.objects.filter(job_id = job.id, attached_to = recruiter_to_remove)
+                    for application in applications:
+                        application.attached_to = new_recruiter
+                        application.save()
+
+                    # write email functionality here
+                    receiver = new_recruiter.email
+                    subject = f"Job post reassigned to you "
+                    message = '''
+THis is the new job post reassigned to you
+'''                 
+                    send_custom_mail(subject = subject, body=message, to_email=[receiver])
+
+                recruiter_to_remove.delete()  
+
+            return Response({"message": "Recruiter removed and jobs reassigned successfully"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("Error in RemoveRecruiter:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        

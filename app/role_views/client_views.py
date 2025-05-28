@@ -866,14 +866,62 @@ class InterviewersView(APIView):
 
     def delete(self, request):
         try:
+            data = request.data
+            print(data, "is the allotted data")
+
             interviewer_id = request.GET.get('interviewer_id')
-            CustomUser.objects.get(id = interviewer_id).delete()
-            return Response({"message":"Interviewer removed successfully"}, status=status.HTTP_200_OK)
-        except Exception as e:
+            if not interviewer_id:
+                return Response({"error": "interviewer_id is required in query params."}, status=status.HTTP_400_BAD_REQUEST)
+
+            interviewer = CustomUser.objects.get(id=interviewer_id)
+
+            if data:
+                for job in data:
+                    round_num = job.get("round_num")
+                    job_id = job.get("job_id")
+                    selected_interviewer_id = job.get("selectedInterviewer")
+
+                    if not (round_num and job_id and selected_interviewer_id):
+                        continue  
+
+                    interviewer_details = InterviewerDetails.objects.get(round_num=round_num, job_id=job_id)
+
+                    scheduled_interviews = InterviewSchedule.objects.filter(
+                        interviewer=interviewer_details,
+                        status__in=['scheduled', 'pending']
+                    )
+
+                    for interview in scheduled_interviews:
+                        applications = JobApplication.objects.filter(next_interview=interview)
+                        for application in applications:
+                            application.next_interview = None
+                            application.save()
+                        interview.delete()
+
+                    new_interviewer = CustomUser.objects.get(id=selected_interviewer_id)
+                    interviewer_details.name = new_interviewer
+                    interviewer_details.save()
+
+            client_details = ClientDetails.objects.get(user=request.user.id)
+            client_details.interviewers.remove(interviewer)
+
+            interviewer.delete()
+
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {"message": "Interviewer removed successfully, and all the interviews allotted to the old interviewer are sent to reschedule"},
+                status=status.HTTP_200_OK
             )
+
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Interviewer not found."}, status=status.HTTP_404_NOT_FOUND)
+        except InterviewerDetails.DoesNotExist:
+            return Response({"error": "Interviewer details not found for some jobs."}, status=status.HTTP_404_NOT_FOUND)
+        except ClientDetails.DoesNotExist:
+            return Response({"error": "Client not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 # Get all the applicaitons
 class GetResumeView(APIView):
@@ -1328,6 +1376,7 @@ class CandidatesOnHold(APIView):
                     "organization_name": candidate.job_id.organization.name,
                     "application_id": candidate.id,
                     "job_department": candidate.job_id.job_department,
+                    "job_status": candidate.job_id.status,
                 }
                 candidate_list.append(candidate_json)
 
@@ -2111,13 +2160,16 @@ class CandidateJoined(APIView):
 
                 job_openings = candidate.application.job_id.num_of_positions
 
+                print("entered 2")
                 job_applications = JobApplication.objects.filter(job_id = candidate.application.job_id)
 
-                jobs_filled = SelectedCandidates.objects.filter(application__in = job_applications.count, joining_status = 'joined').count()
+                print("entered 3")
+                jobs_filled = SelectedCandidates.objects.filter(application__in = job_applications, joining_status = 'joined').count()
 
                 if job_openings>jobs_filled:
                     return Response({"message":"Status updated successfully"}, status=status.HTTP_200_OK)
             
+                print("etnered 4")
                 # send_mass_email here that all the postings are filled here and best of luck for next time
 
                 job_post = candidate.application.job_id
@@ -2486,48 +2538,75 @@ class OrgsData(APIView):
     def get(self, request):
         try:
             user = request.user
-            job_id = request.GET.get('id')
+            organization_id = request.GET.get('id')
 
-            if job_id:
+            if organization_id:
                 try:
-                    job = JobPostings.objects.get(id=job_id, username=user)
-                    jobs = JobPostings.objects.filter(username=user, organization__manager=job.organization.manager)
-                    # fetch the organizations details Organization.objects.filter()
-                    org = Organization.objects.filter(manager=job.organization.manager).first()
-                    if not org:
-                        return Response({'error': 'Organization not found for this job.'}, status=404)
-                    jobs_data = JobPostingsSerializer(jobs, many=True).data
+                    
+                    organization = Organization.objects.get(id = organization_id)
+                    
+                    all_postings = JobPostings.objects.filter(organization = organization, username = request.user)
+                    total_postings = all_postings.count()
+                    completed = JobPostings.objects.filter(organization = organization, status = 'closed', username = request.user).count()
+
+                    jobs_data = []
+                    for job in all_postings:
+                        job_applications = JobApplication.objects.filter(job_id = job.id)
+                        selected = job_applications.filter(status = 'selected').count()
+                        processing = job_applications.filter(status = 'processing').count()
+                        rejected = job_applications.filter(status = 'rejected').count()
+                        hold = job_applications.filter(status = 'hold').count()
+                        pending = job_applications.filter(status = 'pending').count()
+
+                        jobs_data.append({
+                            "job_title": job.job_title,
+                            "jobcode": job.jobcode,
+                            "number_of_openings": job.num_of_positions,
+                            "candidates_selected": selected,
+                            "candidates_processing": processing,
+                            "rejected": rejected,
+                            "hold": hold,
+                            "pending": pending,
+                            "status":job.status,
+                        })
+
                     data = {
+                        'manager_username': organization.manager.username,
+                        'organization_name': organization.name,
+                        'contact_number': organization.contact_number,
+                        'website_url': organization.website_url,
+                        'gst_number': organization.gst_number,
+                        'company_address': organization.company_address,
+                        "pan": organization.company_pan,
+                        'gst': organization.gst_number,
+                        'jobs': jobs_data ,
+                        "total_postings": total_postings,
+                        "completed": completed,
+                    }
+                    return Response(data, status=200)
+                except JobPostings.DoesNotExist:
+                    return Response({'error': 'Job not found or not authorized.'}, status=404)
+            else:
+                jobs = JobPostings.objects.filter(username=user).select_related("organization__manager")
+                unique_orgs = {}
+                data = []
+
+                for job_item in jobs:
+                    org = job_item.organization
+                    if org.id not in unique_orgs:
+                        unique_orgs[org.id] = org
+
+                for org in unique_orgs.values():
+                    data.append({
                         'manager_username': org.manager.username,
                         'organization_name': org.name,
                         'contact_number': org.contact_number,
                         'website_url': org.website_url,
                         'gst_number': org.gst_number,
                         'company_address': org.company_address,
-                        'jobs': jobs_data 
-                    }
-                    return Response(data, status=200)
-                except JobPostings.DoesNotExist:
-                    return Response({'error': 'Job not found or not authorized.'}, status=404)
-            else:
-                jobs = JobPostings.objects.filter(username=user)
-                data = []
-    
-                for job_item in jobs:
-                    org = Organization.objects.filter(manager=job_item.organization.manager).first()
-                    job_serialized = JobPostingsSerializer(job_item).data
-    
-                    if org:
-                        data.append({
-                            'job_details': job_serialized,
-                            'manager_username': org.manager.username,
-                            'organization_name': org.name,
-                            'contact_number': org.contact_number,
-                            'website_url': org.website_url,
-                            'gst_number': org.gst_number,
-                            'company_address': org.company_address,
-                        })
-    
+                        'id': org.id,
+                    })
+
                 return Response(data, status=200)
     
         except Exception as e:
@@ -2616,3 +2695,52 @@ class ClientAllAlerts(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
+class InterviewerRoundsView(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            interviewer_id = request.GET.get('interviewer_id')
+            if not interviewer_id:
+                return Response({"error":"Please send the interviewer id"}, status=status.HTTP_200_OK)
+        
+            interviews = InterviewerDetails.objects.filter(name__id = interviewer_id).select_related('job_id')
+
+            remaining_interviewers = ClientDetails.objects.get(username = request.user).interviewers.all()
+            interviewers_list = []
+            for interviewer in remaining_interviewers:
+                if interviewer.id != int(interviewer_id):
+                    interviewers_list.append({
+                        "interviewer_name":interviewer.username,
+                        "interviewer_id": interviewer.id,
+                    })
+
+            grouped_data = defaultdict(list)
+            for interview in interviews:
+                interviews_pending = InterviewSchedule.objects.filter(interviewer = interview, status = 'pending').count()
+                interview_list = {
+                    "round_num":interview.round_num,
+                    "interview_type": interview.type_of_interview,
+                    "interview_mode": interview.mode_of_interview,
+                    "pending_interviews": interviews_pending,
+                    "job_id":interview.job_id.id,
+                }
+                job_id = interview.job_id
+                grouped_data[job_id.job_title].append(interview_list)
+
+            return Response({"data": dict(grouped_data), "remaining_interviewers" : interviewers_list}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class RemoveInterviewerView(APIView):
+    permission_classes = [IsClient]
+    def post(self, request):
+        try:
+            pass
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        

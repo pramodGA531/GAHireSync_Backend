@@ -164,8 +164,6 @@ HireSync Team
                         message="You have received a new negotiation request.",
             )
             
-            # sending notification from client to the agency find the emails of the client and the agency
-            
             return Response({"detail": "Negotiation request created successfully"}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
@@ -569,9 +567,7 @@ class Invoices(APIView):
 
         if request.user.role == "client":
             invoices = InvoiceGenerated.objects.filter(client=request.user)
-            print("invoices",invoices)
             for invoice in invoices:
-                print("veri",invoice.payment_verification)
                 context = create_invoice_context(invoice)
                 html = generate_invoice(context)
                 html_list.append({"invoice": invoice, "html": html})
