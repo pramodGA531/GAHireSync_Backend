@@ -2161,8 +2161,6 @@ class CandidateLeftView(APIView):
     )
 )        
             
-            
-
             return Response({"message":"Candidate status updated successfully"},status = status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
@@ -2774,3 +2772,52 @@ class RemoveInterviewerView(APIView):
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+class CandidatesRequestedDate(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
+                applications_on_hold = JobApplication.objects.filter(job_id = job_id, status = 'hold').select_related('resume')
+                print("caaling this function it is good to call this function ok ")
+                application_list = [
+                {
+                    
+                    "candidate_name": application.resume.candidate_name,
+                    "candidate_email": application.resume.candidate_email,
+                    "application_id": application.id,
+                    "expected_ctc": application.resume.expected_ctc,
+                    "experience": application.resume.experience,
+                }
+
+                for application in applications_on_hold
+            ]
+                return Response(application_list, status= status.HTTP_200_OK)
+            user = request.user
+            job_posts = JobPostings.objects.filter(username = user)
+            candidates = JobApplication.objects.filter(job_id__in = job_posts)
+            
+            candidate_list = []
+
+            for candidate in candidates:
+                selectCand = SelectedCandidates.objects.filter(application=candidate).exclude(edit_request="").first()
+
+                if selectCand:  # only add if edit_request exists
+                    candidate_json = {
+                        "candidate_name": candidate.resume.candidate_name,
+                        "select_cand_id":selectCand.id,
+                        "job_title": candidate.job_id.job_title,
+                        "status": candidate.job_id.status,
+                        "organization_name": candidate.job_id.organization.name,
+                        "application_id": candidate.id,
+                        "job_department": candidate.job_id.job_department,
+                        "edit_request": selectCand.edit_request,
+                        "client_accept_request":selectCand.client_accept_request,
+                        "joining_date":selectCand.joining_date,
+                    }
+                    candidate_list.append(candidate_json)
+
+            return Response(candidate_list, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
