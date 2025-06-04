@@ -12,8 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings 
-from django.core.mail import send_mail
+from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
 from django.http import HttpResponse
@@ -524,19 +523,11 @@ Best Regards,
 Kalki,
 HireSync.
 '''
-            send_mail(
-                subject=subject,
-                message=client_message,
-                from_email='',
-                recipient_list=[client_email]
-            )
-
-            send_mail(
-                subject=subject,
-                message=organization_recruiters_message,
-                from_email='',
-                recipient_list=[manager_email, recruiters_emails]
-            )
+            send_custom_mail(  subject=subject,
+                body=client_message,
+                to_email=[client_email])
+          
+            send_custom_mail(subject=subject, body = organization_recruiters_message, to_email=[manager_email, recruiters_emails])
 
             return Response({"message":"Candidate Selected Successfully"}, status=status.HTTP_200_OK)
 

@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from app.models import SelectedCandidates, JobPostTerms, InvoiceGenerated, ClientDetails,CandidateProfile,Organization
 from django.utils.timezone import now, timedelta
-from django.core.mail import send_mail, EmailMessage
+from django.core.mail import  EmailMessage
 from app.utils import generate_invoice,sendemailTemplate,calculate_invoice_amounts,create_invoice_context
 import logging
 

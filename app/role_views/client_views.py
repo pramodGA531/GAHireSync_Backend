@@ -6,7 +6,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from django.core.mail import send_mail
 from datetime import datetime
 from django.http import HttpResponse, JsonResponse
 from django.template.loader import render_to_string
@@ -1199,13 +1198,8 @@ If you have any questions, feel free to contact our support team.
 Regards,
 HireSync Team
                 """
-            send_mail(
-                        subject=subject,
-                        message=message,
-                        from_email='noreply@hiresync.com',
-                        recipient_list=[candidate_email],
-                        fail_silently=False,
-                )
+            send_custom_mail(subject=subject, body=message, to_email=[candidate_email])
+    
             return candidate_profile,new_user
         else:
             raise serializers.ValidationError(user_serializer.errors)

@@ -9,15 +9,8 @@ from .serializers import *
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings 
-from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from datetime import datetime
-from collections import Counter
-from django.http import HttpResponse
-from django.template.loader import render_to_string
-from django.shortcuts import render
 from .permissions import *
 import jwt
 import string 

@@ -10,7 +10,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from django.core.mail import send_mail
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
 from app.utils import generate_invoice
@@ -391,13 +390,7 @@ class ScheduleInterview(APIView):
             </html>
             """
 
-            send_mail(
-                subject="Next Interview Scheduled",
-                message="Your interview details...",
-                html_message=html_message,  
-                recipient_list=[interviewer_email, candidate_email],
-                from_email=''
-            )
+            send_custom_mail(subject="Next Interview Scheduled", body="Your interview details...",to_email=[interviewer_email, candidate_email])
             
             ClientDetail=ClientDetails.objects.get(user=application.job_id.username)
                 

@@ -18,7 +18,6 @@ from django.utils.encoding import force_bytes, force_str
 from django.contrib.sites.shortcuts import get_current_site
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import six
-from django.core.mail import send_mail
 from rest_framework.pagination import PageNumberPagination
 from .models import *
 from decimal import Decimal
@@ -503,7 +502,6 @@ def sendemailTemplate(subject, template_name, context, recipient_list):
         return False
 
 def send_custom_mail(subject, body, to_email):
-    print(frontend_url)
     try:
         from_email = settings.DEFAULT_FROM_EMAIL
 

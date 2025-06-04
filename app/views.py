@@ -4,7 +4,6 @@ from rest_framework.views import APIView
 from .models import *
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated
-from django.core.mail import send_mail
 from django.shortcuts import render
 from .permissions import *
 from .authentication_views import *
@@ -148,13 +147,7 @@ Best,
 HireSync Team
 
 """
-
-            send_mail(
-                subject="Job Post Terms & Conditions – Action Needed",
-                message=manager_email_message,
-                from_email='',
-                recipient_list=[organization.manager.email]
-            )
+            send_custom_mail(subject="Job Post Terms & Conditions – Action Needed",body = manager_email_message, to_email=[organization.manager.email])
             
             Notifications.objects.create(
                         sender=request.user,
@@ -208,12 +201,9 @@ Best,
 HireSync Team
 
                 """
-                send_mail(
-                    subject="Job Terms & Conditions – Update",
-                    message=client_email_message,
-                    from_email="",
-                    recipient_list=[negotiation_request.client.user.email]
-                )                
+
+                send_custom_mail(subject="Job Terms & Conditions – Update",body=client_email_message, to_email=[negotiation_request.client.user.email])
+              
                 
             elif data.get('status') == "rejected":
                 negotiation_request.status = "rejected"
@@ -232,12 +222,7 @@ Best,
 HireSync Team
 
 """
-                send_mail(
-                    subject="Job Terms & Conditions – Update",
-                    message=client_email_message,
-                    from_email="",
-                    recipient_list=[negotiation_request.client.user.email]
-                )
+                send_custom_mail( subject="Job Terms & Conditions – Update",body=client_email_message,to_email=[negotiation_request.client.user.email])
                 
                 #  accept notification  here i need to send the notification to the agency to the client find the emails of the client and the agency 
                 
@@ -541,12 +526,7 @@ Interviewers are waiting to check your profile
 
             subject = "Update your profile - HireSync!"
             try:
-                send_mail( 
-                    subject=subject,
-                    message= message,
-                    recipient_list=[candidate_email],
-                    from_email='',
-                )
+                send_custom_mail(subject=subject, body=message, to_email=[candidate_email])
 
                 return Response({"message":"Notification Sent Successfully"}, status=status.HTTP_200_OK)
             

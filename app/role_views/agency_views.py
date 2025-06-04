@@ -10,7 +10,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from django.core.mail import send_mail
 from ..utils import *
 from django.db.models import Prefetch
 from django.core.exceptions import ObjectDoesNotExist

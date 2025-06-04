@@ -13,7 +13,6 @@ from rest_framework.views import APIView
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings 
-from django.core.mail import send_mail
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
 from django.http import HttpResponse
