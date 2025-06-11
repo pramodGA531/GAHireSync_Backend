@@ -437,9 +437,8 @@ class ResetPasswordAPIView(APIView):
             uid = urlsafe_base64_decode(uidb64).decode()
             user = CustomUser.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
-            return Response({'error': 'Invalid token.'}, status=400)
+            return Response({'error': 'Invalid token.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
-            print(default_token_generator.check_token(user, token))
             if default_token_generator.check_token(user, token):
                 new_password = request.data.get('password')
                 user.set_password(new_password)

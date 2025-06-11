@@ -156,3 +156,5 @@ class NotificationsAdmin(admin.ModelAdmin):
 class NegotiationRequestsAdmin(admin.ModelAdmin):
     list_display = ('client','organization','status')
 
+admin.site.register(LinkedinIntegrations)
+admin.site.register(HiresyncLinkedinCred)

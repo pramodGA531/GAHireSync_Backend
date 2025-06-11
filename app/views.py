@@ -14,6 +14,8 @@ from .utils import *
 from django.core.files.base import ContentFile
 from django.http import JsonResponse
 from collections import defaultdict
+import requests
+from django.http import HttpResponseRedirect
 
 
 
@@ -1311,4 +1313,115 @@ class CompleteApplicationDetailsView(APIView):
 
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST) 
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class LinkedInRedirectView(APIView):
+    def get(self, request):
+        try:
+            code = request.GET.get("code")
+            state = request.GET.get("state")
+
+            redirect_url = f"http://localhost:8000/hiresync/generate-linkedincode/callback/"
+
+            # Optional: validate state if using session
+            # if state != request.session.get("linkedin_oauth_state"):
+            #     return Response({"message": "Invalid state"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not code:
+                return Response({"message": "Missing authorization code.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
+
+            token_response = requests.post(
+                "https://www.linkedin.com/oauth/v2/accessToken",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_url,
+                    "client_id": settings.LINKEDIN_CLIENT_ID,
+                    "client_secret": settings.LINKEDIN_CLIENT_SECRET,
+                }
+            )
+
+            if token_response.status_code != 200:
+                return Response({
+                    "message": "Failed to retrieve access token from LinkedIn.",
+                    "details": token_response.json(),
+                    "status": False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            token_data = token_response.json()
+            access_token = token_data.get("access_token")
+            expires_in = token_data.get("expires_in")  
+
+            if not access_token:
+                return Response({"message": "Access token not found in response.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
+
+            expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+
+            orgs_response = requests.get(
+                "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+
+            if orgs_response.status_code != 200:
+                return Response({
+                    "message": "Failed to fetch LinkedIn organizations.",
+                    "details": orgs_response.json(),
+                    "status": False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            org_data = orgs_response.json()
+            elements = org_data.get("elements", [])
+
+            if not elements:
+                return Response({
+                    "message": "No LinkedIn Page found for this account.",
+                    "reason": "NO_PAGE",
+                    "status": False
+                }, status=status.HTTP_200_OK)
+
+            organization_urn = elements[0].get("organizationalTarget")
+
+            if not organization_urn:
+                return Response({
+                    "message": "Organization URN not found.",
+                    "status": False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Save to DB
+            HiresyncLinkedinCred.objects.create(
+                organization_urn=organization_urn,
+                access_token=access_token,
+                token_expires_at=expires_at,
+            )
+
+            return Response({
+                "message": "LinkedIn credentials saved successfully.",
+                "organization_urn": organization_urn,
+                "access_token": access_token,
+                "expires_at": expires_at,
+                "status": True
+            })
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GenerateLinkedInTokens(APIView):
+    def get(self, request):
+        try:
+            state = str(uuid.uuid4())  
+            request.session['linkedin_oauth_state'] = state
+
+            redirect_url = f"http://localhost:8000/hiresync/generate-linkedincode/callback/"  
+
+            auth_url = (
+                f"https://www.linkedin.com/oauth/v2/authorization?"
+                f"response_type=code&client_id={settings.LINKEDIN_CLIENT_ID}"
+                f"&redirect_uri={redirect_url}"
+                f"&scope=w_member_social%20rw_organization_admin%20w_organization_social"
+                f"&state={state}"
+            )
+            return HttpResponseRedirect(auth_url)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

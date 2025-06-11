@@ -149,9 +149,12 @@ urlpatterns = [
     path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
     path('manager/recruiter/jobs/',RecruiterJobsView.as_view(), name='manager-tracking-recruiters'),
     path('manager/remove-recruiter/',RemoveRecruiter.as_view(), name='manager-tracking-recruiters'),
+    path('manager/is_linkedin_verified/',IsManagerLinkedVerifiedView.as_view(), name='manager-tracking-recruiters'),
+    path('manager/job/post_on_linkedin/',PostOnLinkedIn.as_view(), name='manager-tracking-recruiters'),
+    
 
     
-    
+    path('api/linkedin/callback/', LinkedINCallBackView.as_view(), name='linkedin callback view'),
  
     path('change-password/', ChangePassword.as_view(), name='change-password'),
     
@@ -180,4 +183,6 @@ urlpatterns = [
     path('update-notification-seen/',NotificationStatusChange.as_view(), name='notification-viewed' ),
 
     path('complete-application/',CompleteApplicationDetailsView.as_view(),name="resumes-sent"),
+    path('hiresync/generate-linkedincode/',GenerateLinkedInTokens.as_view(), name='generate linkedin token for hiresync' ),
+    path('hiresync/generate-linkedincode/callback/',LinkedInRedirectView.as_view(), name='callback for linkedin token for hiresync' ),
 ]

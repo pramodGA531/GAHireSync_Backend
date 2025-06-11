@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.utils.timezone import now,is_aware, make_naive
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import requests
 
 
 class AgencyJobApplications(APIView):
@@ -832,6 +833,7 @@ class AgencyJobPosts(APIView):
                     "approval_status": job.approval_status,
                     "id": job.id,
                     "rounds_details": rounds_details,
+                    "is_posted_on_linkedin" : job.is_linkedin_posted,
                 }
 
                 jobs_list.append(job_details)
@@ -1299,3 +1301,295 @@ THis is the new job post reassigned to you
             print("Error in RemoveRecruiter:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+
+class PostOnLinkedIn(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            job_id = request.GET.get('job_id')
+            if not job_id:
+                return Response({"error":"Job Id required"}, status=status.HTTP_400_BAD_REQUEST)
+            job = JobPostings.objects.get(id = job_id)
+            if job.approval_status == False:
+                return Response({"error":"Job must be approved before posting it on linkedin"}, status=status.HTTP_400_BAD_REQUEST)
+            if job.is_linkedin_posted:
+                return Response({"error":"Already posted on linkedin"}, status=status.HTTP_400_BAD_REQUEST)
+            if job.status == 'closed':
+                return Response({"error":"Jobpost is closed, unable to post"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                linkedin_connection = LinkedinIntegrations.objects.get(agency__manager= request.user)
+            except Exception as e:
+                return Response({"error":"You are not connected to linkedin, go to profile and add your account"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if linkedin_connection.token_expires_at <= timezone.now():
+                return Response({
+                    "error": "Your LinkedIn session has expired. Please reconnect your account from your profile.",
+                    "reason": "TOKEN_EXPIRED"
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+            
+            token = linkedin_connection.access_token
+            urn = linkedin_connection.organization_urn
+
+            job_title = job.job_title
+            job_description = job.job_description
+            job_primary_skills = SkillMetricsModel.objects.filter(job_id = job, is_primary = True).values('id','skill_name')
+            job_secondary_skills = SkillMetricsModel.objects.filter(job_id = job, is_primary = False).values('id','skill_name')
+            years_of_experience = job.years_of_experience
+
+            post_content = f"""📢 Job Opportunity: {job_title} 📢
+
+We are looking for a talented individual with {years_of_experience} years of experience to join our team as a {job_title}.
+
+About the Role:
+{job_description}
+
+Primary Skills Required:
+{', '.join([skill['skill_name'] for skill in job_primary_skills])}
+
+Secondary Skills (Good to Have):
+{', '.join([skill['skill_name'] for skill in job_secondary_skills])}
+
+If you are interested in this exciting opportunity, please apply or reach out for more details!
+
+#jobopening #hiring #{job_title.replace(' ', '')} #career
+"""
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "X-Restli-Protocol-Version": "2.0.0",
+            }
+
+            data = {
+                "author": urn,  # Example: "urn:li:organization:123456"
+                "lifecycleState": "PUBLISHED",
+                "specificContent": {
+                    "com.linkedin.ugc.ShareContent": {
+                        "shareCommentary": {
+                            "text": post_content
+                        },
+                        "shareMediaCategory": "NONE",  # Use "IMAGE" or "ARTICLE" if needed
+                    }
+                },
+                "visibility": {
+                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                }
+            }
+
+            response_org = requests.post("https://api.linkedin.com/v2/ugcPosts", headers=headers, json=data)
+
+            if response_org.status_code == 201:
+                job.is_linkedin_posted_organization = True
+
+                hiresync_linkedin_cred = HiresyncLinkedinCred.objects.filter()[0]
+
+                personal_token = hiresync_linkedin_cred.access_token
+                personal_urn = hiresync_linkedin_cred.organization_urn
+
+                personal_headers = {
+                    "Authorization": f"Bearer {personal_token}",
+                    "Content-Type": "application/json",
+                    "X-Restli-Protocol-Version": "2.0.0",
+                }
+
+                personal_data = {
+                    "author": personal_urn,
+                    "lifecycleState": "PUBLISHED",
+                    "specificContent": {
+                        "com.linkedin.ugc.ShareContent": {
+                            "shareCommentary": {
+                                "text": post_content
+                            },
+                            "shareMediaCategory": "NONE",
+                        }
+                    },
+                    "visibility": {
+                        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                    }
+                }
+
+                response_personal = requests.post("https://api.linkedin.com/v2/ugcPosts", headers=personal_headers, json=personal_data)
+
+                if response_personal.status_code == 201:
+                    job.is_linkedin_posted_personal = True 
+                    job.save()
+                    return Response({"message": "Successfully posted on LinkedIn Organization and your Personal profile."}, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        "message": "Successfully posted on LinkedIn Organization, but failed to post on your Personal profile.",
+                        "personal_error_details": response_personal.json()
+                    }, status=status.HTTP_200_OK)
+                
+
+            else:
+                return Response({
+                    "error": "Failed to post on LinkedIn",
+                    "details": response.json()
+                }, status=response.status_code)
+
+        except Exception as e:
+            print("Error in RemoveRecruiter:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class IsManagerLinkedVerifiedView(APIView):
+    permission_classes  = [IsManager]
+    def get(self, request):
+        try:
+            manager = request.user
+            try:
+                manager_linkedin = LinkedinIntegrations.objects.get(agency__manager=manager)
+            except LinkedinIntegrations.DoesNotExist:
+                return Response({"status": False}, status=status.HTTP_200_OK)
+
+
+            if manager_linkedin.token_expires_at and manager_linkedin.token_expires_at < timezone.now():
+                
+                state = str(manager_linkedin.agency.id)
+                auth_url = (
+                    f"https://www.linkedin.com/oauth/v2/authorization?"
+                    f"response_type=code&client_id={settings.LINKEDIN_CLIENT_ID}"
+                    f"&redirect_uri={settings.LINKEDIN_REDIRECT_URI}"
+                    f"&scope=w_member_social%20rw_organization_admin%20w_organization_social"
+                    f"&state={state}"
+                )
+                return Response({
+                    "status": False,
+                    "expired": True,
+                    "auth_url": auth_url,
+                    "message": "LinkedIn access token expired. Please re-authenticate."
+                }, status=status.HTTP_200_OK)
+
+            # ✅ Token still valid
+            return Response({"status": manager_linkedin.is_linkedin_connected}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("Error in IsManagerLinkedVerifiedView:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    
+    def post(self, request):
+        try:
+            user = request.user
+            agency = Organization.objects.get(manager = user)
+
+            with transaction.atomic():
+                try:
+                    agency_linkedin = LinkedinIntegrations.objects.get(agency = agency)
+
+                except LinkedinIntegrations.DoesNotExist:
+                    agency_linkedin = LinkedinIntegrations.objects.create(
+                        agency = agency,
+                    )
+
+                state = str(agency.id)
+                request.session['linkedin_auth_state'] = state
+
+                LINKEDIN_REDIRECT_URI = f"{os.environ.get('frontendurl')}/linkedin/callback"
+                
+                auth_url = (
+            f"https://www.linkedin.com/oauth/v2/authorization?"
+            f"response_type=code&client_id={settings.LINKEDIN_CLIENT_ID}"
+            f"&redirect_uri={LINKEDIN_REDIRECT_URI}"
+            f"&scope=w_member_social%20rw_organization_admin%20w_organization_social"
+            f"&state={agency.id}"
+        )
+                return Response({"url":auth_url}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print("Error in RemoveRecruiter:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class LinkedINCallBackView(APIView):
+    def get(self, request):
+        try:
+            code = request.GET.get('code')
+            agency_id = request.GET.get('state')
+            error = request.GET.get('error')
+
+            if error:
+                return Response({"message": "Authorization denied by user.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not code or not agency_id:
+                return Response({"message": "Missing code or state in the request.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Exchange code for access token
+            token_response = requests.post(
+                "https://www.linkedin.com/oauth/v2/accessToken",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
+                    "client_id": settings.LINKEDIN_CLIENT_ID,
+                    "client_secret": settings.LINKEDIN_CLIENT_SECRET,
+                },
+            )
+
+            if token_response.status_code != 200:
+                return Response({
+                    "message": "Failed to retrieve access token from LinkedIn.",
+                    "details": token_response.json(),
+                    "status": False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            token_data = token_response.json()
+            access_token = token_data.get("access_token")
+            expires_in = token_data.get("expires_in")
+
+            if not access_token:
+                return Response({"message": "Access token not found in response.", "status": False}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch organizations (pages) the user has admin access to
+            orgs_response = requests.get(
+                "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+
+            if orgs_response.status_code != 200:
+                return Response({
+                    "message": "Failed to fetch LinkedIn organizations.",
+                    "details": orgs_response.json(),
+                    "status": False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            org_data = orgs_response.json()
+            elements = org_data.get("elements", [])
+
+            if not elements:
+                return Response({
+                    "message": "No LinkedIn Page found for this account.",
+                    "reason": "NO_PAGE",
+                    "status": False
+                }, status=status.HTTP_200_OK)
+
+            organization_urn = elements[0].get("organizationalTarget")
+            if not organization_urn:
+                return Response({
+                    "message": "Organization URN not found.",
+                    "status": False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Save token and organization info
+            try:
+                agency_linkedin = LinkedinIntegrations.objects.get(agency=agency_id)
+            except LinkedinIntegrations.DoesNotExist:
+                return Response({
+                    "message": "LinkedinIntegration record not found for this agency.",
+                    "status": False
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            agency_linkedin.access_token = access_token
+            agency_linkedin.token_expires_at = timezone.now() + timedelta(seconds=int(expires_in))
+            agency_linkedin.organization_urn = organization_urn
+            agency_linkedin.is_linkedin_connected = True
+            agency_linkedin.save()
+
+            return Response({
+                "message": "Agency connected to LinkedIn successfully.",
+                "status": True
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("Callback Error:", str(e))
+            return Response({"message": "Unexpected error occurred.", "error": str(e), "status": False}, status=status.HTTP_400_BAD_REQUEST)

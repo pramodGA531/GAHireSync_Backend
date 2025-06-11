@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 from datetime import timedelta
 from django.core.exceptions import ValidationError
+import uuid
 # Custom User Manager
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, role=None, **extra_fields):
@@ -168,6 +169,7 @@ class JobPostings(models.Model):
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
     reason = models.TextField(default="" , null=True, blank=True)
+    is_linkedin_posted = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('username', 'jobcode') 
@@ -841,3 +843,33 @@ class Notifications(models.Model):
         return f"From {self.sender} to {self.receiver}: {self.subject}"
 
 
+
+class LinkedinIntegrations(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agency = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    linkedin_user_id = models.CharField(max_length=255, blank=True, null=True)  
+    organization_urn = models.CharField(max_length=255, blank=True, null=True)
+    access_token = models.TextField(blank=True, null=True)
+    refresh_token = models.TextField(blank=True, null=True)  
+    token_expires_at = models.DateTimeField(blank=True, null=True)
+    is_linkedin_connected = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Agency Linkedin Integration"
+        verbose_name_plural = "Agency Linkedin Integrations"
+
+    def __str__(self):
+        return self.agency.name
+    
+
+class HiresyncLinkedinCred(models.Model):
+    organization_urn = models.CharField(max_length=255, blank=True, null=True)
+    access_token = models.TextField(blank=True, null=True)
+    refresh_token = models.TextField(blank=True, null=True)  
+    token_expires_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Hiresync Integration"
