@@ -16,6 +16,8 @@ from django.http import JsonResponse
 from collections import defaultdict
 import requests
 from django.http import HttpResponseRedirect
+import html2text
+from django.db.models import Count, Prefetch
 
 
 
@@ -251,7 +253,10 @@ class JobDetailsAPIView(APIView):
         except JobPostings.DoesNotExist:
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
         
+
+        
 class RecJobPostings(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, *args, **kwargs): 
         try:
             user = request.user if request.user.is_authenticated else None
@@ -267,6 +272,7 @@ class RecJobPostings(APIView):
                 org = Organization.objects.filter(recruiters__id=user.id).first()
                 assigned_user = user
 
+
             if not org:
                 return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -278,11 +284,8 @@ class RecJobPostings(APIView):
         except Exception as e:
             print(str(e))
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-from django.db.models import Count, Prefetch
 
-from django.db.models import Count, Prefetch
-from rest_framework.response import Response
-from rest_framework.views import APIView
+
 
 class RecSummery(APIView):
     def get(self, request, *args, **kwargs): 
@@ -1395,7 +1398,7 @@ class LinkedInRedirectView(APIView):
             )
 
             return Response({
-                "message": "LinkedIn credentials saved successfully.",
+                "message": "LinkedIn credentials saved successfully.",  
                 "organization_urn": organization_urn,
                 "access_token": access_token,
                 "expires_at": expires_at,
@@ -1422,6 +1425,83 @@ class GenerateLinkedInTokens(APIView):
                 f"&state={state}"
             )
             return HttpResponseRedirect(auth_url)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class FetchAllJobs(APIView):
+    def get(self, request):
+        try:
+            jobs = JobPostings.objects.filter(status = 'opened')
+            print(jobs)
+            jobs_list = []
+            for job in jobs:
+                jobs_list.append({
+                    "job_title": job.job_title,
+                    "job_description": html2text.html2text(job.job_description),
+                    "experience": job.years_of_experience,
+                    "job_locations": job.job_locations,
+                    "job_type": job.job_type,
+                    "ctc":job.ctc,
+                    "job_level": job.job_level,
+                    "status": job.status,
+                    "id": job.id,
+                    "created_at": job.created_at,
+                    "agency_name": job.organization.name,
+                }
+                )
+            return Response({"jobs_data":jobs_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class SendApplicationDetailsView(APIView):
+    def post(self, request):
+        try:
+            data = request.data
+            job_id = request.GET.get('job_id')
+
+            if not job_id:
+                return Response({"error":"Jobid is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            email = data.get('candidate_email')
+            
+            if JobApplication.objects.filter(job_id__id=job_id, resume__candidate_email=email).exists():
+                return Response(
+                    {"error": "An application with this email is already sent, wait for the response"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+
+            with transaction.atomic():
+                candidate_resume = CandidateResume.objects.create(
+                    resume= data.get('resume'),
+                    candidate_name  = data.get('candidate_name'),
+                    candidate_email = data.get('candidate_email'),
+                    contact_number = data.get('contact_number'),
+                    alternate_contact_number = data.get('alternate_contact_number', ''),
+                    other_details = data.get('other_details', ''),
+                    current_organisation = data.get('current_organization', ''),
+                    current_job_location = data.get('current_job_location',''),
+                    current_job_type = data.get('current_job_type', ''),
+                    date_of_birth = data.get('date_of_birth'),
+                    experience = data.get('experience'),
+                    current_ctc = data.get('current_ctc',0.0),
+                    expected_ctc = data.get('expected_ctc',0.0),
+                    notice_period = data.get('notice_period',0),
+                    job_status = data.get('job_status'),
+                    highest_qualification = data.get('highest_qualification'),
+                    joining_days_required = data.get('joining_days_required'),
+                )
+
+                job_application = JobApplication.objects.create(
+                    resume = candidate_resume,
+                    job_id = JobPostings.objects.get(id = job_id),
+                    status = 'candidate_applied',
+                    is_incoming = True
+                )
+
+            return Response({"message":"Application sent successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

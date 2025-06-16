@@ -603,6 +603,44 @@ class RejectReconfirmResumes(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         
+class RecAssignedJobsView(APIView):
+    permission_classes = [IsRecruiter]
+
+    def get(self, request):
+        try:
+            user = request.user
+
+            job_postings = JobPostings.objects.filter(assigned_to=user)
+
+            job_postings_list = []
+            for job in job_postings:
+                onhold = JobApplication.objects.filter(job_id=job, attached_to=user, status='hold').count()
+                rejected = JobApplication.objects.filter(job_id=job, attached_to=user, status='rejected').count()
+                pending = JobApplication.objects.filter(job_id=job, attached_to=user, status='pending').count()
+                selected = JobApplication.objects.filter(job_id=job, attached_to=user, status='selected').count()
+
+                incoming_applications = JobApplication.objects.filter(job_id=job, attached_to=None, sender=None).count()
+
+                job_postings_list.append({
+                    "job_title": job.job_title,
+                    "client_name": job.username.username if hasattr(job, "username") else "",
+                    "status": job.status,
+                    "num_of_positions": job.num_of_positions,
+                    "onhold": onhold,
+                    "rejected": rejected,
+                    "pending": pending,
+                    "selected": selected,
+                    "incoming": incoming_applications,
+                    "deadline": job.job_close_duration,
+                    "job_id": job.id
+                })
+
+            return Response({"data": job_postings_list}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+        
 
 class RecJobDetails(APIView):
     permission_classes = [IsRecruiter]
@@ -828,5 +866,167 @@ class RecruiterAllAlerts(APIView):
 
             return Response({"data":data}, status=status.HTTP_200_OK)
         
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class IncomingApplicationsView(APIView):
+    permission_classes = [IsRecruiter]
+
+    def get(self, request):
+        try:
+            job_id = request.GET.get('job_id')
+            application_id = request.GET.get('application_id')
+
+            if not job_id:
+                return Response({"error": "job_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if application_id:
+                try:
+                    application = JobApplication.objects.get(job_id__id=job_id, id=application_id)
+                    resume = application.resume
+
+                    if application.sender or application.attached_to:
+                        return Response({"error": "Application is already assigned"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+                    application_json = ({
+                            "id":application.id,
+                            "resume_id": resume.id,
+                            "candidate_name": resume.candidate_name,
+                            "other_details": resume.other_details,
+                            "notice_period": resume.notice_period,
+                            "expected_ctc": resume.expected_ctc,
+                            "current_ctc": resume.current_ctc,
+                            "job_status": resume.job_status,
+                            "current_job_location": resume.current_job_location,
+                            "current_job_type": resume.current_job_type,
+                            "current_organization": resume.current_organisation,
+                            "date_of_birth": resume.date_of_birth,
+                            "experience": resume.experience,
+                            "resume": resume.resume.url if resume.resume else None,
+                            "status": application.status,
+                        })
+
+                    primary_skills = SkillMetricsModel.objects.filter(job_id = application.job_id, is_primary = True).values('skill_name')
+                    secondary_skills = SkillMetricsModel.objects.filter(job_id = application.job_id, is_primary = False).values('skill_name')
+            
+                    return Response({"data":application_json, "primary_skills": primary_skills, "secondary_skills": secondary_skills}, status=status.HTTP_200_OK)
+
+                except JobApplication.DoesNotExist:
+                    return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            applications = JobApplication.objects.filter(
+                job_id__id=job_id,
+                job_id__assigned_to=request.user,
+                sender=None,
+                attached_to=None
+            )
+
+            serializer = IncomingApplicationSerializer(applications,many= True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            print(str(e))  
+            return Response({"error": "Something went wrong. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request):
+        try:
+            application_id = request.data.get('application_id')
+            decision = request.data.get('decision')  # 'accepted' or 'rejected'
+
+            if not application_id or not decision:
+                return Response({"error": "application_id and decision are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if decision not in ['accepted', 'rejected']:
+                return Response({"error": "Invalid decision value"}, status=status.HTTP_400_BAD_REQUEST)
+
+            application = JobApplication.objects.get(id=application_id)
+
+            if application.sender or application.attached_to:
+                return Response({"error": "Application is already assigned"}, status=status.HTTP_400_BAD_REQUEST)
+
+            application.status = decision
+            application.sender = request.user
+            application.attached_to = request.user
+            application.save()
+
+            return Response({"success": f"Application {decision} successfully"}, status=status.HTTP_200_OK)
+
+        except JobApplication.DoesNotExist:
+            return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AcceptIncomingApplication(APIView):
+    permission_classes = [IsRecruiter]
+    def put(self, request):
+        try:
+            application_id = request.GET.get('id')
+            
+            data = request.data
+            resume = JobApplication.objects.get(id = application_id).resume
+
+            primary_skills = data.get("primary_skills", [])
+            secondary_skills = data.get("secondary_skills", [])
+
+            def update_skills(skills, is_primary):
+                for skill in skills:
+                    skill_name = skill.get("skill_name")
+                    rating = skill.get("rating")
+                    if skill_name is not None and rating is not None:
+                        skill_obj = CandidateSkillSet.objects.filter(
+                            candidate=resume,
+                            skill_name=skill_name,
+                            is_primary=is_primary
+                        ).first()
+                        if skill_obj:
+                            skill_obj.metric_value = str(rating)
+                            skill_obj.save()
+                        else:
+                            CandidateSkillSet.objects.create(
+                                candidate=resume,
+                                skill_name=skill_name,
+                                is_primary=is_primary,
+                                skill_metric="rating",
+                                metric_value=str(rating)
+                            )
+
+            update_skills(primary_skills, is_primary=True)
+            update_skills(secondary_skills, is_primary=False)
+
+            application = get_object_or_404(JobApplication, id=application_id)
+            application.status = "pending"  
+            application.sender = request.user
+            application.attached_to = request.user
+            application.receiver = application.job_id.username
+            application.save()
+
+            return Response({"message":"Data updated successfully"},status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class RejectIncomingApplication(APIView):
+    permission_classes = [IsRecruiter]
+    def put(self, request):
+        try:
+            application_id = request.GET.get('id')
+            if not application_id:
+                return Response({"error": "Application ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            application = get_object_or_404(JobApplication, id=application_id)
+
+            feedback = request.data.get("feedback", "")
+
+            application.status = "rejected"
+            application.feedback = feedback
+            application.sender = request.user
+            application.receiver = application.job_id.username
+            application.attached_to = request.user
+            application.save()
+
+            return Response({"message": "Application rejected successfully."}, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

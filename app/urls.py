@@ -15,8 +15,11 @@ urlpatterns = [
     path('resetpassword/<uidb64>/<token>/',ResetPasswordAPIView.as_view(), name='resetpassword'),
     path('verify-email/<uidb64>/<token>/', VerifyEmailView.as_view(), name="verify-email"),
     path('send-verification-email/', VerifyEmailView.as_view(), name="send-verification-email"),
+    path('landing-page/fetchjobs/', FetchAllJobs.as_view(), name="send-verification-email"),
 
     path('changepassword/', changePassword.as_view(), name='changepassword'),
+    path('candidate/sendapplication/', SendApplicationDetailsView.as_view(), name='changepassword'),
+
 
 
     path('job-postings/', JobPostingView.as_view(), name='create-job-posting'),
@@ -35,6 +38,7 @@ urlpatterns = [
     path('recruiter/create-candidate/',CandidateResumeView.as_view(),name='candidate-share-resume'),
 
     path('job-details/', JobDetailsAPIView.as_view(), name='view-job-posting'),
+    path('job-details/outsider/', JobDetailsAPIView.as_view(), name='view-job-posting-outsider'),
     path('organization-terms/', OrganizationTermsView.as_view(), name='organization-terms'),
     path('get-organization-terms/', GetOrganizationTermsView.as_view(), name='get-organization-terms'),
 
@@ -117,6 +121,7 @@ urlpatterns = [
 
     path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
     path('recruiter/all-alerts/', RecruiterAllAlerts.as_view(), name='recruiter-all-alerts'),
+    path('recruiter/assigned-jobs/', RecAssignedJobsView.as_view(), name='recruiter-assigned-jobs'),
     path('recruiter/schedule_interview/pending_application/', ScheduleInterview.as_view(), name='schedule-interviews'),
     path('recruiter/candidate-selected-jobs/', ReConfirmResumes.as_view(), name = 'list-of-cadidate-selected-jobs'),
     path('recruiter/reconfirmation-accept/', AcceptReconfirmResumes.as_view(), name='handle-select'),
@@ -125,6 +130,9 @@ urlpatterns = [
     path('recruiter/resumesent/',ResumesSent.as_view(),name="resumes-sent"),
     path('recruiter/all-scheduled-interviews/',AllScheduledInterviews.as_view(), name='all-scheduled-interviews' ),
     path('recruiter/get-interview-marks/', GetIntervieweRemarks.as_view(), name='get-interview-remarks'),
+    path('recruiter/incoming-applications/', IncomingApplicationsView.as_view(), name='get-interview-remarks'),
+    path('recruiter/accept-incoming-applications/', AcceptIncomingApplication.as_view(), name='get-interview-remarks'),
+    path('recruiter/reject-incoming-applications/', RejectIncomingApplication.as_view(), name='get-interview-remarks'),
 
     path('get_invoices/',Invoices.as_view()),
     path('update_invoices/',Invoices.as_view()),

@@ -661,4 +661,3 @@ HireSync Team
         to_email=[user.email],
     )
  
-

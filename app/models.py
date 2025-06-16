@@ -43,15 +43,26 @@ class CustomUser(AbstractUser):
         (ACCOUNTANT,"accountant"),
     ]
 
+    username = models.CharField(max_length=150, null=False, blank=False, unique=False)
     email = models.EmailField(unique=True)
     profile = models.ImageField(upload_to='Users/Profile/', null=True, blank=True)
-    role = models.CharField(max_length=50, choices=ROLE_CHOICES, default="user")
+    role = models.CharField(max_length=50, choices=ROLE_CHOICES, default="admin")
     credit = models.IntegerField(default=0)
     organization = models.ForeignKey("Organization", on_delete=models.CASCADE, null=True, blank=True)
     is_verified = models.BooleanField(default = False)
     is_first_login = models.BooleanField(default=True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
+
     objects = CustomUserManager()
-    
+
+    class Meta:
+        verbose_name = 'User'
+        verbose_name_plural = 'Users'
+        ordering = ['email']
+
+
     def __str__(self):
         return self.username
 
@@ -454,6 +465,7 @@ class JobApplication(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now = True,)
     sender = models.ForeignKey(CustomUser, related_name='Actual_sender', on_delete=models.CASCADE, null=True, limit_choices_to={'role':"recruiter"})
+    is_incoming = models.BooleanField(default=False)
     class Meta:
         unique_together = ('job_id','resume')
 

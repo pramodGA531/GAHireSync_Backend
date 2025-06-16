@@ -408,3 +408,24 @@ class NotificationsSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'receiver', 'subject', 'message', 'created_at','seen']
         
         
+class IncomingApplicationSerializer(serializers.ModelSerializer):
+    candidate_name = serializers.CharField(source='resume.candidate_name')
+    candidate_email = serializers.EmailField(source='resume.candidate_email')
+    date_of_birth = serializers.DateField(source='resume.date_of_birth')
+
+    class Meta:
+        model = JobApplication
+        fields = ['id', 'candidate_name', 'candidate_email', 'date_of_birth', 'status']
+
+
+class IncomingApplicationDetailSerializer(serializers.ModelSerializer):
+    candidate_name = serializers.CharField(source='resume.candidate_name')
+    candidate_email = serializers.EmailField(source='resume.candidate_email')
+    date_of_birth = serializers.DateField(source='resume.date_of_birth')
+    experience = serializers.CharField(source='resume.experience', required=False)
+    current_ctc = serializers.CharField(source='resume.current_ctc', required=False)
+    resume = serializers.FileField(source='resume.resume', required=False)
+
+    class Meta:
+        model = JobApplication
+        fields = ['id', 'candidate_name', 'candidate_email', 'date_of_birth', 'experience', 'current_ctc', 'resume', 'status']
