@@ -160,7 +160,7 @@ USE_TZ = True
 
 LINKEDIN_CLIENT_ID = os.environ.get('LINKEDIN_CLIENT_ID')
 LINKEDIN_CLIENT_SECRET = os.environ.get('LINKEDIN_CLIENT_SECRET')
-LINKEDIN_REDIRECT_URI = f'{os.environ.get('frontendurl')}/linkedin/callback'
+LINKEDIN_REDIRECT_URI = f'{os.environ.get("frontendurl")}/linkedin/callback'
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
