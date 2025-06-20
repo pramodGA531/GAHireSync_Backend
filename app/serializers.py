@@ -80,6 +80,11 @@ class SkillMetricSerializer(serializers.ModelSerializer):
         model = SkillMetricsModel
         fields = '__all__'
 
+class LocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobLocationsModel
+        fields = '__all__'
+
 
 class JobPostingsSerializer(serializers.ModelSerializer):
     assigned_to = CustomUserSerializer(many=True)
@@ -89,6 +94,7 @@ class JobPostingsSerializer(serializers.ModelSerializer):
     onHoldCount = serializers.SerializerMethodField()
     rejectedCount = serializers.SerializerMethodField()
     pendingCount = serializers.SerializerMethodField()
+    locations = LocationSerializer(many= True, read_only = True, source = 'joblocationsmodel_set')
     interview_details = InterviewerDetailsSerializer(many=True, read_only=True, source='interviewerdetails_set')
     skills = SkillMetricSerializer(many=True)
     
@@ -258,7 +264,6 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
             "years_of_experience",
             "ctc",
             "rounds_of_interview",
-            "job_locations",
             "job_type",
             "job_level",
             "qualifications",
@@ -281,7 +286,6 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
             "industry",
             "differently_abled",
             "languages",
-            "num_of_positions",
             "job_close_duration",
         ]
 
@@ -429,3 +433,58 @@ class IncomingApplicationDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobApplication
         fields = ['id', 'candidate_name', 'candidate_email', 'date_of_birth', 'experience', 'current_ctc', 'resume', 'status']
+
+class JobPostingDraftVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobPostingDraftVersion
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+
+class JobLocationsDraftVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobLocationsDraftVersion
+        fields = '__all__'
+
+
+class SkillMetricsDraftVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SkillMetricsDraftVersion
+        fields = '__all__'
+
+class InterviewerDetailsDraftVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewerDetailsDraftVersion
+        fields = '__all__'
+
+
+class FullJobDraftSerializer(serializers.ModelSerializer):
+    locations = JobLocationsDraftVersionSerializer(many=True, required=False)
+    skill_metrics = SkillMetricsDraftVersionSerializer(many=True, required=False)
+    interviewers = InterviewerDetailsDraftVersionSerializer(many=True, required=False)
+
+    class Meta:
+        model = JobPostingDraftVersion
+        fields = '__all__'
+
+    def create(self, validated_data):
+        locations_data = validated_data.pop('locations', [])
+        skills_data = validated_data.pop('skill_metrics', [])
+        interviewers_data = validated_data.pop('interviewers', [])
+
+        job_draft = JobPostingDraftVersion.objects.create(**validated_data)
+
+        for loc in locations_data:
+            JobLocationsDraftVersion.objects.create(job=job_draft, **loc)
+
+        for skill in skills_data:
+            SkillMetricsDraftVersion.objects.create(job=job_draft, **skill)
+
+        for interviewer in interviewers_data:
+            InterviewerDetailsDraftVersion.objects.create(job=job_draft, **interviewer)
+
+        return job_draft
+
+    def update(self, instance, validated_data):
+        # Optional: write update logic if needed
+        return super().update(instance, validated_data)

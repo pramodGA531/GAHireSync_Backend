@@ -158,3 +158,11 @@ class NegotiationRequestsAdmin(admin.ModelAdmin):
 
 admin.site.register(LinkedinIntegrations)
 admin.site.register(HiresyncLinkedinCred)
+
+@admin.register(JobLocationsModel)
+class JobLocationsModelAdmin(admin.ModelAdmin):
+    list_display = ('job_id', 'location')
+    search_fields= ('job_id__job_title',)
+    ordering = ('-job_id__created_at',)
+
+admin.site.register(JobLocationsDraftVersion)

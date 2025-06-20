@@ -17,6 +17,7 @@ from django.db.models import Count, Sum
 from collections import defaultdict
 from django.utils.timesince import timesince
 from django.shortcuts import render
+from rest_framework.viewsets import ModelViewSet
 
 
 
@@ -58,7 +59,7 @@ class ClientDashboard(APIView):
                     "job_title": post.job_title,
                     "posted": timesince(post.created_at) + " ago",
                     "id": post.id,
-                    "location": post.job_locations.split(",")[0].strip() if post.job_locations else "",
+                    "location": "",
                     "applications": application_counts_dict.get(post.id, 0),
                     "applications_last_week": recent_applications_dict.get(post.id, 0),
                     "years_of_experience": post.years_of_experience,
@@ -67,7 +68,7 @@ class ClientDashboard(APIView):
                 })
 
             
-            total_vacancies = all_jobs.aggregate(total=Sum('num_of_positions'))['total'] or 0
+            # total_vacancies = all_jobs.aggregate(total=Sum('num_of_positions'))['total'] or 0
             resumes_received = all_applications.count()
             on_process = all_applications.filter(status='processing').count()
             no_of_roles = all_jobs.count()
@@ -80,7 +81,7 @@ class ClientDashboard(APIView):
                 "on_process": on_process,
                 "no_of_roles": no_of_roles,
                 "closed": closed,
-                "vacancies": total_vacancies,
+                "vacancies": 0,
             }
 
             # interviewer name, interviewer email, num_of_jobs_alloted, num_of_round_alloted, rounds_completed, rounds_pending
@@ -203,6 +204,15 @@ class GetOrganizationTermsView(APIView):
             
             html = render(request, "organizationTerms.html", html_context).content.decode("utf-8")
 
+
+            draft_jobs = JobPostingDraftVersion.objects.filter(username = request.user, organization__org_code = org_code)
+
+            if draft_jobs.exists():
+
+                return Response({"negotiated_data": negotiated_data, "terms_data": context, "html": html, "draft_exists": True},
+                status=status.HTTP_200_OK,)
+
+
             return JsonResponse(
                 {"negotiated_data": negotiated_data, "terms_data": context, "html": html},
                 safe=False,
@@ -280,8 +290,6 @@ class JobPostingView(APIView):
         username = request.user
 
         organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
-        if not username or username.role != 'client':
-            return Response({"error": "Invalid user role"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not organization:
             return Response({"error": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
@@ -293,13 +301,8 @@ class JobPostingView(APIView):
         
         try:
             with transaction.atomic():
-                interview_rounds = data.get('interview_rounds', [])
-                acceptedterms = data.get('accepted_terms', [])
-                job_close_duration_raw = data.get('job_close_duration')
-                try:
-                    job_close_duration = datetime.strptime(job_close_duration_raw, "%Y-%m-%dT%H:%M:%S.%fZ").date()
-                except (ValueError, TypeError):
-                    return Response({"error": "Invalid date format for job_close_duration. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+                job_close_duration= data.get('job_close_duration')
+                interview_rounds = json.loads(data.get('interview_rounds', []))
 
                 job_posting = JobPostings.objects.create(
                     username=username,
@@ -311,69 +314,68 @@ class JobPostingView(APIView):
                     years_of_experience=data.get('years_of_experience','Not Specified'),
                     ctc=data.get('ctc',"Not Specified"),
                     rounds_of_interview = len(interview_rounds),
-                    job_locations=data.get('job_locations'),
                     job_type=data.get('job_type'),
                     probation_type =data.get('probation_type',""),
-                    job_level=data.get('job_level'),
+                    probation_period = data.get("probation_period",""),
+                    job_level=data.get('job_level',""),
                     qualifications=data.get('qualifications'),
                     timings=data.get('timings'),
                     other_benefits=data.get('other_benefits'),
                     working_days_per_week=data.get('working_days_per_week'),
-                    decision_maker=data.get('decision_maker'),
-                    decision_maker_email=data.get('decision_maker_email'),
-                    bond=data.get('bond'),
-                    rotational_shift = data.get('rotational_shift') == "yes",
-                    age = data.get('age_limit'),
-                    gender = data.get('gender'), 
+                    decision_maker=data.get('decision_maker',''),
+                    decision_maker_email=data.get('decision_maker_email',''),
+                    bond=data.get('bond',''),
+                    rotational_shift = data.get('rotational_shift') == "true",
+                    age = data.get('age_limit',''),
+                    gender = data.get('gender',''), 
                     industry = data.get('industry'),
-                    differently_abled = data.get('differently_abled'),
-                    visa_status = data.get('visa_status'),
+                    differently_abled = data.get('differently_abled',''),
+                    visa_status = data.get('visa_status',''),
                     passport_availability = data.get('passport_availability',''),
                     time_period = data.get('time_period'),
                     notice_period = data.get('notice_period'),
                     notice_time = data.get('notice_time'),
-                    qualification_department = data.get('qualification_department'),
                     languages = data.get('languages'),
-                    num_of_positions = data.get('num_of_positions'),
                     job_close_duration  = job_close_duration,
                     status='opened',
                     created_at=None
                 )
 
-                primary_skills = data.get('primarySkills')
-                secondary_skills = data.get('secondarySkills')
+                primary_skills = json.loads(data.get('primary_skills'))
+                secondary_skills = json.loads(data.get('secondary_skills'))
+                location_data = json.loads(data.get('location_data'))
 
                 for skill in primary_skills:
                     skill_metric = SkillMetricsModel.objects.create(
                         job_id = job_posting,
                         is_primary = True,
                         skill_name = skill.get('skill_name'),
-                        metric_type = skill.get('skill_metric'),
+                        metric_type = skill.get('metric_type'),
                         metric_value = skill.get('metric_value'),
                     )
-                    
-                    if skill.get('skill_metric') == 'custom':
-                        skill_metric.metric_type = skill.get('custom_metric')
-                        
-                    skill_metric.save()
+
 
                 for skill in secondary_skills:
                     skill_metric = SkillMetricsModel.objects.create(
                         job_id = job_posting,
                         is_primary = False,
                         skill_name = skill.get('skill_name'),
-                        metric_type = skill.get('skill_metric'),
+                        metric_type = skill.get('metric_type'),
                         metric_value = skill.get('metric_value'),
                     )
 
-                    if skill.get('skill_metric') == 'custom':
-                        skill_metric.metric_type = skill.get('custom_metric')
-                        
-                    skill_metric.save()
+                for location in location_data:
+                    print(location)
+                    JobLocationsModel.objects.create(
+                        job_id = job_posting,
+                        location = location.get('location'),
+                        positions = location.get('positions'),
+                        job_type = location.get('job_type')
+                    )
 
                 if interview_rounds:
                     for round_data in interview_rounds:
-                        interviewer = CustomUser.objects.get(email = round_data.get('email'))
+                        interviewer = CustomUser.objects.get(id=round_data.get('id'))
                         InterviewerDetails.objects.create(
                             job_id=job_posting,
                             round_num=round_data.get('round_num'),
@@ -381,6 +383,12 @@ class JobPostingView(APIView):
                             type_of_interview=round_data.get('type_of_interview', ''),
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
+
+                self.addTermsAndConditions(job_posting)
+
+                job_draft = JobPostingDraftVersion.objects.get(organization = organization, username = request.user)
+                job_draft.delete()
+                
                 new_job_link = f"{frontend_url}/agency/postings/{job_posting.id}"
                 manager_message = f"""
 
@@ -394,13 +402,12 @@ HireSync Team
 
 """
 
+
                 send_custom_mail(
                     subject="New Job Post Created – Action Required",
                     body=manager_message,
                     to_email=[organization.manager.email]
                 )
-
-                self.addTermsAndConditions(job_posting)
                 
                 Notifications.objects.create(
                     sender=request.user,
@@ -514,7 +521,7 @@ class getClientJobposts(APIView):
                         "company": job.organization.name,
                         "status": job.status,
                         "reason": job.reason,
-                        "positions_closed": f"{closed}/{job.num_of_positions}",
+                        "positions_closed": f" ",
                         "ctc":job.ctc,
                         "job_close_duration": job.job_close_duration,
                         "approval_status": job.approval_status
@@ -2816,3 +2823,262 @@ class CandidatesRequestedDate(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+        
+
+
+class JobPostingDraftViewSet(ModelViewSet):
+    queryset = JobPostingDraftVersion.objects.all()
+    serializer_class = JobPostingDraftVersionSerializer
+
+class JobLocationDraftViewSet(ModelViewSet):
+    queryset = JobLocationsDraftVersion.objects.all()
+    serializer_class = JobLocationsDraftVersionSerializer
+
+class SkillMetricDraftViewSet(ModelViewSet):
+    queryset = SkillMetricsDraftVersion.objects.all()
+    serializer_class = SkillMetricsDraftVersionSerializer
+
+class InterviewerDraftViewSet(ModelViewSet):
+    queryset = InterviewerDetailsDraftVersion.objects.all()
+    serializer_class = InterviewerDetailsDraftVersionSerializer
+
+class FullJobDraftView(APIView):
+    def post(self, request):
+        serializer = FullJobDraftSerializer(data=request.data)
+        if serializer.is_valid():
+            draft = serializer.save()
+            return Response(FullJobDraftSerializer(draft).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        try:
+            instance = JobPostingDraftVersion.objects.get(pk=pk)
+        except JobPostingDraftVersion.DoesNotExist:
+            return Response({"error": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = FullJobDraftSerializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            draft = serializer.save()
+            return Response(FullJobDraftSerializer(draft).data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ContinueDraftView(APIView):
+    def get(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            user = request.user
+            try:
+                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization__org_code = company_code)
+            except JobPostingDraftVersion.DoesNotExist():
+                return Response({"error":"Draft doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            serializer_data = FullJobDraftSerializer(job_draft)
+            return Response({"data":serializer_data.data}, status=status.HTTP_200_OK) 
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class CreateNewDraftView(APIView):
+    def get(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            try:
+                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization__org_code = company_code)
+                job_draft.delete()
+
+
+            except JobPostingDraftVersion.DoesNotExist:
+                pass
+            
+            organization = Organization.objects.get(org_code = company_code)
+            JobPostingDraftVersion.objects.create(username = request.user, organization=organization)
+            return Response({"message":"Draft created successfully"}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class SkillSetDraftView(APIView):
+    def post(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            is_primary = request.GET.get('is_primary')  == 'true'
+            user = request.user
+            data = request.data.get('skills')
+
+
+            # Ensure JobPostingDraftVersion exists
+            try:
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+            except JobPostingDraftVersion.DoesNotExist:
+                organization = Organization.objects.get(org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.create(username=user, organization=organization)
+
+            incoming_skill_names = [skill.get("skill_name") for skill in data]
+            SkillMetricsDraftVersion.objects.filter(
+                job=job_draft,
+                is_primary=is_primary
+            ).exclude(
+                skill_name__in=incoming_skill_names
+            ).delete()
+
+            for skill in data:
+                skill_name = skill.get("skill_name")
+                metric_type = skill.get("metric_type")
+
+                
+                metric_value = skill.get("metric_value")
+
+                skill_obj, created = SkillMetricsDraftVersion.objects.update_or_create(
+                    job=job_draft,
+                    skill_name=skill_name,
+                    is_primary=is_primary,
+                    defaults={
+                        "metric_type": metric_type,
+                        "metric_value": metric_value
+                    }
+                )
+
+            job_draft.current_step = 2
+            job_draft.save()
+
+            return Response({"message": "Skills saved as draft successfully."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class LocationDraftView(APIView):
+    def post(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            
+            user = request.user
+            data = request.data.get('locations')
+            try:
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+            except JobPostingDraftVersion.DoesNotExist:
+                organization = Organization.objects.get(org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.create( username=user, organization=organization)
+
+            incoming_location_names = [location.get("location") for location in data]
+            JobLocationsDraftVersion.objects.filter(
+                job = job_draft,
+            ).exclude(
+                location__in = incoming_location_names
+            ).delete()
+
+
+            for location in data:
+                location_name= location.get('location')
+                job_type = location.get('job_type')
+                positions = location.get('positions')
+
+                JobLocationsDraftVersion.objects.update_or_create(
+
+                    job=job_draft,
+                    location=location_name,
+                    defaults={
+                        'job_type': job_type,
+                        'positions': positions
+                    }
+                )
+
+
+            job_draft.current_step = 2
+            job_draft.save()
+
+            return Response({"message":"draft saved"}, status= status.HTTP_200_OK)
+
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class JobDraftView(APIView):
+    def patch(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            
+            user = request.user
+            data = request.data
+            try:
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+            except JobPostingDraftVersion.DoesNotExist:
+                organization = Organization.objects.get(org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.create( username=user, organization=organization)   
+
+
+            for field, val in request.data.items():
+                setattr(job_draft, field, val)
+
+            job_draft.current_step = 2
+            job_draft.save()
+
+            return Response({"message": "Draft saved"}, status = status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class InterviewersDraftView(APIView):
+    def post(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            user = request.user
+            data = request.data.get("interview_rounds", [])
+
+            try:
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+            except JobPostingDraftVersion.DoesNotExist:
+                organization = Organization.objects.get(org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.create(username=user, organization=organization)
+
+            existing_rounds = list(job_draft.interviewers.all())
+
+            incoming_identifiers = set()
+
+            for round_data in data:
+                round_num = round_data.get("round_num")
+                interviewer_id = round_data.get("id")
+                mode = round_data.get("mode_of_interview")
+                type_ = round_data.get("type_of_interview")
+
+                incoming_identifiers.add(round_num)
+
+                try:
+                    user_obj = CustomUser.objects.get(id = interviewer_id, role="interviewer")
+                except CustomUser.DoesNotExist:
+                    continue 
+
+                round_obj = InterviewerDetailsDraftVersion.objects.filter(job=job_draft, round_num=round_num).first()
+                if round_obj:
+                    round_obj.name = user_obj
+                    round_obj.mode_of_interview = mode
+                    round_obj.type_of_interview = type_
+                    round_obj.save()
+                else:
+                    InterviewerDetailsDraftVersion.objects.create(
+                        job=job_draft,
+                        round_num=round_num,
+                        name=user_obj,
+                        mode_of_interview=mode,
+                        type_of_interview=type_,
+                    )
+
+            for existing in existing_rounds:
+                if existing.round_num not in incoming_identifiers:
+                    existing.delete()
+
+            job_draft.current_step = 3
+            job_draft.save()
+
+            return Response({"message": "Draft saved successfully"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

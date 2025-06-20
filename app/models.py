@@ -150,33 +150,31 @@ class JobPostings(models.Model):
     years_of_experience = models.TextField(max_length=100)
     ctc = models.CharField(max_length=50)
     rounds_of_interview = models.IntegerField()
-    job_locations = models.CharField(max_length=100)
     job_type = models.CharField(max_length=100, )
-    probation_type = models.CharField(max_length=20, blank=True)    # paid or unpaid
-    job_level = models.CharField(max_length=100, )
+    probation_type = models.CharField(max_length=20, blank=True)  
+    probation_period = models.CharField(max_length=30, blank=True) 
+    job_level = models.CharField(max_length=100, blank=True )
     qualifications = models.TextField()
     timings = models.CharField(max_length=100 )
-    other_benefits = models.TextField()
-    working_days_per_week = models.IntegerField(default=5)
-    decision_maker = models.CharField(max_length=100, )
-    decision_maker_email = models.CharField(max_length=100, )
-    bond = models.TextField(max_length=255, )
+    other_benefits = models.TextField( blank=True, null= True)
+    working_days_per_week = models.IntegerField( blank=True, null=True)
+    decision_maker = models.CharField(max_length=100,  blank=True)
+    decision_maker_email = models.CharField(max_length=100,  blank=True)
+    bond = models.TextField(max_length=255, blank=True )
     rotational_shift = models.BooleanField()
-    status = models.CharField(max_length=10, default='opened')      # (opened) or (closed)
+    status = models.CharField(max_length=10, default='opened')     
     assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     age = models.CharField(max_length=255 )
-    gender = models.CharField(max_length = 100,) 
+    gender = models.CharField(max_length = 30, blank=True) 
     visa_status = models.CharField(max_length=100, )
     passport_availability = models.CharField(max_length=50,)
     time_period = models.CharField(max_length=50 ,default=" ",blank=True )
-    qualification_department = models.CharField(max_length=50,)
     notice_period = models.CharField(max_length=30,)
     notice_time = models.CharField(max_length=30, default=" ",blank=True)
     industry = models.CharField(max_length=40 ,)
-    differently_abled = models.CharField(max_length=40,)
-    languages = models.CharField(max_length=100 ,)
-    num_of_positions = models.IntegerField(default=1)
+    differently_abled = models.CharField(max_length=40, blank=True)
+    languages = models.CharField(max_length=100, blank=True)
     job_close_duration = models.DateField(null=True)
     approval_status = models.CharField(max_length=10,default="pending",)
     reason = models.TextField(default="" , null=True, blank=True)
@@ -185,8 +183,6 @@ class JobPostings(models.Model):
     class Meta:
         unique_together = ('username', 'jobcode') 
      
-    def get_locations(self):
-        return self.job_locations.split(",") if self.job_locations else []
     
     def get_languages(self):
         return self.languages.split(",") if self.languages else []
@@ -194,6 +190,25 @@ class JobPostings(models.Model):
     def __str__(self):
         return self.job_title
     
+
+class JobLocationsModel(models.Model):
+    REMOTE = 'remote'
+    HYBRID = 'hybrid'
+    OFFICE = 'office'
+
+    WORK_CHOICES = [
+        (REMOTE, 'remote'),
+        (HYBRID, 'hybrid'),
+        (OFFICE, 'office'),
+    ]
+
+    job_id = models.ForeignKey(JobPostings, on_delete= models.CASCADE)
+    location = models.CharField(max_length=50)
+    job_type = models.CharField(max_length=10, choices=WORK_CHOICES)
+    positions = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.job_id.job_title} - {self.location}"
 
 class JobPostingsEditedVersion(models.Model):
     ACCEPTED = 'accepted'
@@ -885,3 +900,118 @@ class HiresyncLinkedinCred(models.Model):
 
     class Meta:
         verbose_name = "Hiresync Integration"
+
+
+
+class JobPostingDraftVersion(models.Model):
+    username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
+    jobcode = models.CharField(max_length=40, default='jcd0', blank=True)
+    current_step = models.IntegerField(default=1)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, blank=True, null=True)
+    job_title = models.CharField(max_length=255, blank=True)
+    job_department = models.CharField(max_length=100, blank=True)
+    job_description = models.TextField(blank=True)
+    years_of_experience = models.CharField(max_length=100, blank=True)
+    ctc = models.CharField(max_length=50, blank=True)
+    rounds_of_interview = models.IntegerField(blank=True, null=True)
+    job_type = models.CharField(max_length=100, blank=True)
+    time_period = models.CharField(max_length=50, default="", blank=True)
+    probation_period = models.CharField(max_length=30, blank=True)
+    probation_type = models.CharField(max_length=20, blank=True)
+    job_level = models.CharField(max_length=100, blank=True)
+    qualifications = models.TextField(blank=True)
+    timings = models.CharField(max_length=100, blank=True)
+    other_benefits = models.TextField(blank=True)
+    working_days_per_week = models.IntegerField(default=5, blank=True, null=True)
+    decision_maker = models.CharField(max_length=100, blank=True)
+    decision_maker_email = models.CharField(max_length=100, blank=True)
+    bond = models.CharField(max_length=255, blank=True)
+    rotational_shift = models.BooleanField(default=False)
+    status = models.CharField(max_length=10, default='opened', blank=True)
+    assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs_draft', limit_choices_to={"role": "recruiter"}, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    age = models.CharField(max_length=255, blank=True)
+    gender = models.CharField(max_length=100, blank=True)
+    visa_status = models.CharField(max_length=100, blank=True)
+    passport_availability = models.CharField(max_length=50, blank=True)
+    qualification_department = models.CharField(max_length=50, blank=True)
+    notice_period = models.CharField(max_length=30, blank=True)
+    notice_time = models.CharField(max_length=30, default="", blank=True)
+    industry = models.CharField(max_length=40, blank=True)
+    differently_abled = models.CharField(max_length=40, blank=True)
+    languages = models.CharField(max_length=100, blank=True)
+    job_close_duration = models.DateField(null=True, blank=True)
+    approval_status = models.CharField(max_length=10, default="pending", blank=True)
+    reason = models.TextField(default="", null=True, blank=True)
+    is_linkedin_posted = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('username', 'jobcode')
+
+    def get_languages(self):
+        return self.languages.split(",") if self.languages else []
+
+    def __str__(self):
+        return self.job_title or "Untitled Draft"
+
+    
+class JobLocationsDraftVersion(models.Model):
+    REMOTE = 'remote'
+    HYBRID = 'hybrid'
+    OFFICE = 'office'
+
+    WORK_CHOICES = [
+        (REMOTE, 'remote'),
+        (HYBRID, 'hybrid'),
+        (OFFICE, 'office'),
+    ]
+
+    job = models.ForeignKey(JobPostingDraftVersion, on_delete=models.CASCADE, related_name='locations')
+    location = models.CharField(max_length=50, blank=True)
+    job_type = models.CharField(max_length=10, choices=WORK_CHOICES, blank=True)
+    positions = models.IntegerField(default=0, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.job.job_title or 'Draft'} - {self.location}"
+
+
+class SkillMetricsDraftVersion(models.Model):
+    job = models.ForeignKey(JobPostingDraftVersion, on_delete=models.CASCADE, related_name="skill_metrics")
+    skill_name = models.CharField(max_length=50, blank=True)
+    is_primary = models.BooleanField(default=False)
+    metric_type = models.CharField(max_length=100, blank=True)
+    metric_value = models.CharField(max_length=100, blank=True)
+
+    def __str__(self):
+        return f"{self.job.job_title or 'Draft'} - {self.skill_name or 'Unnamed'}"
+
+    
+class InterviewerDetailsDraftVersion(models.Model):
+    FACE = 'face_to_face'
+    ONLINE = 'online'
+    TELEPHONE = 'telephone'
+
+    MODE_OF_INTERVIEW = [
+        (FACE, 'Face to Face'),
+        (ONLINE, 'Online'),
+        (TELEPHONE, 'Telephone'),
+    ]
+
+    TECHNICAL = 'technical'
+    NONTECHNICAL = 'non-technical'
+    ASSIGNMENT = 'assignment'
+
+    TYPE_OF_INTERVIEW = [
+        (TECHNICAL, 'Technical'),
+        (NONTECHNICAL, 'Non-Technical'),
+        (ASSIGNMENT, 'Assignment'),
+    ]
+
+    job = models.ForeignKey(JobPostingDraftVersion, on_delete=models.CASCADE, related_name="interviewers")
+    round_num = models.IntegerField(default=0, blank=True, null=True)
+    name = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "interviewer"}, blank=True, null=True)
+    mode_of_interview = models.CharField(max_length=20, choices=MODE_OF_INTERVIEW, blank=True)
+    type_of_interview = models.CharField(max_length=35, choices=TYPE_OF_INTERVIEW, blank=True)
+
+    def __str__(self):
+        return self.name.username if self.name else "Unnamed Interviewer"

@@ -64,8 +64,6 @@ urlpatterns = [
     path('get-resume/<int:application_id>/', GetResumeByApplicationId.as_view(), name='get-resume-by-application-id'),
     path('client/on-hold/', CandidatesOnHold.as_view(), name= 'candidates-on-hold' ),
     path('client/cand-request/', CandidatesRequestedDate.as_view(), name= 'candidates-request' ),
-    
-    
     path('client/today-joinings/', TodayJoingings.as_view(), name='today-joinings-of-candidates'),
     path('client/joined-candidates/', AllJoinedCandidates.as_view(), name='all-joined-candidates'),
     path('client/candidate-left/', CandidateLeftView.as_view(), name='updating-joining-status-of-candidate-as-left'),
@@ -80,6 +78,13 @@ urlpatterns = [
     path('client/orgs-data/', OrgsData.as_view(), name='orgs-data'),
     path('client/all-alerts/', ClientAllAlerts.as_view(), name='client-all-alerts'),
     path('client/interviewer-details/', InterviewerRoundsView.as_view(), name='client-all-alerts'),
+    path('client/jobpost/continue-draft/', ContinueDraftView.as_view(), name='client-all-alerts'),
+    path('client/jobpost/create-new-draft/', CreateNewDraftView.as_view(), name='create-jobpost-draft'),
+    path('client/save-skill-draft/', SkillSetDraftView.as_view(), name='save-skill-draft'),
+    path('client/save-location-draft/', LocationDraftView.as_view(), name='save-location-draft'),
+    path('client/save-job-draft/', JobDraftView.as_view(), name='save-location-draft'),
+    path('client/save-interview-draft/', InterviewersDraftView.as_view(), name='save-location-draft'),
+
 
 
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
