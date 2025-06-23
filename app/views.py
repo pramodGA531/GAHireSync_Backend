@@ -249,7 +249,26 @@ class JobDetailsAPIView(APIView):
             job_id = request.GET.get('job_id')
             job_posting = JobPostings.objects.get(id=job_id)
             serializer = JobPostingsSerializer(job_posting)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            assigned_recruiters = AssignedJobs.objects.filter(job_location__job_id=job_id).prefetch_related('assigned_to', 'job_location')
+            
+            assigned_recruiters_map = {}
+
+            for assignment in assigned_recruiters:
+                location_id = str(assignment.job_location.id)
+                recruiter_ids = list(assignment.assigned_to.values_list('id', flat=True))
+
+                if location_id in assigned_recruiters_map:
+                    assigned_recruiters_map[location_id] = list(
+                        set(assigned_recruiters_map[location_id] + recruiter_ids)
+                    )
+                else:
+                    assigned_recruiters_map[location_id] = recruiter_ids
+
+            return Response({
+                "job": serializer.data,
+                "assigned_recruiters": assigned_recruiters_map
+            }, status=status.HTTP_200_OK)
+
         except JobPostings.DoesNotExist:
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
         

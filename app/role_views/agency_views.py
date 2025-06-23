@@ -614,6 +614,7 @@ class RecruitersView(APIView):
 
 # Assign job post to the recruiter
 class AssignRecruiterView(APIView):
+    permission_classes = [IsManager]
     def post(self, request):
         try:
             user = request.user
@@ -621,18 +622,26 @@ class AssignRecruiterView(APIView):
 
             if org:
                 job_id = request.data.get('job_id')
-                job = JobPostings.objects.get(id=job_id, organization=org)
+                recruiter_map = request.data.get('recruiter_ids', {})  
 
-                recruiter_ids = request.data.get('recruiter_ids', [])  
-                recruiters = CustomUser.objects.filter(id__in=recruiter_ids)
+                try:
+                    job = JobPostings.objects.get(id=job_id, organization=org)
+                except JobPostings.DoesNotExist:
+                    return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
 
-                job.assigned_to.set(recruiters)  # Assign multiple recruiters
-                job.save()
+                for location_id_str, recruiter_ids in recruiter_map.items():
+                    try:
+                        location_id = int(location_id_str)
+                        job_location = JobLocationsModel.objects.get(id=location_id, job_id=job)
 
-                for recruiter in recruiters:
-                    
-                    link = f"{frontend_url}/recruiter/postings/{job_id}"
-                    message = f"""
+                        assigned_job = AssignedJobs.objects.create(job_location=job_location, job_id = job)
+                        recruiters = CustomUser.objects.filter(id__in=recruiter_ids, role='recruiter')
+                        assigned_job.assigned_to.set(recruiters)
+
+                        for recruiter in recruiters:
+                            link = f"{frontend_url}/recruiter/postings/{job_id}"
+
+                            message = f"""
 
 A new job post {job.job_title} has been assigned to you. Please review the details and start the recruitment process.
 🔗 {link}
@@ -640,14 +649,14 @@ A new job post {job.job_title} has been assigned to you. Please review the detai
 Best,
 HireSync Team
 """
-                    send_custom_mail(f"New Job Assigned – {job.job_title}", message, {recruiter.email})
-                    
-                    notification = Notifications.objects.create(
-                    sender=request.user,
-                    receiver=recruiter,
-                    category = Notifications.CategoryChoices.ASSIGN_JOB,
-                    subject=f"New Job Assigned by Manager",
-                    message=(
+                            send_custom_mail(f"New Job Assigned – {job.job_title}", message, {recruiter.email})
+                            
+                            notification = Notifications.objects.create(
+                            sender=request.user,
+                            receiver=recruiter,
+                            category = Notifications.CategoryChoices.ASSIGN_JOB,
+                            subject=f"New Job Assigned by Manager",
+                            message=(
         f"📢 New Job Assignment\n\n"
         f"You have been assigned a new job post to source profiles for.\n\n"
         f"Position: **{job.job_title}**\n"
@@ -657,8 +666,13 @@ HireSync Team
         f"link::'recruiter/postings/"
     )
                 )
-                    notification.category = Notifications.CategoryChoices.ASSIGN_JOB
-                    notification.save()
+                            notification.category = Notifications.CategoryChoices.ASSIGN_JOB
+                            notification.save()
+                    
+                    
+                    except JobLocationsModel.DoesNotExist:
+                        return Response({"error":"JOb location doesnot exist"}, status=status.HTTP_200_OK)
+                   
 
                 return Response({"detail": "Recruiters Assigned Successfully"}, status=status.HTTP_200_OK)
         except Organization.DoesNotExist:
@@ -781,11 +795,8 @@ class AgencyJobPosts(APIView):
     def get(self, request):
         user = request.user
 
-        if not user.is_authenticated:
-            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
-
         try:
-            all_jobs = JobPostings.objects.filter(organization__manager=user).select_related('username').prefetch_related('assigned_to')
+            all_jobs = JobPostings.objects.filter(organization__manager=user).select_related('username')
 
             total_postings = 0
             num_of_open_jobs = 0
@@ -796,23 +807,28 @@ class AgencyJobPosts(APIView):
 
             jobs_list = []
             for job in all_jobs:
-                applied = JobApplication.objects.filter(job_id=job.id).count()
-                under_review = JobApplication.objects.filter(job_id=job.id, status='processing').count()
-                hired = JobApplication.objects.filter(job_id=job.id, status='selected').count()
-                rejected = JobApplication.objects.filter(job_id=job.id, status='rejected').count()
+                job_postings = JobApplication.objects.filter(job_location__job_id = job.id)
+                applied = job_postings.count()
+                under_review = job_postings.filter( status='processing').count()
+                hired = job_postings.filter( status='selected').count()
+                rejected = job_postings.filter( status='rejected').count()
                 
                 num_of_rounds = job.rounds_of_interview
                 rounds_details = []
 
+                num_of_positions = 0
+                locations = JobLocationsModel.objects.filter(job_id =  job)
+                for location in locations:
+                    num_of_positions += location.positions
+
                 rounds_details.extend([
-                                     {"Vacancies": job.num_of_positions},
+                                     {"Vacancies": num_of_positions},
                                      {"Applied": applied},
                                      {"Under Review": under_review},
                                     ])
 
                 for round_num in range(1, num_of_rounds + 1):
-                    count = JobApplication.objects.filter(
-                        job_id=job.id,
+                    count = job_postings.filter(
                         round_num=round_num,
                         status='processing'
                     ).count()
@@ -823,10 +839,18 @@ class AgencyJobPosts(APIView):
                                      {"Hired":hired},
                                      {"Rejected" : rejected}
                                     ])
+                
+                locations_assigned_to = AssignedJobs.objects.filter(job_id = job)
+                assigned_to = []
+                for location in locations_assigned_to:
+                    assigned_to.append({
+                        "location": location.job_location.location,
+                        "recruiter_name" : list(location.assigned_to.values_list('username', flat=True) if location.assigned_to.exists() else ['Not Assigned'])
+                    })
 
                 job_details = {
                     "job_title": job.job_title,
-                    "recruiter_name": list(job.assigned_to.values_list('username', flat=True)) if job.assigned_to.exists() else ["Not Assigned"],
+                    "assigned_to": assigned_to,
                     "client_name": job.username.username if job.username else "Unknown",
                     "deadline": job.job_close_duration,
                     "status": job.status,
@@ -837,7 +861,7 @@ class AgencyJobPosts(APIView):
                 }
 
                 jobs_list.append(job_details)
-                total_postings += job.num_of_positions
+                total_postings += num_of_positions
 
                 if job.approval_status == 'pending':
                     pending_approval+=1
@@ -848,7 +872,7 @@ class AgencyJobPosts(APIView):
                 if job.job_close_duration < timezone.now().date():
                     expired_jobs+=1
 
-                applications_closed = JobApplication.objects.filter(job_id = job.id, status = 'selected').count()
+                applications_closed = job_postings.filter( status = 'selected').count()
                 closed_positions += applications_closed
             
 

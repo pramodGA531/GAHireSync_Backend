@@ -163,7 +163,6 @@ class JobPostings(models.Model):
     bond = models.TextField(max_length=255, blank=True )
     rotational_shift = models.BooleanField()
     status = models.CharField(max_length=10, default='opened')     
-    assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     age = models.CharField(max_length=255 )
     gender = models.CharField(max_length = 30, blank=True) 
@@ -209,6 +208,18 @@ class JobLocationsModel(models.Model):
 
     def __str__(self):
         return f"{self.job_id.job_title} - {self.location}"
+    
+
+class AssignedJobs(models.Model):
+    job_location = models.ForeignKey(JobLocationsModel, on_delete=models.CASCADE)
+    assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs',  limit_choices_to={"role": "recruiter"},  blank=True)
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    
+    def __str__(self):
+        assigned_names = ", ".join(user.get_full_name() or user.username for user in self.assigned_to.all())
+        return f"{self.job_location.job_id.job_title} - {self.job_location.location} is assigned to [{assigned_names}]"
+
+
 
 class JobPostingsEditedVersion(models.Model):
     ACCEPTED = 'accepted'
@@ -468,7 +479,7 @@ class JobApplication(models.Model):
 
     id = models.AutoField(primary_key=True)
     resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
-    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    job_location = models.ForeignKey(JobLocationsModel, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, choices= STATUS, default='applied')
     attached_to = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
     receiver = models.ForeignKey(CustomUser, related_name="received_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "client"})
@@ -482,10 +493,10 @@ class JobApplication(models.Model):
     sender = models.ForeignKey(CustomUser, related_name='Actual_sender', on_delete=models.CASCADE, null=True, limit_choices_to={'role':"recruiter"})
     is_incoming = models.BooleanField(default=False)
     class Meta:
-        unique_together = ('job_id','resume')
+        unique_together = ('job_location','resume')
 
     def __str__(self):
-        return f"{self.resume.candidate_name} applied for {self.job_id.job_title}"
+        return f"{self.resume.candidate_name} applied for {self.job_location.job_id.job_title}"
 
 
 

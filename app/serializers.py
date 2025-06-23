@@ -85,9 +85,14 @@ class LocationSerializer(serializers.ModelSerializer):
         model = JobLocationsModel
         fields = '__all__'
 
+class AssignedJobsSerializer(serializers.ModelSerializer):
+    class Meta:
+        models = AssignedJobs
+        fields = '__all__'
+
 
 class JobPostingsSerializer(serializers.ModelSerializer):
-    assigned_to = CustomUserSerializer(many=True)
+    assigned_to = serializers.SerializerMethodField()
     username = CustomUserSerializer()
     organization = OrganizationSerializer()
     selectedCandidatesCount = serializers.SerializerMethodField()  
@@ -104,16 +109,37 @@ class JobPostingsSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_selectedCandidatesCount(self, obj):
-        return SelectedCandidates.objects.filter(application__job_id=obj).count()
+        return SelectedCandidates.objects.filter(application__job_location__job_id=obj).count()
 
     def get_onHoldCount(self, obj):
-        return SelectedCandidates.objects.filter(application__status='onHold', application__job_id=obj).count()
+        return SelectedCandidates.objects.filter(application__status='onHold', application__job_location__job_id=obj).count()
 
     def get_rejectedCount(self, obj):
-        return SelectedCandidates.objects.filter(application__status='rejected', application__job_id=obj).count()
+        return SelectedCandidates.objects.filter(application__status='rejected', application__job_location__job_id=obj).count()
 
     def get_pendingCount(self, obj):
-        return SelectedCandidates.objects.filter(application__status='pending', application__job_id=obj).count()
+        return SelectedCandidates.objects.filter(application__status='pending', application__job_location__job_id=obj).count()
+    
+    def get_assigned_to(self, obj):
+        job_id = obj.id
+        assigned_jobs = AssignedJobs.objects.filter(
+            job_location__job_id=job_id
+        ).prefetch_related('assigned_to', 'job_location')
+
+        result = []
+
+        for assigned_job in assigned_jobs:
+            location_name = assigned_job.job_location.location
+
+            for recruiter in assigned_job.assigned_to.all():
+                result.append({
+                    "id": recruiter.id,
+                    "username": recruiter.username,
+                    "email": recruiter.email,
+                    "location": location_name,
+                })
+
+        return result
     
    
     def to_representation(self, instance):

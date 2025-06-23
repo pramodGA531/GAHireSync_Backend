@@ -61,8 +61,8 @@ class CandidateResumeAdmin(admin.ModelAdmin):
 
 @admin.register(JobApplication)
 class JobApplicationAdmin(admin.ModelAdmin):
-    list_display = ('resume', 'job_id', 'status', 'application_date')
-    search_fields = ('resume__candidate_name', 'job_id__job_title')
+    list_display = ('resume', 'job_location', 'status', 'application_date')
+    search_fields = ('resume__candidate_name', 'job_location__job_id__job_title')
     list_filter = ('status',)
     ordering = ('-application_date',)
 
@@ -166,3 +166,4 @@ class JobLocationsModelAdmin(admin.ModelAdmin):
     ordering = ('-job_id__created_at',)
 
 admin.site.register(JobLocationsDraftVersion)
+admin.site.register(AssignedJobs)
