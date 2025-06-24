@@ -18,6 +18,8 @@ from django.utils.timezone import now,is_aware, make_naive
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import requests
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Sum  
 
 
 class AgencyJobApplications(APIView):
@@ -28,30 +30,33 @@ class AgencyJobApplications(APIView):
             org = Organization.objects.get(manager=user)
 
             job_postings = JobPostings.objects.filter(organization=org)
-            applications = JobApplication.objects.filter(job_id__in=job_postings).select_related('resume', 'job_id')
+            job_locations = JobLocationsModel.objects.filter(job_id__organization = org)
+            job_locations_ids = job_locations.values('id')
+            applications = JobApplication.objects.filter(job_location__in=job_locations_ids).select_related('resume', 'job_location')
+            print("entered ", applications)
 
             job_titles = [
                 {"job_id": job.id, "job_title": job.job_title}
                 for job in job_postings.distinct()
             ]
 
-            applications_list = [
-                {
-                    "candidate_name": app.resume.candidate_name,
+            applications_list = []
+            for app in applications:
+                job = app.job_location.job_id
+                applications_list.append({
+                "candidate_name": app.resume.candidate_name,
                     "application_id": app.id,
                     "job_id":app.id,
-                    "job_title": app.job_id.job_title,
-                    "job_department": app.job_id.job_department,
-                    "job_description": app.job_id.job_description,
-                    "job_title": app.job_id.job_title,
-                    "job_department": app.job_id.job_department,
-                    "job_description": app.job_id.job_description,
+                    "job_title": job.job_title,
+                    "job_department": job.job_department,
+                    "job_description": job.job_description,
+                    "job_title": job.job_title,
+                    "job_department": job.job_department,
+                    "job_description": job.job_description,
                     "application_status": app.status,   
                     "feedback": app.feedback,
-                }
-                for app in applications
-            ]
-
+                })
+            
             return Response(
                 {"applications_list": applications_list, "job_titles": job_titles},
                 status=status.HTTP_200_OK
@@ -60,6 +65,7 @@ class AgencyJobApplications(APIView):
         except Organization.DoesNotExist:
             return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            print(str(e))
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
     def delete(self, request, *args, **kwargs):
@@ -91,48 +97,62 @@ class AgencyDashboardAPI(APIView):
         try:
             user = request.user
             agency_name = Organization.objects.get(manager = user).name
+            all_applications = JobApplication.objects.filter(job_location__job_id__organization__name = agency_name)
+            all_jobs = JobPostings.objects.filter(organization__name = agency_name)
+            pending_assigned = 0
+            for job in all_jobs:
+                locations = JobLocationsModel.objects.filter(job_id = job).count()                
+                assigned_locations = AssignedJobs.objects.filter(job_id=job).values_list('job_location', flat=True).distinct()
+                assigned_jobs = len(set(assigned_locations))
 
-            approval_pending = JobPostings.objects.filter(organization__name = agency_name, approval_status='pending').count()
-            interviews_scheduled = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).count()
-            recruiter_allocation_pending = JobPostings.objects.filter(organization__name=agency_name, assigned_to=None).count()
+                if(locations > assigned_jobs):
+                    pending_assigned += 1
+                
+
+            approval_pending = all_jobs.filter(approval_status='pending').count()
+            interviews_scheduled = all_applications.exclude(next_interview=None).count()
+            recruiter_allocation_pending = pending_assigned
             jobpost_edit_requests = JobPostingsEditedVersion.objects.filter(job_id__organization__manager=user).count()  
-            opened_jobs = JobPostings.objects.filter(organization__name=agency_name, status='opened').count()
-            closed_jobs = JobPostings.objects.filter(organization__name=agency_name, status='closed').count()
+            opened_jobs = all_jobs.filter(status='opened').count()
+            closed_jobs = all_jobs.filter(status='closed').count()
+            applications = all_applications.exclude(next_interview=None).order_by('-next_interview__scheduled_date')[:20]
+            print(applications)
             upcoming_interviews = []
-            applications = JobApplication.objects.filter(job_id__organization__name=agency_name).exclude(next_interview=None).order_by('-next_interview__scheduled_date')[:20]
 
             for application in applications:
-                application_details = {
+                upcoming_interviews.append({
                     "interviewer_name" : application.next_interview.interviewer.name.username,
                     "round_num" : application.round_num,
                     "candidate_name": application.resume.candidate_name,
                     "scheduled_time": application.next_interview.scheduled_date,
                     "from_time": application.next_interview.from_time,
                     "to_time": application.next_interview.to_time,
-                    "job_title": application.job_id.job_title,
-                }
+                    "job_title": application.job_location.job_id.job_title,
+                })
 
-                upcoming_interviews.append(application_details)
 
-            latest_jobs = JobPostings.objects.filter(organization__name = agency_name).order_by('-created_at')[:10]
+            latest_jobs_ids = all_jobs.order_by('-created_at')[:10].values('id')
+            latest_jobs = JobLocationsModel.objects.filter(job_id__in = latest_jobs_ids)
             
             jobs_details = []
-            for job in latest_jobs:
-
-                selected = JobApplication.objects.filter(job_id = job, status = 'selected').count()
-                rejected = JobApplication.objects.filter(job_id = job.id, status = "rejected").count()
-                applications = JobApplication.objects.filter(job_id = job.id).count()
-                number_of_rounds =  InterviewerDetails.objects.filter(job_id = job.id).count()
-                rejected_at_last_round = JobApplication.objects.filter(job_id = job.id, round_num = number_of_rounds, status = 'rejected').count()
+            for location in latest_jobs:
+                
+                joined = SelectedCandidates.objects.filter(application__job_location = location, joining_status = 'joined').count()
+                selected = all_applications.filter(job_location = location, status = 'selected').count()
+                rejected = all_applications.filter(job_location = location, status = "rejected").count()
+                applications = all_applications.filter(job_location = location).count()
+                number_of_rounds =  InterviewerDetails.objects.filter(job_id = location.job_id).count()
+                rejected_at_last_round = all_applications.filter(job_location = location, round_num = number_of_rounds, status = 'rejected').count()
                 interviewed = selected + rejected_at_last_round
 
                 job_details = {
-                    "role":job.job_title,
-                    "positions_left": job.num_of_positions - selected,
+                    "role":location.job_id.job_title,
+                    "positions_left": location.positions - joined,
                     "applications": applications,
                     "interviewed":interviewed,
                     "rejected": rejected,
                     "feedback_pending": 0,
+                    "location": location.location,
                     "offered": selected,
                 }
 
@@ -1036,10 +1056,10 @@ class ViewSelectedCandidates(APIView):
         try:
             user = request.user
             selected_candidates_list = []
-            applications = JobApplication.objects.filter(job_id__organization__manager = user, status = 'selected')
+            applications = JobApplication.objects.filter(job_location__job_id__organization__manager = user, status = 'selected')
             selected_candidates = SelectedCandidates.objects.filter(application__in = applications)
             for candidate in selected_candidates:
-                job = candidate.application.job_id
+                job = candidate.application.job_location.job_id
                 candidate_json = {
                     "candidate_name" : candidate.candidate.name.username,
                     "joining_date": candidate.joining_date,
@@ -1050,6 +1070,7 @@ class ViewSelectedCandidates(APIView):
                     "actual_ctc":job.ctc,
                     "client_name": job.username.username,
                     "job_title": job.job_title,
+                    "location": candidate.application.job_location.location,
                 }
                 selected_candidates_list.append(candidate_json)
             
@@ -1082,7 +1103,6 @@ class AccountantsView(APIView):
             return Response({"error": "Email is already taken"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            print("request.user",request.user)
             organization=Organization.objects.get(manager=request.user)
         except Organization.DoesNotExist:
             return Response({"error": "Manager does not belong to an organization"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1170,53 +1190,71 @@ class ClientsData(APIView):
     def get(self, request):
         try:
             user = request.user
-            job_id = request.GET.get('id')
+            client_id = request.GET.get('id')
 
-            if job_id:
+            if client_id:
                 try:
-                    job = JobPostings.objects.get(id=job_id, organization__manager=user)
-
-                    jobs = JobPostings.objects.filter(username=job.username, organization__manager=user)
-
-                    client = ClientDetails.objects.filter(user=job.username).first()
-
+                    client = ClientDetails.objects.filter(user=client_id).first()
                     if not client:
-                        return Response({'error': 'Client not found for this job.'}, status=404)
+                        return Response({'error': 'Client not found'}, status=404)
+                    
+                    jobs = JobPostings.objects.filter(username=client.user, organization__manager=user)
+                    associated_at = jobs.order_by('created_at').first()
 
-                    jobs_data = JobPostingsSerializer(jobs, many=True).data
+                    total_positions = JobLocationsModel.objects.filter(
+                        job_id__in=jobs
+                    ).aggregate(total=Sum('positions'))['total'] or 0
 
-                    data = {
+
+                    client_data = {
                         'client_username': client.username,
                         'organization_name': client.name_of_organization,
                         'contact_number': client.contact_number,
                         'website_url': client.website_url,
                         'gst_number': client.gst_number,
                         'company_address': client.company_address,
-                        'jobs': jobs_data,
-                        
+                        'associated_at': associated_at.created_at
                     }
 
-                    return Response(data, status=200)
+                    jobs_data = []
+                    for job in jobs:
+                        locations = JobLocationsModel.objects.filter(job_id = job)
+                        for location in locations:
+                            applications = JobApplication.objects.filter(job_location = location)
+                            selected_application = SelectedCandidates.objects.filter(application__in = applications)
 
-                except JobPostings.DoesNotExist:
-                    return Response({'error': 'Job not found or not authorized.'}, status=404)
+                            jobs_data.append(
+                                {
+                                    "openings": location.positions,
+                                    "pending": applications.filter(status = 'pending').count(),
+                                    "processing": applications.filter(status = 'processing').count(),
+                                    "rejected": applications.filter(status = 'rejected').count(),
+                                    "joined": selected_application.filter(joining_status = 'joined').count(),
+                                    "selected": selected_application.filter(joining_status = 'pending').count(),
+                                    "job_title": job.job_title,
+                                    "status": job.status,
+                                }
+                            )
+
+                    return Response({"client_data":client_data, "jobs_data": jobs_data}, status=status.HTTP_200_OK)
+                except Exception as e:
+                    return Response({'error': str(e)}, status=500)
             else:
-                jobs = JobPostings.objects.filter(organization__manager=user)
+                jobs = JobPostings.objects.filter(organization__manager=user).order_by('created_at')
                 data = []
                 added_clients = set()  
                 for job_item in jobs:
                     client = ClientDetails.objects.filter(user=job_item.username).first()
                     if client and client.username not in added_clients:
                         data.append({
-                            'job_code': job_item.jobcode,
-                            'job_title': job_item.job_title,
-                            'job_id': job_item.id,
+                            "client_id": client.id,
                             'client_username': client.username,
                             'organization_name': client.name_of_organization,
                             'contact_number': client.contact_number,
                             'website_url': client.website_url,
                             'gst_number': client.gst_number,
                             'company_address': client.company_address,
+                            "associated_at": job_item.created_at,
                         })
                         added_clients.add(client.username)  
 
@@ -1224,6 +1262,7 @@ class ClientsData(APIView):
 
 
         except Exception as e:
+            print(str(e))
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1617,3 +1656,99 @@ class LinkedINCallBackView(APIView):
         except Exception as e:
             print("Callback Error:", str(e))
             return Response({"message": "Unexpected error occurred.", "error": str(e), "status": False}, status=status.HTTP_400_BAD_REQUEST)
+
+class RecSummaryMetrics(APIView):
+    permission_classes = [IsManager]
+    def get(self, request, *args, **kwargs):
+        rctr_id = request.GET.get("rctr_id")
+
+        try:
+            rctr_obj = CustomUser.objects.get(id=rctr_id)  
+        except ObjectDoesNotExist:
+            return Response({"error": "Recruiter not found"}, status=404)
+
+        jobs_assigned = AssignedJobs.objects.filter(assigned_to = rctr_obj)
+        total_jobs_assigned = jobs_assigned.count()
+
+
+        interviews = InterviewSchedule.objects.filter(rctr=rctr_obj)
+        interviews_count = interviews.count()
+
+        applications = JobApplication.objects.filter(attached_to = rctr_obj)
+        applications_count = applications.count()
+
+        selected_candidates = SelectedCandidates.objects.filter(application__attached_to = rctr_id)
+
+
+        pending_candidates_count = selected_candidates.filter(joining_status = "pending").count()
+
+        joined_candidates_count = selected_candidates.filter(joining_status = 'joined').count()
+
+        candidates_on_processing = applications.filter( status = 'processing')[:10]
+        candidates_data = []
+        for candidate in candidates_on_processing:
+    
+            candidates_data.append({
+                "candidate_name": candidate.resume.candidate_name,
+                "role": candidate.job_location.job_id.job_title,
+                "status": candidate.status,
+                "profile": None
+            }) 
+        
+        cards_data = {
+            "application_count": applications_count,
+            "interviews_count": interviews_count,
+            "job_postings_count": total_jobs_assigned,
+            "pending_candidates_count": pending_candidates_count,
+            "joined_candidates_count": joined_candidates_count,
+        }
+        
+        interview_data = []
+        for interview in interviews:
+            interview_data.append({
+                "scheduled_date":interview.scheduled_date,
+                "profile": interview.interviewer.name.profile.url if interview.interviewer.name.profile else None,
+                "job_title": interview.job_location.job_id.job_title,
+                "scheduled_time": f"{interview.from_time} - {interview.to_time}",
+                "candidate_name": interview.candidate.candidate_name,
+                "from_time": interview.from_time,
+                "to_time": interview.to_time,
+                "round_num": interview.round_num,
+                "id": interview.id,
+                "interviewer_name": interview.interviewer.name.username
+            })
+
+        
+        job_data = []
+        for assigned_job in jobs_assigned:
+            applications = JobApplication.objects.filter(job_location = assigned_job.job_location)
+            job = assigned_job.job_id
+            job_location = assigned_job.job_location
+            joined = 0
+            for application in applications:
+                try:
+                    selected_candidate = SelectedCandidates.objects.get(application = application, joining_status = 'joined')
+                    joined +=1
+                except SelectedCandidates.DoesNotExist:
+                    continue
+            job_data.append(
+                {
+                    "job_id": job.id,
+                    "job_title": job.job_title,
+                    "location": job_location.location,
+                    "positions": job_location.positions,
+                    "dead_line": job.job_close_duration,
+                    "application_count": len(applications),
+                    "joined": joined,
+                }
+            )
+
+        return Response({
+            "cards_data": cards_data,
+            "on_processing": candidates_data,
+            "interviews": interview_data,
+            "jobs_data": job_data,
+        }, status=status.HTTP_200_OK)
+    
+
+

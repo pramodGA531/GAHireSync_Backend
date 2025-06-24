@@ -61,7 +61,6 @@ def extract_text_from_file(file):
 def summarize_jd(jd):
     model = genai.GenerativeModel("gemini-1.5-flash")
 
-    
     job_title = jd.job_title
     job_department = jd.job_department
     job_description = jd.job_description.strip() if jd.job_description else None
@@ -109,6 +108,7 @@ def summarize_jd(jd):
     response = model.generate_content(prompt)
     output = response.text  
 
+    print(output, " is the output")
     return output
 
 

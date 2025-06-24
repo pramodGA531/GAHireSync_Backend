@@ -262,7 +262,7 @@ class JobDetailsAPIView(APIView):
                         set(assigned_recruiters_map[location_id] + recruiter_ids)
                     )
                 else:
-                    assigned_recruiters_map[location_id] = recruiter_ids
+                    assigned_recruiters_map[location_id] = recruiter_ids    
 
             return Response({
                 "job": serializer.data,
@@ -303,60 +303,6 @@ class RecJobPostings(APIView):
         except Exception as e:
             print(str(e))
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-class RecSummery(APIView):
-    def get(self, request, *args, **kwargs): 
-        try:
-            recruiter_id = request.GET.get("rctr_id")
-            recruiter_obj = CustomUser.objects.get(id=recruiter_id)
-
-            # Get total jobs posted by the recruiter (if `username` stores recruiters)
-            jobs_assigned = JobPostings.objects.filter(assigned_to=recruiter_obj)
-
-            total_jobs = jobs_assigned.count()
-
-            # Fetch applications for each job
-            jobs_with_applications = jobs_assigned.prefetch_related(
-                Prefetch(
-                    "jobapplication_set", 
-                    queryset=JobApplication.objects.all()
-                )
-            ).annotate(application_count=Count("jobapplication"))
-            print("jobapplication_set",jobs_with_applications)
-
-            # Format the response data
-            job_data = [
-                {
-                    "job_id": job.id,
-                    "job_title": job.job_title,
-                    "application_count": job.application_count,
-                    "vacancies":job.num_of_positions,
-                    "dead_line":job.job_close_duration,
-                    "applications": [
-                        {
-                            "application_id": app.id,
-                            "status": app.status,
-                        }
-                        for app in job.jobapplication_set.all()
-                    ]
-                }
-                for job in jobs_with_applications
-            ]
-
-            return Response({
-                "recruiter_id": recruiter_id,
-                "total_jobs_assigned": total_jobs,
-                "job_details": job_data
-            })
-        
-        except CustomUser.DoesNotExist:
-            return Response({"error": "Recruiter not found"}, status=404)
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
-
-
     
 
 class GetResumeByApplicationId(APIView):
@@ -1301,14 +1247,15 @@ class CompleteApplicationDetailsView(APIView):
                 })
 
             candidate_evaluation_json = dict(candidate_evaluation_json)
+            job = application.job_location.job_id
 
             application_json = {
                 "application_id":application.id,
-                "job_title":application.job_id.job_title,
-                "job_department":application.job_id.job_department,
-                "rounds_of_interview" : application.job_id.rounds_of_interview,
+                "job_title":job.job_title,
+                "job_department":job.job_department,
+                "rounds_of_interview" : job.rounds_of_interview,
                 "current_round": application.round_num,
-                "deadline":application.job_id.job_close_duration,
+                "deadline":job.job_close_duration,
                 "candidate_name": application.resume.candidate_name,
                 "candidate_email": application.resume.candidate_email,
                 "candidate_phone": application.resume.contact_number,
@@ -1329,6 +1276,7 @@ class CompleteApplicationDetailsView(APIView):
                 "created_at": application.created_at,
                 "other_details":application.resume.other_details,
                 "candidate_evaluation": candidate_evaluation_json,
+                "job_location": application.job_location.location,
             }
 
             return Response({"application_data": application_json}, status=status.HTTP_200_OK)

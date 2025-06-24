@@ -60,7 +60,8 @@ class CandidateResumeView(APIView):
             if not job_id:
                 return Response({"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            job = JobPostings.objects.get(id=job_id)
+            job_assigned = AssignedJobs.objects.get(id=job_id)
+            job = job_assigned.job_id
 
             if job.status == 'closed':
                 return Response({"error":"Job post is closed, unable to share the applications"}, status=status.HTTP_400_BAD_REQUEST)
@@ -70,7 +71,10 @@ class CandidateResumeView(APIView):
             data = request.data
             user = request.user
 
+
+            print(request.data.get('resume'))
             if data.get('resume') == "draggedId":
+                print("entered here")
                 application = JobApplication.objects.get(id= data.get('application_id')).resume
                 actual_resume_path = application.resume.name
 
@@ -81,7 +85,7 @@ class CandidateResumeView(APIView):
                 new_file = request.FILES['resume']
 
             else: 
-                return Response({"error": "Resume file is required."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Resume is required."}, status=status.HTTP_400_BAD_REQUEST)
             
 
             date_string = data.get('date_of_birth', '')
@@ -98,14 +102,9 @@ class CandidateResumeView(APIView):
             if not primary_skills:
                 return Response({"error": "Primary skills are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            if JobApplication.objects.filter(
-                job_id=job, resume__candidate_email=data.get('candidate_email')
-            ).exists():
-                return Response({"error": "Candidate application is submitted previously"}, status=status.HTTP_400_BAD_REQUEST)
-
             try:
                 resumes =  CandidateResume.objects.filter(candidate_name = data.get('candidate_name'))
-                application = JobApplication.objects.get(job_id = job_id, resume__in = resumes)
+                application = JobApplication.objects.get(job_location__job_id = job, resume__in = resumes)
 
                 if application:
                     return Response({"error":"Job application already posted for this email id"}, status=status.HTTP_400_BAD_REQUEST)
@@ -164,7 +163,7 @@ class CandidateResumeView(APIView):
 
                 JobApplication.objects.create(
                     resume=candidate_resume,
-                    job_id=job,
+                    job_location = job_assigned.job_location,
                     status='pending',
                     sender=user,
                     attached_to = user,
@@ -202,8 +201,9 @@ HireSync Team
                 return Response({"message": "Resume added successfully"}, status=status.HTTP_201_CREATED)
 
         except JobPostings.DoesNotExist:
-            return Response({"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Job not found."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
  
 class AllScheduledInterviews(APIView):
@@ -246,11 +246,12 @@ class ScheduleInterview(APIView):
                 applications = JobApplication.objects.filter(attached_to = user, status = 'processing')
                 for application in applications:
                     if  application.next_interview and application.next_interview.status != 'pending':
+                        print("yes it is not njull")
                         continue
-                    interviewer = InterviewerDetails.objects.get(job_id = application.job_id, round_num = application.round_num).name.username
+                    interviewer = InterviewerDetails.objects.get(job_id = application.job_location.job_id, round_num = application.round_num).name.username
                     pending_arr.append({
                         "application_id" : application.id, 
-                        "job_title" : application.job_id.job_title,
+                        "job_title" : application.job_location.job_id.job_title,
                         "round_num" : application.round_num,
                         "candidate_name": application.resume.candidate_name ,
                         "next_interview": application.next_interview.scheduled_date if application.next_interview else None,
@@ -274,7 +275,7 @@ class ScheduleInterview(APIView):
                 if application.status == 'pending':
                     return Response({"error":"Client is'nt shortlisted this application"}, status = status.HTTP_400_BAD_REQUEST)
                 try:
-                    next_interview_details = InterviewerDetails.objects.get(job_id = application.job_id.id, round_num = application.round_num)
+                    next_interview_details = InterviewerDetails.objects.get(job_id = application.job_location.job_id.id, round_num = application.round_num)
 
                 except InterviewerDetails.DoesNotExist:
                     return Response({"error":f"{application.round_num} Interviewer Details for this round Does not exist"}, status=status.HTTP_400_BAD_REQUEST)
@@ -286,8 +287,8 @@ class ScheduleInterview(APIView):
                     "candidate_email": application.resume.candidate_email,
                     "candidate_contact": application.resume.contact_number,
                     "candidate_alternate_contact": application.resume.alternate_contact_number,
-                    "job_title" : application.job_id.job_title,
-                    "job_ctc" : application.job_id.ctc,
+                    "job_title" : application.job_location.job_id.job_title,
+                    "job_ctc" : application.job_location.job_id.ctc,
                     "application_id": application.id,
                     "interview_type": next_interview_details.type_of_interview,
                     "interview_mode": next_interview_details.mode_of_interview,
@@ -303,13 +304,12 @@ class ScheduleInterview(APIView):
     
     def post(self, request):
         try:
-            print("enterd to scdl interviews")
             if not request.GET.get('application_id'):
                 return Response({"error": "Application ID is required"}, status=status.HTTP_400_BAD_REQUEST)
             rctr=request.user
             application_id = request.GET.get('application_id')
             application = JobApplication.objects.get(id = application_id)
-            interviewer = InterviewerDetails.objects.get(job_id = application.job_id, round_num = application.round_num)
+            interviewer = InterviewerDetails.objects.get(job_id = application.job_location.job_id, round_num = application.round_num)
             scheduled_date = request.data.get('scheduled_date')
             from_time = request.data.get('from_time')
             to_time = request.data.get('to_time')
@@ -342,14 +342,14 @@ class ScheduleInterview(APIView):
 
             if(scheduled_date is None):
                 return Response({"error":"Please select date and time"}, status = status.HTTP_400_BAD_REQUEST)
-            print("from_time",from_time,"to_time",to_time,"round_num",application.round_num)
+            
             with transaction.atomic():
                 next_scheduled_interview = InterviewSchedule.objects.create(
                     # rctr=rctr,
                     candidate = application.resume,
                     interviewer = interviewer,
                     scheduled_date = scheduled_date,
-                    job_id = application.job_id,
+                    job_location = application.job_location,
                     meet_link = meet_link,
                     from_time = from_time,
                     to_time = to_time,
@@ -392,19 +392,19 @@ class ScheduleInterview(APIView):
 
             send_custom_mail(subject="Next Interview Scheduled", body="Your interview details...",to_email=[interviewer_email, candidate_email])
             
-            ClientDetail=ClientDetails.objects.get(user=application.job_id.username)
+            ClientDetail=ClientDetails.objects.get(user=application.job_location.job_id.username)
                 
             customCand=CustomUser.objects.get(email=application.resume.candidate_email)
             Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
     category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
-    subject=f"Interview Scheduled for {application.job_id.job_title} ",
+    subject=f"Interview Scheduled for {application.job_location.job_id.job_title} ",
     message = (
     f"Interview Scheduled\n\n"
     f"Your interview has been scheduled on {scheduled_date}.\n"
     f"Round Number: {interviewer.round_num}\n"
-    f"Role: {application.job_id.job_title}\n"
+    f"Role: {application.job_location.job_id.job_title}\n"
     f"Interviewer: {interviewer.name.username}\n"
     f"Type of Interview: {interviewer.type_of_interview}\n"
     f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
@@ -420,7 +420,7 @@ class ScheduleInterview(APIView):
         f"Interview Assignment\n\n"
         f"You have been scheduled to conduct an interview with {customCand.username}.\n"
         f"Scheduled Date: {scheduled_date}\n"
-        f"Role: {application.job_id.job_title}\n"
+        f"Role: {application.job_location.job_id.job_title}\n"
         f"Round Number: {interviewer.round_num}\n"
         f"Type of Interview: {interviewer.type_of_interview}\n"
         f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
@@ -503,10 +503,11 @@ class GenerateQuestions(APIView):
         try:
             user = request.user
             org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
+            job = AssignedJobs.objects.get(id=job_id, job_id__organization=org).job_id
             questions = generate_questions_with_gemini(job)
             return Response(questions, status=status.HTTP_200_OK)
         except Exception as e:
+            print(str(e))
             return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
 class AnalyseResume(APIView):
@@ -514,13 +515,14 @@ class AnalyseResume(APIView):
         try:
             user = request.user
             org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
+            job = AssignedJobs.objects.get(id = job_id, job_id__organization  = org).job_id
             resume = request.FILES.get('resume')
             resume = extract_text_from_file(resume)
             analysis = analyse_resume(job, resume)
             return Response(analysis, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+            print(str(e))
+            return Response({"detail": str(e)}, status=status.HTTP_200_OK)
 
 class ScreenResume(APIView):
     def post(self, request, job_id):
@@ -610,35 +612,39 @@ class RecAssignedJobsView(APIView):
         try:
             user = request.user
 
-            job_postings = JobPostings.objects.filter(assigned_to=user)
+            jobs_assigned = AssignedJobs.objects.filter(assigned_to = user)
 
             job_postings_list = []
-            for job in job_postings:
-                onhold = JobApplication.objects.filter(job_id=job, attached_to=user, status='hold').count()
-                rejected = JobApplication.objects.filter(job_id=job, attached_to=user, status='rejected').count()
-                pending = JobApplication.objects.filter(job_id=job, attached_to=user, status='pending').count()
-                selected = JobApplication.objects.filter(job_id=job, attached_to=user, status='selected').count()
+            for job_assigned in jobs_assigned:
+                applications = JobApplication.objects.filter(job_location = job_assigned.job_location, attached_to = user)
+                onhold = applications.filter(status='hold').count()
+                rejected = applications.filter(status='rejected').count()
+                pending = applications.filter(status='pending').count()
+                selected = applications.filter(status='selected').count()
 
-                incoming_applications = JobApplication.objects.filter(job_id=job, attached_to=None, sender=None).count()
+                incoming_applications = JobApplication.objects.filter(job_location = job_assigned.job_location, attached_to=None, sender=None).count()
 
+                job = job_assigned.job_id
                 job_postings_list.append({
                     "job_title": job.job_title,
                     "client_name": job.username.username if hasattr(job, "username") else "",
                     "status": job.status,
-                    "num_of_positions": job.num_of_positions,
+                    "num_of_positions": job_assigned.job_location.positions,
                     "onhold": onhold,
                     "rejected": rejected,
                     "pending": pending,
                     "selected": selected,
                     "incoming": incoming_applications,
                     "deadline": job.job_close_duration,
-                    "job_id": job.id
+                    "job_id": job_assigned.id,
+                    "location": job_assigned.job_location.location,
                 })
 
             return Response({"data": job_postings_list}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         
 
@@ -648,18 +654,19 @@ class RecJobDetails(APIView):
         try:
             user = request.user
             org = Organization.objects.filter(recruiters__id=user.id).first()
-            job = JobPostings.objects.get(id=job_id, organization=org)
+            job = AssignedJobs.objects.get(id=job_id, job_id__organization = org).job_id
             serializer = JobPostingsSerializer(job)
 
-            resume_count = JobApplication.objects.filter(job_id = job_id, attached_to = user).count()
+            resume_count = JobApplication.objects.filter(job_location__job_id = job, attached_to = user).count()
 
             try:
                 summary = summarize_jd(job)
             except:
                 summary = ''
             return Response({'jd':serializer.data,'summary':summary, 'count':resume_count}, status=status.HTTP_200_OK)
-        except:
-            return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"detail": "Job not found"}, status=status.HTTP_400_BAD_REQUEST)
         
 class OrganizationApplications(APIView):
     permission_classes = [IsRecruiter]
@@ -690,7 +697,6 @@ class OrganizationApplications(APIView):
                             "joining_days_required": resume.joining_days_required,
                             "resume": resume.resume.url if resume.resume else None,  # Get URL of the file
                         }   
-                        print(application_json)
                         return JsonResponse(application_json, json_dumps_params={'ensure_ascii': False}, safe=False)  # Ensure encoding is handled properly
                     except JobApplication.DoesNotExist:
                         return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -702,21 +708,20 @@ class OrganizationApplications(APIView):
                     organization = Organization.objects.filter(recruiters__id = recruiter_id).first()
                     # print(organization)
                     job_postings = JobPostings.objects.filter(organization = organization )
-                    organization_applications = JobApplication.objects.filter(job_id__in = job_postings)
+                    organization_applications = JobApplication.objects.filter(job_location__job_id__in = job_postings)
                     # print(organization_applications.count())
 
                     application_list = []
                     paginator = self.pagination_class()
                     paginated_applications = paginator.paginate_queryset(organization_applications,request)
                     for application in paginated_applications:
-                        print(application)
                         application_json = {
                             "candidate_name":application.resume.candidate_name,
-                            "job_department": application.job_id.job_department,
+                            "job_department": application.job_location.job_id.job_department,
                             "status": application.status,
                             "application_id":application.id,
                             "cand_number":application.resume.contact_number,
-                            "job_title":application.job_id.job_title
+                            "job_title":application.job_location.job_id.job_title
                         }
                         application_list.append(application_json)
                     
@@ -732,17 +737,20 @@ class ResumesSent(APIView):
     permission_classes = [IsRecruiter]  
     def get(self, request, *args, **kwargs):
         user = request.user
-        job_id = request.GET.get("job_id")  
+        assigned_id = request.GET.get("job_id")  
 
         org = Organization.objects.filter(recruiters__id=user.id).first()
         if not org:
             return Response({"error": "Organization not found"}, status=404)
 
-        job_posting = JobPostings.objects.filter(organization=org, assigned_to=user, id=job_id).first()
+        job_assigned = AssignedJobs.objects.filter(job_id__organization =org,  assigned_to=user, id=assigned_id).first()
+
+        job_posting = job_assigned.job_id
+
         if not job_posting:
             return Response({"error": "Job posting not found or not assigned to you"}, status=404)
 
-        applications = JobApplication.objects.filter(job_id=job_posting, attached_to=user)
+        applications = JobApplication.objects.filter(job_location = job_assigned.job_location , attached_to=user)
 
         applications_data = [
             {
@@ -758,55 +766,7 @@ class ResumesSent(APIView):
 
         return Response({"applications": applications_data}, status=200)
     
-from django.core.exceptions import ObjectDoesNotExist
 
-class GetInterviews(APIView):
-    def get(self, request, *args, **kwargs):
-        rctr_id = request.GET.get("rctr_id")
-
-        try:
-            rctr_obj = CustomUser.objects.get(id=rctr_id)  # Fetch recruiter
-        except ObjectDoesNotExist:
-            return Response({"error": "Recruiter not found"}, status=404)
-
-        # Fetch interviews related to the recruiter
-        interviews = InterviewSchedule.objects.filter(rctr=rctr_obj)
-
-        # Serialize all interviews
-        interview_data = InterviewScheduleSerializer(interviews, many=True).data
-
-        return Response({"interviews": interview_data}, status=200)
-    
-class RecSummaryMetrics(APIView):
-    def get(self, request, *args, **kwargs):
-        print("calling this function")
-        rctr_id = request.GET.get("rctr_id")
-        try:
-            rctr_obj = CustomUser.objects.get(id=rctr_id)  
-        except ObjectDoesNotExist:
-            return Response({"error": "Recruiter not found"}, status=404)
-
-        applications_count = JobApplication.objects.filter(attached_to=rctr_obj).count()
-
-        interviews_count = InterviewSchedule.objects.filter(rctr=rctr_obj).count()
-
-        job_postings_count = JobPostings.objects.filter(assigned_to=rctr_obj).count()
-
-        pending_candidates_count = SelectedCandidates.objects.filter(
-            application__attached_to=rctr_obj, joining_status="pending"
-        ).count()
-
-        joined_candidates_count = SelectedCandidates.objects.filter(
-            application__attached_to=rctr_obj, joining_status="joined"
-        ).count()
-
-        return Response({
-            "applications_count": applications_count,
-            "interviews_count": interviews_count,
-            "job_postings_count": job_postings_count,
-            "pending_candidates_count": pending_candidates_count,
-            "joined_candidates_count": joined_candidates_count
-        })
 
 
 class RecruiterAllAlerts(APIView):

@@ -36,7 +36,7 @@ class InterviewerDashboardView(APIView):
             todays_interviews = InterviewSchedule.objects.filter(
                 interviewer__in=interviewer_details,
                 scheduled_date=today
-            ).select_related('candidate', 'job_id')
+            ).select_related('candidate', 'job_location')
 
             todays_interviews_list = []
             today_events = []
@@ -44,7 +44,7 @@ class InterviewerDashboardView(APIView):
                 # Today's Interview List
                 todays_interviews_list.append({
                     "candidate_name": interview.candidate.candidate_name,
-                    "job_title": interview.job_id.job_title,
+                    "job_title": interview.job_location.job_id.job_title,
                     "round_num": interview.round_num,
                     "from_time": interview.from_time.strftime("%I:%M %p"),  # Formatting time like '09:30 AM'
                     "to_time": interview.to_time.strftime("%I:%M %p"),
@@ -60,19 +60,18 @@ class InterviewerDashboardView(APIView):
                     "endTime": interview.to_time.strftime("%I:%M %p"),
                     "type": "processing" if interview.status == 'pending' else 'success'
                 })
-
             # Fetch missed interviews (pending status and scheduled before today)
             missed_interviews = InterviewSchedule.objects.filter(
                 interviewer__in=interviewer_details,
                 scheduled_date__lt=today,
                 status='pending'
-            ).select_related('candidate', 'job_id')
+            ).select_related('candidate', 'job_location')
 
             missed_interviews_list = []
             for interview in missed_interviews:
                 missed_interviews_list.append({
                     "candidate_name": interview.candidate.candidate_name,
-                    "job_title": interview.job_id.job_title,
+                    "job_title": interview.job_location.job_id.job_title,
                     "round_num": interview.round_num,
                     "from_time": interview.from_time.strftime("%I:%M %p"),
                     "to_time": interview.to_time.strftime("%I:%M %p"),
@@ -99,7 +98,6 @@ class InterviewerDashboardView(APIView):
 
         except Exception as e:
             # Log the error for debugging
-            print(f"Error in InterviewerDashboardView: {str(e)}")
             return Response(
                 {"error": "Something went wrong. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -119,9 +117,9 @@ class ScheduledInterviewsView(APIView):
                     candidate = scheduled_interview.candidate
                     try:
                         interview_details_json = {
-                            "job_id" : scheduled_interview.job_id.id,
-                            "job_title": scheduled_interview.job_id.job_title,
-                            "job_department": scheduled_interview.job_id.job_department,
+                            "job_id" : scheduled_interview.job_location.job_id.id,
+                            "job_title": scheduled_interview.job_location.job_id.job_title,
+                            "job_department": scheduled_interview.job_location.job_id.job_department,
                             "interviewer_name" : scheduled_interview.interviewer.name.username,
                             "candidate_name" : scheduled_interview.candidate.candidate_name,
                             "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
@@ -153,8 +151,8 @@ class ScheduledInterviewsView(APIView):
                     scheduled_date = interview.scheduled_date
                     round_of_interview = interview.round_num
                     timings = f"{interview.from_time} - {interview.to_time}"
-                    job_id = interview.job_id.id
-                    job_title = interview.job_id.job_title
+                    job_id = interview.job_location.job_id.id
+                    job_title = interview.job_location.job_id.job_title
 
                     if application_by_interview:
                         candidate_name = application_by_interview.resume.candidate_name
@@ -178,6 +176,7 @@ class ScheduledInterviewsView(APIView):
                         "round_of_interview": round_of_interview,
                         "scheduled_date": scheduled_date,
                         "timings": timings,
+                        "location": interview.job_location.location,
                         "status": statuss,
                         "application_id": application_id,
                     })
@@ -204,7 +203,7 @@ class CompletedInterviewsView(APIView):
             evaluation_list = []
             for evaluation in evaluations:
                 evaluation_list.append({
-                    "job_title": evaluation.job_id.job_title,
+                    "job_title": evaluation.job_location.job_id.job_title,
                     "round_num": evaluation.interview_schedule.round_num,
                     "mode_of_interview": evaluation.interview_schedule.interviewer.mode_of_interview,
                     "candidate_name": evaluation.job_application.resume.candidate_name,
@@ -285,7 +284,7 @@ class JobPostSkillsView(APIView):
             application = JobApplication.objects.get(resume__id = resume_id)
 
             application_round = application.round_num
-            job_post_rounds = application.job_id.rounds_of_interview
+            job_post_rounds = application.job_location.job_id.rounds_of_interview
 
             if(application_round < job_post_rounds):
                 has_next_round = True
@@ -347,16 +346,14 @@ class PromoteCandidateView(APIView):
             except JobApplication.DoesNotExist:
                 return Response({"error":"Job application matching query doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
             
-            if application.job_id.status == 'closed':
+            if application.job_location.job_id.status == 'closed':
                 return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
 
             primary_skills = request.data.get('primary_skills')
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
-            print("user name is ", application.resume.candidate_name)
             candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
-            print("But not entered here")
 
             remarks = CandidateEvaluation.objects.create(
                 primary_skills_rating = primary_skills,
@@ -367,7 +364,7 @@ class PromoteCandidateView(APIView):
                 status = "SELECTED",
                 job_application = application,
                 score = score,
-                job_id = application.job_id,
+                job_location = application.job_location,
                 interview_schedule = application.next_interview,
             )
 
@@ -379,16 +376,18 @@ class PromoteCandidateView(APIView):
             application.status = 'processing'
             application.save()
             customCand=CustomUser.objects.get(email=candidate.email)
+
+            job = application.job_location.job_id
             
             Notifications.objects.create(
     sender=request.user,
     category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
     receiver=application.attached_to,
-    subject=f"Candidate {customCand.username} has been cleared interview {application.round_num-1} for the role {application.job_id.job_title}",
+    subject=f"Candidate {customCand.username} has been cleared interview {application.round_num-1} for the role {job.job_title}",
     message=(
         f"Candidate Promotion Notice\n\n"
         f"Client: {request.user.username}\n"
-        f"Position: {application.job_id.job_title}\n\n"
+        f"Position: {job.job_title}\n\n"
         f"The candidate {customCand.username} has successfully cleared round {application.round_num-1}. "
         f"Please schedule interview {application.round_num} availability of candidate and interviewer\n\n"
         f"link::recruiter/schedule_applications/"
@@ -400,12 +399,12 @@ class PromoteCandidateView(APIView):
     sender=request.user,
     receiver=customCand,
     category = Notifications.CategoryChoices.PROMOTE_CANDIDATE,
-    subject=f"Congratulations {customCand.username}! You have qualified for the next round for the role {application.job_id.job_title}",
+    subject=f"Congratulations {customCand.username}! You have qualified for the next round for the role {job.job_title}",
     message=(
         f"Interview Progress Update\n\n"
         f"Dear {customCand.username},\n\n"
         f"Congratulations! You have successfully cleared round {application.round_num-1} "
-        f"for the position of {application.job_id.job_title}.\n\n"
+        f"for the position of {job.job_title}.\n\n"
         f"We will be scheduling your next interview (Round {application.round_num}) soon. "
         f"Our team will contact you regarding your availability.\n\n"
         f"Stay tuned!\n\n"
@@ -424,7 +423,7 @@ class RejectCandidate(APIView):
             round_num = request.data.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
 
-            if application.job_id.status == 'closed':
+            if application.status == 'closed':
                 return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
 
             primary_skills = request.data.get('primary_skills', '')
@@ -443,7 +442,7 @@ class RejectCandidate(APIView):
                 status = "REJECTED",
                 job_application = application,
                 score = score,
-                job_id = application.job_id,
+                job_location = application.job_location,
                 interview_schedule = application.next_interview,
             )
             application.next_interview.status = 'completed'
@@ -452,18 +451,20 @@ class RejectCandidate(APIView):
             application.save()
             
             customCand=CustomUser.objects.get(email=candidate.email)
+
+            job = application.job_location.job_id
             
             Notifications.objects.create(
                     sender=request.user,
                     category = Notifications.CategoryChoices.REJECT_CANDIDATE,
                     receiver=application.attached_to,
-                    subject=f"Candidate {customCand.username} is rejected for the role {application.job_id.job_title}",
+                    subject=f"Candidate {customCand.username} is rejected for the role {job.job_title}",
                     message = (
     f"Candidate Rejection Notice\n\n"
     f"Client: {request.user.username}\n"
-    f"Position: {application.job_id.job_title}\n\n"
+    f"Position: {job.job_title}\n\n"
     f"{request.user.username} has conducted the interview for round {application.next_interview.round_num} "
-    f"with the submitted candidate {customCand.username} for the position of {application.job_id.job_title}, "
+    f"with the submitted candidate {customCand.username} for the position of {job.job_title}, "
     f"and has decided not to move forward with them at this time.\n\n"
     f"link::recruiter/postings/"
 )
@@ -473,11 +474,11 @@ class RejectCandidate(APIView):
     sender=request.user,
     receiver=customCand,
     category = Notifications.CategoryChoices.REJECT_CANDIDATE,
-    subject=f"Update on your application for the role {application.job_id.job_title}",
+    subject=f"Update on your application for the role {job.job_title}",
     message=(
         f"Application Update\n\n"
         f"Dear {customCand.username},\n\n"
-        f"We appreciate your interest in the {application.job_id.job_title} position.\n\n"
+        f"We appreciate your interest in the {job.job_title} position.\n\n"
         f"After careful consideration following your interview for round {application.next_interview.round_num}, "
         f"we regret to inform you that we will not be moving forward with your application at this time.\n\n"
     )
@@ -491,16 +492,18 @@ class RejectCandidate(APIView):
 class SelectCandidate(APIView):
     permission_classes = [IsInterviewer]
 
-    def sendAlert(self, job_id):
+    def sendAlert(self, job_location_id):
         try:
             try:
-                job_post = JobPostings.objects.get(id = job_id)
+                job_location = JobLocationsModel.objects.get(id = job_location_id)
+                job_assigned = AssignedJobs.objects.get(job_location = job_location)
+                job_post = job_location.job_id
             except JobPostings.DoesNotExist:
                 return Response({"error":'Job posting does not exists'},status= status.HTTP_400_BAD_REQUEST)
 
             client_email = job_post.username.email
             manager_email = job_post.organization.manager.email
-            recruiters_emails = job_post.assigned_to.values_list('email', flat=True)
+            recruiters_emails = job_assigned.assigned_to.values_list('email', flat=True)
 
             subject = f"JOB POST {job_post.job_title} ALL OPENINGS ARE COMPLETED"
             client_message = '''
@@ -541,17 +544,18 @@ HireSync.
             round_num = request.GET.get('round_num')
             application = JobApplication.objects.get(resume = resume_id)
             
-            if application.job_id.status == 'closed':
+            if application.job_location.job_id.status == 'closed':
                 return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
 
 
             remarks = request.data.get('remarks')
-            print(remarks, " are the remarks")
             if remarks == None:
                 return Response({"error":"Please enter remarks"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            print("entered here")
 
-            num_of_postings_completed = JobApplication.objects.filter(job_id = application.job_id, status = 'selected').count()
-            req_postings = JobPostings.objects.get(id= application.job_id.id).num_of_positions
+            num_of_postings_completed = JobApplication.objects.filter(job_location = application.job_location.id, status = 'selected').count()
+            req_postings = application.job_location.positions
 
             if(num_of_postings_completed >= req_postings):
                 return Response({"error":"All job openings are filled"}, status=status.HTTP_400_BAD_REQUEST)
@@ -564,9 +568,11 @@ HireSync.
             
             candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
 
+            print("Entered here")
+
             with transaction.atomic():
 
-                remarks_candidate = CandidateEvaluation.objects.create(
+                CandidateEvaluation.objects.create(
                     primary_skills_rating = primary_skills,
                     secondary_skills_ratings = secondary_skills,
                     candidate = candidate,
@@ -575,7 +581,7 @@ HireSync.
                     status = "SELECTED",
                     job_application = application,
                     score = score,
-                    job_id = application.job_id,
+                    job_location = application.job_location,
                     interview_schedule = application.next_interview,
                 )
                 application.next_interview.status = 'completed'
@@ -584,16 +590,16 @@ HireSync.
                 application.next_interview = None
                 application.save()
                 customCand=CustomUser.objects.get(email=candidate.email)
-                
+                job = application.job_location.job_id
                 Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
     category = Notifications.CategoryChoices.ONHOLD_CANDIDATE,
-    subject=f"Update on your application for the role {application.job_id.job_title}",
+    subject=f"Update on your application for the role {job.job_title}",
     message=(
         f"Application Update\n\n"
         f"Dear {customCand.username},\n\n"
-        f"We appreciate your interest in the {application.job_id.job_title} position with {request.user.username}.\n\n"
+        f"We appreciate your interest in the {job.job_title} position with {request.user.username}.\n\n"
         f"We are pleased to inform you that you have successfully cleared all rounds of the interview process.\n\n"
         f"Your profile is now under final review for the last call.\n"
         f"Our team will get back to you shortly with the final update.\n\n"
@@ -603,14 +609,14 @@ HireSync.
 )
                 Notifications.objects.create(
     sender=request.user,
-    receiver=application.job_id.username,
+    receiver=job.username,
     category = Notifications.CategoryChoices.SELECT_CANDIDATE,
-    subject=f"Profile cleared all interviews for {application.job_id.job_title} — Final Confirmation Needed",
+    subject=f"Profile cleared all interviews for {job.job_title} — Final Confirmation Needed",
     message=(
         f"Application Update\n\n"
-        f"Position: {application.job_id.job_title}\n\n"
+        f"Position: {job.job_title}\n\n"
         f"The candidate {customCand.username} has successfully completed all rounds of interviews for the "
-        f"position of {application.job_id.job_title}.\n\n"
+        f"position of {job.job_title}.\n\n"
         f"Please review the candidate’s profile and provide your final decision regarding their selection.\n\n"
         f"link::client/candidates/"
     )
@@ -620,27 +626,28 @@ HireSync.
     sender=request.user,
     category = Notifications.CategoryChoices.SELECT_CANDIDATE,
     receiver=application.attached_to,
-    subject=f"Candidate {customCand.username} has cleared all interviews for the role {application.job_id.job_title}",
+    subject=f"Candidate {customCand.username} has cleared all interviews for the role {job.job_title}",
     message=(
         f"Candidate Progress Update\n\n"
         f"Client: {request.user.username}\n"
-        f"Position: {application.job_id.job_title}\n\n"
+        f"Position: {job.job_title}\n\n"
         f"{request.user.username} has completed all interview rounds with the candidate {customCand.username} "
-        f"for the position of {application.job_id.job_title}.\n\n"
+        f"for the position of {job.job_title}.\n\n"
         f"The candidate has successfully cleared all interviews and their profile is now under final review by the client.\n"
         f"Kindly follow up with the client for the final decision.\n\n"
         f"link::recruiter/postings/"
     )
 )
                 
-                applications_selected  = JobApplication.objects.filter(job_id = application.job_id).filter(status  = 'selected').count()
-                job_postings_req = JobPostings.objects.get(id = application.job_id.id).num_of_positions
+                applications_selected  = JobApplication.objects.filter(job_location__job_id = job).filter(status  = 'selected').count()
+                job_postings_req = req_postings
 
                 if applications_selected >= job_postings_req:
-                    return self.sendAlert(application.job_id.id)
+                    return self.sendAlert(application.job_location)
 
             return Response({"message":"Candidate selected"},status = status.HTTP_201_CREATED)
         except Exception as e:
+            print(str(e))
             return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
         
 
@@ -678,11 +685,10 @@ class JobsInterviews(APIView):
         for interview in interviews:
             # Try to fetch the InterviewSchedule record
             interview_schedule = InterviewSchedule.objects.filter(
-                job_id=interview.job_id,
+                job_location__job_id=interview.job_id,
                 interviewer=interview
             ).first()
 
-            # Common InterviewerDetails data
             interview_data = {
                 "job_code": interview.job_id.jobcode if interview.job_id else None,
                 "job_title": interview.job_id.job_title if interview.job_id else None,

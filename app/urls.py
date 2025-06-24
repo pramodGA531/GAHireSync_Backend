@@ -98,6 +98,7 @@ urlpatterns = [
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/select-candidate/', SelectCandidate.as_view(), name= 'shortlist-candidate'),
     path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
+    path('interviewer/jobs-interviews/', JobsInterviews.as_view(), name= 'reject-candidate'),
 
     path('fetch-skills/', JobPostSkillsView.as_view(),name='get-jobpost-skills'),
 
@@ -118,9 +119,6 @@ urlpatterns = [
     path('candidate/all-alerts/', CandidateAllAlerts.as_view(), name='candidate-all-alerts'),
 
     path('rec-job-postings/', RecJobPostings.as_view(), name='rec-job-posting'),
-    path('rec-job-summary/', RecSummery.as_view(), name='rec-job-posting'),
-    path('rctr/interviews/', GetInterviews.as_view(), name='rctr-interviews'),
-    path('rctr/summary/',RecSummaryMetrics.as_view(),name='rctr-summar-metrics'),
     
     
 
@@ -164,6 +162,7 @@ urlpatterns = [
     path('manager/remove-recruiter/',RemoveRecruiter.as_view(), name='manager-tracking-recruiters'),
     path('manager/is_linkedin_verified/',IsManagerLinkedVerifiedView.as_view(), name='manager-tracking-recruiters'),
     path('manager/job/post_on_linkedin/',PostOnLinkedIn.as_view(), name='manager-tracking-recruiters'),
+    path('manager/recruiter-summary/',RecSummaryMetrics.as_view(), name='manager-recruiter-summary'),
     
 
     

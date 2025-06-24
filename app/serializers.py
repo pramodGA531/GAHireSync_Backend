@@ -340,7 +340,7 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
     interviewer = InterviewerDetailsSerializer()
     candidate=CandidateResumeSerializer()
     rctr = CustomUserSerializer(many=True)
-    job_id=JobPostingsSerializer()
+    
     class Meta:
         model = InterviewSchedule # JobPostingsSerializer
         fields = "__all__"

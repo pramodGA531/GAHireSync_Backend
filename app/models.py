@@ -447,7 +447,7 @@ class InterviewSchedule(models.Model):
     scheduled_date = models.DateField(null= True, blank=True, )
     from_time = models.TimeField(null=True, blank=True,default="00:00:00" )
     to_time = models.TimeField(null=True, blank=True,default="00:00:00" )
-    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    job_location = models.ForeignKey(JobLocationsModel, on_delete=models.CASCADE)
     meet_link = models.URLField(null=True, blank=True)
     round_num = models.IntegerField(default=0)
     status = models.CharField(max_length=20,choices=STATUS_CHOICES, default='scheduled')
@@ -607,7 +607,7 @@ class CandidateEvaluation(models.Model):
     id = models.AutoField(primary_key=True)
     job_application = models.ForeignKey(JobApplication, on_delete=models.CASCADE)
     candidate = models.ForeignKey(CandidateProfile, on_delete=models.CASCADE)
-    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
+    job_location = models.ForeignKey(JobLocationsModel, on_delete=models.CASCADE)
     interview_schedule = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE)
     score = models.IntegerField(default=0)
     remarks = models.TextField(null=True, blank=True)
@@ -617,7 +617,7 @@ class CandidateEvaluation(models.Model):
     comments = models.TextField(null=True, blank=True)
     status = models.CharField(max_length=40, choices=STATUS, default='pending')
     class Meta:
-        unique_together = ('job_id','job_application','round_num')
+        unique_together = ('job_application','round_num')
 
     def __str__(self):
         return f"Evaluation for {self.job_application.resume.candidate_name}"
