@@ -163,6 +163,7 @@ urlpatterns = [
     path('manager/is_linkedin_verified/',IsManagerLinkedVerifiedView.as_view(), name='manager-tracking-recruiters'),
     path('manager/job/post_on_linkedin/',PostOnLinkedIn.as_view(), name='manager-tracking-recruiters'),
     path('manager/recruiter-summary/',RecSummaryMetrics.as_view(), name='manager-recruiter-summary'),
+    path('manager/fetch-reumes/',ManagerResumeBankView.as_view(), name='manager-fetch-all-resumes'),
     
 
     
@@ -197,4 +198,5 @@ urlpatterns = [
     path('complete-application/',CompleteApplicationDetailsView.as_view(),name="resumes-sent"),
     path('hiresync/generate-linkedincode/',GenerateLinkedInTokens.as_view(), name='generate linkedin token for hiresync' ),
     path('hiresync/generate-linkedincode/callback/',LinkedInRedirectView.as_view(), name='callback for linkedin token for hiresync' ),
+    path('convert-pdf-to-images/', convert_pdf_to_images, name='convert pdf to images'),
 ]

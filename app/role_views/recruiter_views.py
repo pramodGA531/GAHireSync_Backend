@@ -71,21 +71,6 @@ class CandidateResumeView(APIView):
             data = request.data
             user = request.user
 
-
-            print(request.data.get('resume'))
-            if data.get('resume') == "draggedId":
-                print("entered here")
-                application = JobApplication.objects.get(id= data.get('application_id')).resume
-                actual_resume_path = application.resume.name
-
-                with default_storage.open(actual_resume_path, 'rb') as f:
-                    new_file = File(f)
-
-            elif 'resume' in request.FILES:
-                new_file = request.FILES['resume']
-
-            else: 
-                return Response({"error": "Resume is required."}, status=status.HTTP_400_BAD_REQUEST)
             
 
             date_string = data.get('date_of_birth', '')
@@ -109,9 +94,13 @@ class CandidateResumeView(APIView):
                 if application:
                     return Response({"error":"Job application already posted for this email id"}, status=status.HTTP_400_BAD_REQUEST)
             except JobApplication.DoesNotExist:
+                resume = None
+                application = JobApplication.objects.filter(resume__candidate_email = data.get('candidate_email')).first()
+                if application:
+                    resume = application.resume.resume.name
 
                 candidate_resume = CandidateResume.objects.create(
-                    resume=new_file if new_file else request.FILES['resume'],
+                    resume= resume if resume else request.FILES['resume'],
                     candidate_name=data.get('candidate_name'),
                     candidate_email = data.get('candidate_email'),
                     contact_number=data.get('contact_number'),
@@ -633,7 +622,7 @@ class RecAssignedJobsView(APIView):
                     "onhold": onhold,
                     "rejected": rejected,
                     "pending": pending,
-                    "selected": selected,
+                    "selected": selected,   
                     "incoming": incoming_applications,
                     "deadline": job.job_close_duration,
                     "job_id": job_assigned.id,

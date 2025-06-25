@@ -1075,10 +1075,9 @@ class AllApplicationsForJob(APIView):
     def get(self, request):
         try:
             job_id = request.GET.get('job_id')
-            print(job_id, "is the job id")
             job = JobPostings.objects.get(id=job_id)
 
-            applications = JobApplication.objects.filter(job_id=job.id)
+            applications = JobApplication.objects.filter(job_location__job_id=job.id)
             applications_list = []
             for application in applications:
                 applications_list.append({
@@ -1087,14 +1086,24 @@ class AllApplicationsForJob(APIView):
                     "last_updated": application.updated_at,
                     "status": application.status,
                     "round_num": application.round_num,
+                    "location": application.job_location.location,
                 })
+
+            locations_instance = JobLocationsModel.objects.filter( job_id = job)
+            locations = list(locations_instance.values_list('location', flat=True))
+            print(locations)
+
+            num_of_positions = 0
+            for location in locations_instance:
+                num_of_positions+= location.positions
 
             job_details = {
                 "job_title": job.job_title,
                 "job_type": job.job_type,
                 "deadline": job.job_close_duration,
                 "client_name": job.username.username,
-                "num_of_positions": job.num_of_positions
+                "locations": locations,
+                "num_of_positions": num_of_positions,
             }
 
             pending_list = []
@@ -1133,6 +1142,7 @@ class AllApplicationsForJob(APIView):
                 "rejected": rejected_list,
                 "processing": round_wise_processing,
                 "hold": hold_list,
+                "locations":locations,
             }
 
             return Response(response_data, status=status.HTTP_200_OK)

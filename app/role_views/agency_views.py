@@ -827,6 +827,7 @@ class AgencyJobPosts(APIView):
 
             jobs_list = []
             for job in all_jobs:
+                print("entered")
                 job_postings = JobApplication.objects.filter(job_location__job_id = job.id)
                 applied = job_postings.count()
                 under_review = job_postings.filter( status='processing').count()
@@ -861,12 +862,13 @@ class AgencyJobPosts(APIView):
                                     ])
                 
                 locations_assigned_to = AssignedJobs.objects.filter(job_id = job)
-                assigned_to = []
-                for location in locations_assigned_to:
-                    assigned_to.append({
-                        "location": location.job_location.location,
-                        "recruiter_name" : list(location.assigned_to.values_list('username', flat=True) if location.assigned_to.exists() else ['Not Assigned'])
-                    })
+                assigned_to = {}
+                for location in locations:
+                    recruiters = list(locations_assigned_to.filter(job_location = location).values_list('assigned_to__username', flat= True))
+                    assigned_to[location.location] = recruiters
+                
+              
+                # print(assigned_to)
 
                 job_details = {
                     "job_title": job.job_title,
@@ -911,6 +913,7 @@ class AgencyJobPosts(APIView):
             return Response({"error": "No job postings found for the manager."}, status=status.HTTP_404_NOT_FOUND)
 
         except Exception as e:
+            print(str(e))
             return Response({"error": f"Something went wrong: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1752,3 +1755,60 @@ class RecSummaryMetrics(APIView):
     
 
 
+class ManagerResumeBankView(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            applications = JobApplication.objects.filter(
+                job_location__job_id__organization__manager=request.user
+            ).select_related('resume', 'job_location__job_id')
+
+            candidate_data = {}
+
+            for app in applications:
+                email = app.resume.candidate_email
+
+                if email not in candidate_data:
+                    candidate_data[email] = {
+                        'resume': app.resume.resume.url if app.resume.resume else None,
+                        'candidate_name': app.resume.candidate_name,
+                        'candidate_email': email,
+                        'job_count': 0,
+                        'jobs': []
+                    }
+
+                candidate_data[email]['job_count'] += 1
+                candidate_data[email]['jobs'].append({
+                    'job_title': app.job_location.job_id.job_title,
+                    'status': app.status
+                })
+
+            candidate_data = list(candidate_data.values())
+            paginator = TenResultsPagination()
+            page = paginator.paginate_queryset(candidate_data,request )
+
+            recruiters = list(Organization.objects.get(manager = request.user).recruiters.values_list('email','username'))
+
+            applications_list = []
+            for application in applications:
+                application_status = application.status
+                if application_status == 'selected':
+                    try:
+                        application_status = SelectedCandidates.objects.get(application = application).joining_status
+                    except SelectedCandidates.DoesNotExist:
+                        pass
+                applications_list.append({
+                    "status": application_status,
+                    "attached_to":application.attached_to.email
+                })
+
+            return paginator.get_paginated_response({
+                "resumes": page,
+                "storage": get_resume_storage_usage(request.user) ,
+                "applications": applications_list,
+                "recruiters": recruiters
+            })
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

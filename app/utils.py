@@ -28,6 +28,9 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.conf import settings
 import logging
+from pdf2image import convert_from_path
+import uuid
+from django.http import JsonResponse, Http404
 
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -661,3 +664,71 @@ HireSync Team
         to_email=[user.email],
     )
  
+
+
+
+def convert_pdf_to_images(request):
+    # resume_path = request.GET.get('resume')
+    pdf_url = request.GET.get('resume')  # e.g., "media/88/resume.pdf" or "/media/88/resume.pdf"
+
+    if not pdf_url:
+        return JsonResponse({'error': 'Missing resume path'}, status=400)
+
+    # Remove '/media/' from the URL and join with MEDIA_ROOT
+    pdf_rel_path = pdf_url.replace('/media/', '').replace('media/', '')
+    pdf_path = os.path.join(settings.MEDIA_ROOT, pdf_rel_path)
+
+    if not os.path.exists(pdf_path):
+        raise Http404("Resume file not found.")
+
+    # Output folder for generated images
+    output_folder_uuid = str(uuid.uuid4())
+    output_folder = os.path.join(settings.MEDIA_ROOT, 'resume_images', output_folder_uuid)
+    os.makedirs(output_folder, exist_ok=True)
+
+    try:
+        images = convert_from_path(pdf_path, dpi=150)
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to convert PDF: {str(e)}'}, status=500)
+
+    # Generate image URLs relative to MEDIA_URL
+    image_urls = []
+    for i, image in enumerate(images):
+        image_filename = f'page_{i + 1}.jpg'
+        image_path = os.path.join(output_folder, image_filename)
+        image.save(image_path, 'JPEG')
+
+        relative_url = os.path.join(settings.MEDIA_URL, 'resume_images', output_folder_uuid, image_filename)
+        image_urls.append(relative_url)
+
+    return JsonResponse({"images": image_urls})
+
+
+def get_resume_storage_usage(manager_user):
+    total_size_bytes = 0
+
+    # Get all resumes under the manager's org
+    applications = JobApplication.objects.filter(
+        job_location__job_id__organization__manager=manager_user
+    ).select_related('resume')
+
+    seen_files = set() 
+
+    for app in applications:
+        resume = app.resume
+        if resume and resume.resume and resume.resume.name not in seen_files:
+            try:
+                file_path = os.path.join(settings.MEDIA_ROOT, resume.resume.name)
+                if os.path.isfile(file_path):
+                    total_size_bytes += os.path.getsize(file_path)
+                    seen_files.add(resume.resume.name)
+            except Exception as e:
+                print(f"Error accessing file: {resume.resume.name}, {e}")
+
+    total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
+
+    return {
+        'total_size_bytes': total_size_bytes,
+        'total_size_mb': total_size_mb,
+        'total_files': len(seen_files)
+    }
