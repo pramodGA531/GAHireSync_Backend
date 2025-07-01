@@ -139,7 +139,7 @@ class ScheduledInterviewsView(APIView):
                     return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
             else:
                
-                interviews = InterviewSchedule.objects.filter(interviewer__name = request.user )
+                interviews = InterviewSchedule.objects.filter(interviewer__name = request.user, status = 'scheduled' )
 
                 scheduled_list = []
                 for interview in interviews:

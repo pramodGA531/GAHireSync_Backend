@@ -141,6 +141,7 @@ class ClientDetails(models.Model):
 # Job Postings Model
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
+    description_file = models.FileField(upload_to='Resumes/', blank=True, null=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
     jobcode = models.CharField(max_length=40,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
@@ -194,6 +195,8 @@ class JobLocationsModel(models.Model):
     REMOTE = 'remote'
     HYBRID = 'hybrid'
     OFFICE = 'office'
+    CLOSED = 'closed'
+    OPENED = 'opened'
 
     WORK_CHOICES = [
         (REMOTE, 'remote'),
@@ -201,10 +204,16 @@ class JobLocationsModel(models.Model):
         (OFFICE, 'office'),
     ]
 
+    STATUS_CHOICES = [
+        (OPENED, 'opened'),
+        (CLOSED, 'closed')
+    ]
+
     job_id = models.ForeignKey(JobPostings, on_delete= models.CASCADE)
     location = models.CharField(max_length=50)
     job_type = models.CharField(max_length=10, choices=WORK_CHOICES)
     positions = models.IntegerField(default=0)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='opened')
 
     def __str__(self):
         return f"{self.job_id.job_title} - {self.location}"
@@ -583,6 +592,7 @@ class CandidateProfile(models.Model):
     skills = models.TextField(blank=True)  
     current_company = models.CharField(max_length=200, blank=True)
     resume = models.FileField(upload_to='Candidate/Resumes/', null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True)
 
     def __str__(self):
         return self.name.username
@@ -916,6 +926,7 @@ class HiresyncLinkedinCred(models.Model):
 
 class JobPostingDraftVersion(models.Model):
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
+    description_file = models.FileField(upload_to='Resumes/', blank=True, null=True)
     jobcode = models.CharField(max_length=40, default='jcd0', blank=True)
     current_step = models.IntegerField(default=1)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, blank=True, null=True)

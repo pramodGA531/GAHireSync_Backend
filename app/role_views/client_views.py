@@ -87,7 +87,6 @@ class ClientDashboard(APIView):
             interviewers = ClientDetails.objects.get(user=request.user).interviewers.all() 
 
             interviewer_ids = [interviewer.id for interviewer in interviewers]
-            print(interviewer_ids)
             interviewer_usernames = {interviewer.id: interviewer.username for interviewer in interviewers}
             interviewer_emails = {interviewer.id: interviewer.email for interviewer in interviewers}
 
@@ -105,7 +104,6 @@ class ClientDashboard(APIView):
                 rounds_alloted_dict[interview['name']] += 1
 
             rounds_status = InterviewSchedule.objects.filter(interviewer_id__name__in=interviewer_ids).values('interviewer_id__name', 'status')
-            print(rounds_status)
 
             rounds_status_count = defaultdict(lambda: {'pending': 0, 'completed': 0})
             for round_status in rounds_status:
@@ -305,6 +303,7 @@ class JobPostingView(APIView):
 
                 job_posting = JobPostings.objects.create(
                     username=username,
+                    description_file = request.FILES.get('description_file') if request.FILES.get('description_file') else None,
                     organization=organization,
                     jobcode = generated_job_code,
                     job_title=data.get('job_title', ''),
@@ -320,7 +319,7 @@ class JobPostingView(APIView):
                     qualifications=data.get('qualifications'),
                     timings=data.get('timings'),
                     other_benefits=data.get('other_benefits'),
-                    working_days_per_week=data.get('working_days_per_week'),
+                    working_days_per_week=data.get('working_days_per_week',5),
                     decision_maker=data.get('decision_maker',''),
                     decision_maker_email=data.get('decision_maker_email',''),
                     bond=data.get('bond',''),
@@ -511,7 +510,26 @@ class getClientJobposts(APIView):
                 for job in jobposts:
                     applications = JobApplication.objects.filter(job_location__job_id = job)
                     applications_count = applications.count()
-                    closed = SelectedCandidates.objects.filter(application__in = applications, joining_status = 'joined').count()
+                    positions = 0
+                    closed = 0
+                    locations = JobLocationsModel.objects.filter(job_id = job.id)
+                    location_wise_list = []
+
+                    for location in locations:
+                        positions += location.positions
+                        joined = SelectedCandidates.objects.filter(
+                            application__in=applications,
+                            application__job_location=location,
+                            joining_status='joined'
+                        ).count()
+                        closed += joined
+
+                        location_wise_list.append({
+                            "location": location.location,
+                            "position": location.positions,
+                            "closed": joined
+                        })
+                
                     job_details = {
                         "id": job.id,
                         "job_code": job.jobcode,
@@ -520,10 +538,11 @@ class getClientJobposts(APIView):
                         "company": job.organization.name,
                         "status": job.status,
                         "reason": job.reason,
-                        "positions_closed": f" ",
+                        "positions_closed": f"{closed}/{positions}",
                         "ctc":job.ctc,
                         "job_close_duration": job.job_close_duration,
-                        "approval_status": job.approval_status
+                        "approval_status": job.approval_status,
+                        "location_wise": location_wise_list,
                     }
                     jobs.append(job_details)
 
@@ -534,7 +553,7 @@ class getClientJobposts(APIView):
         
         except Exception as e:
             print(str(e))
-            return Response(status=status.HTTP_400_BAD_REQUEST, errorData = (str(e)))
+            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
 
 # Edit Requests for the Job
@@ -644,6 +663,7 @@ class AcceptJobEditRequestView(APIView):
                     new_version = JobPostingsEditedVersion.objects.create(
                         job_id=job_post,
                         user=user,
+                        base_version = edited_fields_version,
                     )
                     for change in new_changes:
                         field_name = change.get('field_name')
@@ -950,12 +970,14 @@ class GetResumeView(APIView):
                 candidates_serializer = CandidateResumeWithoutContactSerializer(candidates,many=True)
                 
 
-                job = JobLocationsModel.objects.get(id = location_id).job_id
+                location = JobLocationsModel.objects.get(id = location_id)
+                job = location.job_id
                 job_data = {
                     "job_id": location_id,
                     "job_title" : job.job_title,
                     "job_description": job.job_description,
                     "ctc": job.ctc, 
+                    "location_status": location.status,  
                     "num_of_rounds": job.rounds_of_interview
                 }
 
@@ -973,6 +995,7 @@ class GetResumeView(APIView):
                         "job_id": job_location.id, 
                         "job_title": job_location.job_id.job_title,
                         "num_of_postings": f"{job_location.positions} - ({job_location.location})",
+                        "location_status": job_location.status,
                         "last_date": job_location.job_id.job_close_duration,
                         "applications_sent": total_applications,
                         "organization":job_location.job_id.organization.name,
@@ -1346,21 +1369,26 @@ class CandidatesOnHold(APIView):
     permission_classes = [IsClient]
     def get(self, request):
         try:
-            location_id = request.GET.get('job_id')
-            if location_id and location_id.isdigit():
-                applications_on_hold = JobApplication.objects.filter(job_location = location_id, status = 'hold').select_related('resume')
-                application_list = [
-                {
-                    
-                    "candidate_name": application.resume.candidate_name,
-                    "candidate_email": application.resume.candidate_email,
-                    "application_id": application.id,
-                    "expected_ctc": application.resume.expected_ctc,
-                    "experience": application.resume.experience,
-                }
-
-                for application in applications_on_hold
-            ]
+            job_id = request.GET.get('job_id')
+            if job_id and job_id.isdigit():
+                location_ids = list(JobLocationsModel.objects.filter(job_id= job_id).values_list('id',flat=True))
+                applications_on_hold = JobApplication.objects.filter(job_location__in = location_ids, status = 'hold').select_related('resume')
+                application_list = []
+                for application in applications_on_hold:
+                    job = application.job_location.job_id
+                    application_list.append(
+                    {
+                        "candidate_name":application.resume.candidate_name,
+                        "job_title": job.job_title,
+                        "status": job.status,
+                        "organization_name": job.organization.name,
+                        "application_id": application.id,
+                        "location": application.job_location.location,
+                        "job_department": job.job_department,
+                        "job_status": job.status,
+                        "job_id": job.id,
+                        "location_status": application.job_location.status, 
+                    })
                 return Response(application_list, status= status.HTTP_200_OK)
             user = request.user
             job_posts = JobPostings.objects.filter(username = user)
@@ -1376,7 +1404,10 @@ class CandidatesOnHold(APIView):
                     "organization_name": job.organization.name,
                     "application_id": candidate.id,
                     "job_department": job.job_department,
+                    "location": candidate.job_location.location,
                     "job_status": job.status,
+                    "job_id": job.id,
+                    "location_status": candidate.job_location.status, 
                 }
                 candidate_list.append(candidate_json)
 
@@ -1395,10 +1426,11 @@ class HandleSelect(APIView):
             application = JobApplication.objects.get(id = id)
 
             job_post = JobPostings.objects.get(id = application.job_location.job_id.id)
+
             selected_applications = SelectedCandidates.objects.filter(application__job_location__job_id = job_post.id , joining_status = 'joined').count()
 
-            if selected_applications >= application.job_location.positions:
-                return Response({"message":"All Job Postings are filled, If you want to recruit extra members recruit renew your job post"}, status = status.HTTP_200_OK)
+            if selected_applications >= application.job_location.positions or application.job_location.status == 'closed':
+                return Response({"error":"All Job Postings are filled, If you want to recruit extra members recruit renew your job post with locations"}, status = status.HTTP_400_BAD_REQUEST)
 
             candidate = CandidateProfile.objects.get(email = application.resume.candidate_email)
 
@@ -1886,7 +1918,6 @@ class AllJoinedCandidates(APIView):
 class CandidateLeftView(APIView):
     def post(self, request):
         try:
-            print('entered here')
             reason = request.data.get('reason')
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
@@ -1901,42 +1932,11 @@ class CandidateLeftView(APIView):
             application = candidate.application
             application.status = 'left'
             application.save()
-            print(candidate.joining_status)
             return Response({"message":"Candidate status updated successfully"},status = status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-class ApplyReplacementView(APIView):
-    permission_classes = [IsClient]
-    def post(self, request):
-        try:
-            candidate_id = request.GET.get('candidate_id')
-            candidate = SelectedCandidates.objects.get(id = candidate_id)
-            job_post = candidate.application.job_id
-            try:
-                job_post_terms = JobPostTerms.objects.get(job_id= job_post)
-            except JobPostTerms.DoesNotExist:
-                return Response({"error":"Terms for this job post doesnot exist"}, status= status.HTTP_200_OK)
-            
-            replacement_clause = job_post_terms.replacement_clause
-            joining_date = candidate.joining_date
-            today = datetime.today().date()
-
-            if isinstance(joining_date, str):
-                joining_date = datetime.strptime(joining_date, "%Y-%m-%d").date()
-
-            if joining_date-today < replacement_clause:
-                return Response({"error":"Date is expired to replace"},status=status.HTTP_400_BAD_REQUEST)
-
-            job_post.status= 'opened'
-            job_post.save()
-            return Response({"message":"Replacement request sent to organization successfully"}, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 class AllSelectedCandidates(APIView):
     permission_classes = [IsClient]
     def get(self, request):
@@ -1958,8 +1958,8 @@ class AllSelectedCandidates(APIView):
                 ]
 
                 job_details_json = {
-                    "job_title": application.job_id.job_title,
-                    "created_at": application.job_id.created_at,
+                    "job_title": application.job_location.job_id.job_title,
+                    "created_at": application.job_location.job_id.created_at,
                     "candidates": job_candidates,
                 }
                 candidates_list.append(job_details_json)
@@ -1983,7 +1983,8 @@ class SelectedCandidatesView(APIView):
             job_id = request.GET.get('job_id')
             if job_id and job_id.isdigit():
                 job_id = int(job_id)
-                applications = JobApplication.objects.filter(job_id = request.GET.get('job_id'),status = 'selected').select_related('selected_candidates')
+                applications = JobApplication.objects.filter(job_location__job_id = request.GET.get('job_id'),status = 'selected').select_related('selected_candidates')
+
             else:
                 applications = JobApplication.objects.filter(job_location__job_id__username = request.user,status = 'selected').select_related('selected_candidates')
             candidates_list = []
@@ -1996,11 +1997,14 @@ class SelectedCandidatesView(APIView):
                     candidates_list.append({
                         "candidate_name": candidate.candidate_name,
                         "application_id": application.id,
+                        "job_id": job_id,
                         "selected_candidate_id": selected_candidate.id,
                         "job_title": application.job_location.job_id.job_title,
                         "joining_status": selected_candidate.joining_status,
                         "joining_date": selected_candidate.joining_date,
-                        "job_status": application.job_location.job_id.status
+                        "job_status": application.job_location.job_id.status,
+                        "location_status": application.job_location.status,
+                        "location":application.job_location.location,
                     })
 
             return Response(candidates_list, status = status.HTTP_200_OK)
@@ -2064,6 +2068,7 @@ class AllJoinedCandidates(APIView):
                         "created_at": job.created_at,
                         "candidate_name": application.resume.candidate_name,
                         "organization_name":job.organization.name,
+                        "location_status": application.job_location.status,
                         "joining_status": candidate.joining_status,
                         "candidate_id": candidate.id,
                         "joined_date": candidate.joining_date,
@@ -2175,51 +2180,66 @@ class CandidateLeftView(APIView):
 
 class CandidateJoined(APIView):
     permission_classes = [IsClient]
+
+    def check_all_positions_filled(self, application_id):
+        application = JobApplication.objects.get(id = application_id)
+        total_location_positions = application.job_location.positions
+
+        all_applications = JobApplication.objects.filter(job_location = application.job_location)
+        number_of_filled = SelectedCandidates.objects.filter(application__in = all_applications, joining_status = 'joined').count()
+
+
+        if(total_location_positions <= number_of_filled):
+            job_location = application.job_location
+            job_location.status = 'closed'
+            job_location.save()
+
+            for application in all_applications:
+                if application.next_interview:
+                    application.next_interview.status = "cancelled"
+                    application.next_interview.save()
+
+
+        opened_locations = JobLocationsModel.objects.filter(job_id = application.job_location.job_id, status = 'opened')
+        if opened_locations.exists():
+            return False
+    
+        application.job_location.job_id.status = 'closed'
+        application.job_location.job_id.save()
+
+        return True
+
+
     def post(self, request):
         try:
 
             with transaction.atomic():
                 candidate_id = request.GET.get('candidate_id')
-                print(candidate_id, " is the candidate id")
                 candidate = SelectedCandidates.objects.get(id = candidate_id)
                 candidate.joining_status = "joined"
                 candidate.save()
+                
 
-                job_openings = candidate.application.job_location.positions
-
-                job_applications = JobApplication.objects.filter(job_location = candidate.application.job_location)
-
-                jobs_filled = SelectedCandidates.objects.filter(application__in = job_applications, joining_status = 'joined').count()
-
-                if job_openings>jobs_filled:
-                    return Response({"message":"Status updated successfully"}, status=status.HTTP_200_OK)
-            
-
-                # send_mass_email here that all the postings are filled here and best of luck for next time
-
-                job_post = candidate.application.job_location.job_id
-                job_post.status = 'closed'
-                job_post.save()
-
-                for application in job_applications:
-                    if application.next_interview:
-                        application.next_interview.status = "cancelled"
-                        application.next_interview.save()
-
-            
                 Notifications.objects.create(
-    sender=request.user,
-    receiver=candidate.application.attached_to,
-    category = Notifications.CategoryChoices.CANDIDATE_JOINED,
-    subject=f"Candidate {request.user.username} Has Successfully Joined",
-    message=(
-        f"Joining Confirmation\n\n"
-        f"We are pleased to inform you that the candidate {candidate.candidate.name.username} "
-        f"has successfully joined for the position of {candidate.application.job_location.job_id.job_title}.\n\n"
-    )
-)
-            return Response({"message":"All Job openings are filled, job post is closed successfully"}, status=status.HTTP_200_OK)
-            
+                    sender=request.user,
+                    receiver=candidate.application.attached_to,
+                    category = Notifications.CategoryChoices.CANDIDATE_JOINED,
+                    subject=f"Candidate {request.user.username} Has Successfully Joined",
+                    message=(
+                        f"Joining Confirmation\n\n"
+                        f"We are pleased to inform you that the candidate {candidate.candidate.name.username} "
+                        f"has successfully joined for the position of {candidate.application.job_location.job_id.job_title}.\n\n"
+                    )
+                )
+
+                is_filled = self.check_all_positions_filled(candidate.application.id)
+
+                if is_filled:
+                    return Response({"message":"All Job openings are filled, job post is closed successfully"}, status=status.HTTP_200_OK)
+                
+                else:
+                    return Response({"candidate status updated successfully"}, status=status.HTTP_200_OK)
+                
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -2273,6 +2293,9 @@ class ReplacementsView(APIView):
                 )
 
                 job_post = selected_candidate.application.job_location.job_id
+                job_location = selected_candidate.application.job_location
+                job_location.status = 'opened'
+                job_location.save()
                 job_post.status = "opened"
                 job_post.save()  
 

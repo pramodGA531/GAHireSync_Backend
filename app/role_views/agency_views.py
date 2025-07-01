@@ -116,7 +116,6 @@ class AgencyDashboardAPI(APIView):
             opened_jobs = all_jobs.filter(status='opened').count()
             closed_jobs = all_jobs.filter(status='closed').count()
             applications = all_applications.exclude(next_interview=None).order_by('-next_interview__scheduled_date')[:20]
-            print(applications)
             upcoming_interviews = []
 
             for application in applications:
@@ -251,16 +250,15 @@ class JobEditStatusAPIView(APIView):
             if job.approval_status == 'reject':
                 return Response({"status": 'rejected'}, status=status.HTTP_200_OK)
 
-            # 4. Get latest job edit version
             job_edit_version = JobPostingsEditedVersion.objects.filter(job_id=job_id).order_by("-created_at").first()
 
             if not job_edit_version:
                 return Response({'notFound': "Job edit post not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            # 5. Fetch edited fields
+            
             job_edit_fields = JobPostEditFields.objects.filter(edit_id=job_edit_version)
 
-            # 6. If any field is rejected, return all fields
+            print(job_edit_fields)
             if any(field.status == 'rejected' for field in job_edit_fields):
                 rejected_fields_json = [{
                     "field_name": field.field_name,
@@ -273,11 +271,9 @@ class JobEditStatusAPIView(APIView):
                     "fields_rejected": rejected_fields_json
                 }, status=status.HTTP_200_OK)
 
-            # 7. If edit is accepted or user is owner, continue with field diff view
             if job_edit_version.user == request.user or job_edit_version.status == 'accepted':
                 return Response({"status": job_edit_version.status}, status=status.HTTP_200_OK)
 
-            # 8. Build old and new fields comparison
             old_fields_json = []    
             if job_edit_version.base_version:
                 old_edit_fields = JobPostEditFields.objects.filter(edit_id=job_edit_version.base_version)
@@ -827,7 +823,6 @@ class AgencyJobPosts(APIView):
 
             jobs_list = []
             for job in all_jobs:
-                print("entered")
                 job_postings = JobApplication.objects.filter(job_location__job_id = job.id)
                 applied = job_postings.count()
                 under_review = job_postings.filter( status='processing').count()
@@ -1496,7 +1491,7 @@ If you are interested in this exciting opportunity, please apply or reach out fo
                 }, status=response.status_code)
 
         except Exception as e:
-            print("Error in RemoveRecruiter:", str(e))
+            print( str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 class IsManagerLinkedVerifiedView(APIView):

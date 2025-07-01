@@ -545,7 +545,6 @@ class Invoices(APIView):
 
         elif request.user.role == "accountant":
             accountant=Accountants.objects.get(user=request.user)
-            print(accountant.organization)
             if accountant:
                 invoices = InvoiceGenerated.objects.filter(organization=accountant.organization)
                 for invoice in invoices:
@@ -770,7 +769,6 @@ class HandleReplies(APIView):
             user = request.user
             ticket_id = request.GET.get('ticket_id')
             data = request.data
-            print(data, " is the reply data")
 
             ticket = Tickets.objects.get(id = ticket_id)
 
@@ -791,7 +789,6 @@ class HandleReplies(APIView):
 
 class HandleTicketView(APIView):
     def get(self, request):
-        print("entered here")
         try:
             user = request.user
             ticket_id = request.GET.get('ticket_id')
@@ -1091,7 +1088,6 @@ class AllApplicationsForJob(APIView):
 
             locations_instance = JobLocationsModel.objects.filter( job_id = job)
             locations = list(locations_instance.values_list('location', flat=True))
-            print(locations)
 
             num_of_positions = 0
             for location in locations_instance:
@@ -1410,14 +1406,14 @@ class FetchAllJobs(APIView):
     def get(self, request):
         try:
             jobs = JobPostings.objects.filter(status = 'opened')
-            print(jobs)
             jobs_list = []
             for job in jobs:
+                locations = list(JobLocationsModel.objects.filter(job_id = job.id).values_list('location', flat=True))
                 jobs_list.append({
                     "job_title": job.job_title,
                     "job_description": html2text.html2text(job.job_description),
                     "experience": job.years_of_experience,
-                    "job_locations": job.job_locations,
+                    "job_locations": locations,
                     "job_type": job.job_type,
                     "ctc":job.ctc,
                     "job_level": job.job_level,
@@ -1437,13 +1433,16 @@ class SendApplicationDetailsView(APIView):
         try:
             data = request.data
             job_id = request.GET.get('job_id')
+            location = request.data.get('location')
+            
+            location_instance = JobLocationsModel.objects.get(job_id = job_id,location = location)
 
             if not job_id:
                 return Response({"error":"Jobid is required"}, status=status.HTTP_400_BAD_REQUEST)
             
             email = data.get('candidate_email')
             
-            if JobApplication.objects.filter(job_id__id=job_id, resume__candidate_email=email).exists():
+            if JobApplication.objects.filter(job_location__job_id__id=job_id, resume__candidate_email=email).exists():
                 return Response(
                     {"error": "An application with this email is already sent, wait for the response"},
                     status=status.HTTP_400_BAD_REQUEST
@@ -1473,7 +1472,7 @@ class SendApplicationDetailsView(APIView):
 
                 job_application = JobApplication.objects.create(
                     resume = candidate_resume,
-                    job_id = JobPostings.objects.get(id = job_id),
+                    job_location = location_instance,
                     status = 'candidate_applied',
                     is_incoming = True
                 )

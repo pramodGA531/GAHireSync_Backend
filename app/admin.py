@@ -68,11 +68,10 @@ class JobApplicationAdmin(admin.ModelAdmin):
 
 @admin.register(InterviewSchedule)
 class InterviewScheduleAdmin(admin.ModelAdmin):
-    list_display = ( 'interviewer', 'scheduled_date', 'status')
-    search_fields = ( 'interviewer__name', 'job_id__job_title')
+    list_display = ( 'interviewer', 'scheduled_date', 'status','from_time','to_time', 'job_location')
+    search_fields = ( 'interviewer__name', 'job_location__job_id__job_title')
     list_filter = ('status',)
     ordering = ('scheduled_date',)
-
 @admin.register(CandidateEvaluation)
 class CandidateEvaluationAdmin(admin.ModelAdmin):
     list_display = ('interview_schedule', 'score', 'remarks')
@@ -157,7 +156,10 @@ class NegotiationRequestsAdmin(admin.ModelAdmin):
     list_display = ('client','organization','status')
 
 admin.site.register(LinkedinIntegrations)
-admin.site.register(HiresyncLinkedinCred)
+
+@admin.register(HiresyncLinkedinCred)
+class HiresyncLinkedinCredAdmin(admin.ModelAdmin):
+    list_display = ('organization_urn',)
 
 @admin.register(JobLocationsModel)
 class JobLocationsModelAdmin(admin.ModelAdmin):
@@ -167,3 +169,8 @@ class JobLocationsModelAdmin(admin.ModelAdmin):
 
 admin.site.register(JobLocationsDraftVersion)
 admin.site.register(AssignedJobs)
+
+
+
+
+admin.site.register(ReplacementCandidates)

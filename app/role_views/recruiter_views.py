@@ -84,11 +84,15 @@ class CandidateResumeView(APIView):
  
             secondary_skills = json.loads(data.get('secondary_skills', '[]'))
 
+            current_ctc = data.get('current_ctc')
+            if current_ctc == "null":
+                current_ctc = 0.0
+
             if not primary_skills:
                 return Response({"error": "Primary skills are required"}, status=status.HTTP_400_BAD_REQUEST)
-
+            
             try:
-                resumes =  CandidateResume.objects.filter(candidate_name = data.get('candidate_name'))
+                resumes =  CandidateResume.objects.filter(candidate_email = data.get('candidate_email'))
                 application = JobApplication.objects.get(job_location__job_id = job, resume__in = resumes)
 
                 if application:
@@ -98,6 +102,7 @@ class CandidateResumeView(APIView):
                 application = JobApplication.objects.filter(resume__candidate_email = data.get('candidate_email')).first()
                 if application:
                     resume = application.resume.resume.name
+
 
                 candidate_resume = CandidateResume.objects.create(
                     resume= resume if resume else request.FILES['resume'],
@@ -111,14 +116,15 @@ class CandidateResumeView(APIView):
                     current_job_type=data.get('current_job_type', ''),
                     date_of_birth=date_of_birth,
                     experience=data.get('experience', ''),
-                    current_ctc=data.get('current_ctc', ''),
+                    current_ctc=current_ctc,
                     expected_ctc=data.get('expected_ctc', ''),
-                    notice_period=data.get('notice_period', ''),
+                    notice_period=data.get('notice_period', 0.0),
                     job_status=data.get('job_status', ''),
                     joining_days_required = data.get('joining_days_required',''),
                     highest_qualification = data.get('highest_qualification'),
                 )
 
+                print('candidate resume created')            
 
                 for skill in primary_skills:
                     skill_metric = CandidateSkillSet.objects.create(
@@ -235,7 +241,6 @@ class ScheduleInterview(APIView):
                 applications = JobApplication.objects.filter(attached_to = user, status = 'processing')
                 for application in applications:
                     if  application.next_interview and application.next_interview.status != 'pending':
-                        print("yes it is not njull")
                         continue
                     interviewer = InterviewerDetails.objects.get(job_id = application.job_location.job_id, round_num = application.round_num).name.username
                     pending_arr.append({
@@ -307,7 +312,7 @@ class ScheduleInterview(APIView):
 
             # Checking all interviews at that time for the interviewer
             overlapping_interviews = InterviewSchedule.objects.filter(
-                interviewer=interviewer,
+                interviewer__name=interviewer.name,
                 scheduled_date=scheduled_date
             ).filter(
                 Q(from_time__lt=to_time, to_time__gt=from_time)  
@@ -533,10 +538,9 @@ class ReConfirmResumes(APIView):
         try:
             job_applications = JobApplication.objects.filter(attached_to = request.user, status = 'selected')
             selected_candidates = SelectedCandidates.objects.filter(application__in = job_applications)
-            print("selected_candidates",selected_candidates)
             candidates_list = []
             for candidate in selected_candidates:
-                job_post = candidate.application.job_id
+                job_post = candidate.application.job_location.job_id
                 selected_candidate_json = {
                     "job_title": job_post.job_title,
                     "job_description": job_post.job_description,
@@ -618,6 +622,7 @@ class RecAssignedJobsView(APIView):
                     "job_title": job.job_title,
                     "client_name": job.username.username if hasattr(job, "username") else "",
                     "status": job.status,
+                    "location_status": job_assigned.job_location.status,
                     "num_of_positions": job_assigned.job_location.positions,
                     "onhold": onhold,
                     "rejected": rejected,
@@ -823,15 +828,18 @@ class IncomingApplicationsView(APIView):
 
     def get(self, request):
         try:
-            job_id = request.GET.get('job_id')
+            assigned_job_id = request.GET.get('job_id')
+            location = request.GET.get('location')
             application_id = request.GET.get('application_id')
 
-            if not job_id:
+            if not assigned_job_id:
                 return Response({"error": "job_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            assigned_job=AssignedJobs.objects.get(id = assigned_job_id)
 
             if application_id:
                 try:
-                    application = JobApplication.objects.get(job_id__id=job_id, id=application_id)
+                    application = JobApplication.objects.get( id=application_id)
                     resume = application.resume
 
                     if application.sender or application.attached_to:
@@ -856,20 +864,24 @@ class IncomingApplicationsView(APIView):
                             "status": application.status,
                         })
 
-                    primary_skills = SkillMetricsModel.objects.filter(job_id = application.job_id, is_primary = True).values('skill_name')
-                    secondary_skills = SkillMetricsModel.objects.filter(job_id = application.job_id, is_primary = False).values('skill_name')
+                    primary_skills = SkillMetricsModel.objects.filter(job_id = application.job_location.job_id, is_primary = True).values('skill_name')
+                    secondary_skills = SkillMetricsModel.objects.filter(job_id = application.job_location.job_id, is_primary = False).values('skill_name')
             
                     return Response({"data":application_json, "primary_skills": primary_skills, "secondary_skills": secondary_skills}, status=status.HTTP_200_OK)
 
                 except JobApplication.DoesNotExist:
+                    print(str(e))
                     return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
+            
 
             applications = JobApplication.objects.filter(
-                job_id__id=job_id,
-                job_id__assigned_to=request.user,
+                job_location__location = location,
+                job_location = assigned_job.job_location,
                 sender=None,
                 attached_to=None
             )
+
+            print(applications)
 
             serializer = IncomingApplicationSerializer(applications,many= True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -948,7 +960,7 @@ class AcceptIncomingApplication(APIView):
             application.status = "pending"  
             application.sender = request.user
             application.attached_to = request.user
-            application.receiver = application.job_id.username
+            application.receiver = application.job_location.job_id.username
             application.save()
 
             return Response({"message":"Data updated successfully"},status=status.HTTP_200_OK)

@@ -204,20 +204,14 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 # CELERY SET UP HERE 
 
-from celery.schedules import crontab, schedule
-
-# RMS_BACKEND/settings.py
-# Celery settings
 
 
-CELERY_BROKER_URL = 'amqp://localhost'  # RabbitMQ default URL
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # RabbitMQ default URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_BACKEND = 'rpc://'
-CELERY_TIMEZONE = 'Asia/Kolkata'  # Set time zone to India Standard Time (IST)
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_TIMEZONE = 'Asia/Kolkata'
 
-
-# Optional: set up periodic task schedule using Celery beat (we will do this in tasks.py)
 
 CELERY_BEAT_SCHEDULE = {
     
@@ -229,15 +223,55 @@ CELERY_BEAT_SCHEDULE = {
     #     'task': 'app.tasks.invoice_generated',
     #     'schedule': crontab(minute=38, hour=16), # here need to add the data not only the time 
     # },
+
     
     'daily_tasks':{
         'task': 'app.tasks.daily_tasks_runner',
-        # 'schedule':timedelta(seconds=30),
-        'schedule':crontab(minute=22, hour=10), # set up celery cmds in the production 
+        'schedule':crontab(minute=22, hour=10), 
     },
-    'send_reminders_every_10_minutes': {
-        'task': 'app.tasks.remainders_task',
-        'schedule': crontab(minute='*'),  # every 10 minutes
+    'approve_job_daily_10am': {
+        'task': 'app.tasks.approve_job_post_10_AM',
+        'schedule': crontab(minute=33, hour=14, day_of_week='mon-fri'),
+    },
+    'approve_negotation_request': {
+        'task': 'app.tasks.approve_negotation_request',
+        'schedule': crontab(minute=5, hour=10, day_of_week='mon-fri'),
+    },
+    'assign_job_post': {
+        'task': 'app.tasks.assign_job_post',
+        'schedule': crontab(minute=45, hour=14, day_of_week='mon-fri'),
+    },
+    'shortlist_application': {
+        'task': 'app.tasks.shortlist_application',
+        'schedule': crontab(minute=21, hour=14, day_of_week='mon-fri'),
+    },
+    'schedule_interview': {
+        'task': 'app.tasks.schedule_interview',
+        'schedule': crontab(minute=49, hour=14, day_of_week='mon-fri'),
+    },
+    'add_interview_remarks': {
+        'task': 'app.tasks.add_interview_remarks',
+        'schedule': crontab(minute=59, hour=13, day_of_week='mon-fri'),
+    },
+    'select_candidate_client': {
+        'task': 'app.tasks.select_candidate_client',
+        'schedule': crontab(minute=53, hour=14, day_of_week='mon-fri'),
+    },
+    'approve_job_offer_candidate': {
+        'task': 'app.tasks.job_offer_candidate',
+        'schedule': crontab(minute=57, hour=14, day_of_week='mon-fri'),
+    },
+    'update_profile_candidate': {
+        'task': 'app.tasks.update_profile_candidate',
+        'schedule': crontab(minute=40, hour=10, day_of_week='mon-fri'),
+    },
+    'job_deadline': {
+        'task': 'app.tasks.job_deadline',
+        'schedule': crontab(minute=7, hour=15, day_of_week='mon-fri'),
+    },
+    'confirm_joining_client': {
+        'task': 'app.tasks.confirm_joining_client',
+        'schedule': crontab(minute=17, hour=15, day_of_week='mon-fri'),
     },
 }
 

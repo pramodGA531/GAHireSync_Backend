@@ -480,7 +480,7 @@ class SelectedJobsCandidate(APIView):
             selected_jobs = SelectedCandidates.objects.filter(candidate__name = request.user)
             selected_jobs_list = []
             for selected_job in selected_jobs:
-                job = selected_job.application.job_id
+                job = selected_job.application.job_location.job_id
                 companyDetail=ClientDetails.objects.get(user=job.username)
                 details_json = {
                     "job_title": job.job_title,
@@ -495,9 +495,10 @@ class SelectedJobsCandidate(APIView):
                     "selected_candidate_id": selected_job.id,
                     "candidate_acceptance": selected_job.candidate_acceptance,
                     "recruiter_acceptance": selected_job.recruiter_acceptance,
-                    "job_id": selected_job.application.job_id.id,
+                    "job_id": job.id,
                     "edit_request":selected_job.edit_request,
                     "client_accept_request":selected_job.client_accept_request,
+                    "location":selected_job.application.job_location.location
                 }
                 selected_jobs_list.append(details_json)
 
