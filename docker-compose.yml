@@ -1,0 +1,62 @@
+version: "3"
+name: hiresync-project
+
+services: 
+  app:
+    image: hiresync-docker-image
+    container_name:  hiresync-docker-container
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    command: ["python", "manage.py", "runserver","0.0.0.0:8000"]
+
+
+  celery:
+    image: hiresync-docker-image
+    container_name: hiresync-celery-worker
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    command: ["celery", "-A", "RTMAS_BACKEND","worker","--pool=solo","--loglevel=info"]
+    depends_on:
+      - app
+      - redis
+
+  
+  beat:
+    image: hiresync-docker-image
+    container_name: hiresync-celery-beat
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    command: ["celery", "-A", "RTMAS_BACKEND", "beat", "--loglevel=info"]
+    depends_on:
+      - app
+      - redis
+
+  flower:
+    image: hiresync-docker-image
+    container_name: hiresync-flower
+    volumes:
+      - .:/app
+    ports:
+      - "5555:5555"
+    env_file:
+      - .env
+    command: ['celery',"-A","RTMAS_BACKEND","flower","--address=0.0.0.0", "--port=5555"]
+    depends_on:
+      - celery
+      - redis
+
+  redis:
+      image: redis:7
+      container_name: hiresync-redis
+      ports:
+      - "6379:6379"
+      restart: always
+    
