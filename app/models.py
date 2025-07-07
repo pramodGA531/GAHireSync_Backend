@@ -86,7 +86,9 @@ class Organization(models.Model):
 
 # Organization Terms Model
 class OrganizationTerms(models.Model):
-    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name="terms")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="terms")
+    unique_code = models.CharField(max_length=30, default="ABC123" , unique=True)
+    ctc_range = models.CharField(default="5,6", max_length=30)
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
     description = models.TextField(default ='')
     replacement_clause = models.IntegerField(default=90)
@@ -562,6 +564,7 @@ class NegotiationRequests(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     accepted_date = models.DateTimeField(auto_now=True)
     reason = models.TextField(null=True, default="", blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return f"negotiation by {self.client.name_of_organization}"

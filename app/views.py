@@ -18,6 +18,7 @@ import requests
 from django.http import HttpResponseRedirect
 import html2text
 from django.db.models import Count, Prefetch
+from django.db import IntegrityError
 
 
 
@@ -41,50 +42,84 @@ class GetUserDetails(APIView):
 
 class OrganizationTermsView(APIView):
     
-    permission_classes = [IsAuthenticated]   
+    permission_classes = [IsAuthenticated]  
+
+    def generate_unique_code(self, org_code, count):
+        padded_count = str(count).zfill(4)
+        return f"{org_code}+{padded_count}"
 
     def get(self, request):
         user = request.user
         organization = Organization.objects.filter(manager=user).first()
 
         if not organization:
-            return render(request, "error.html", {"message": "Organization not found"})
-        
-        values = request.GET.get('values')
-        if values:
-            try:
-                organization_terms = OrganizationTerms.objects.get(organization = organization)
-                serializer = OrganizationTermsSerializer(organization_terms)
-            except OrganizationTerms.DoesNotExist:
-                return Response({"error":"Organization Terms does not exist"}, status = status.HTTP_400_BAD_REQUEST)
-            return Response({"data":serializer.data}, status=status.HTTP_200_OK)
+            return Response({"error":"Organization doesnot found"},status=status.HTTP_400_BAD_REQUEST)
 
-        organization_terms, _ = OrganizationTerms.objects.get_or_create(organization=organization)
-        serializer = OrganizationTermsSerializer(organization_terms)
-        data = serializer.data
+        organization_terms = OrganizationTerms.objects.filter(organization=organization)
+        terms_list = []
+        for terms in organization_terms:
+            terms_list.append({
+                    "service_fee": terms.service_fee,
+                    "invoice_after": terms.invoice_after,
+                    "payment_within": terms.payment_within,
+                    "replacement_clause": terms.replacement_clause,
+                    "interest_percentage": terms.interest_percentage,
+                    "ctc_range": terms.ctc_range,
+                    "unique_code": terms.unique_code ,
+                    "id":terms.id,
+            })
 
-        context = {
-            "service_fee": data.get("service_fee"),
-            "invoice_after": data.get("invoice_after"),
-            "payment_within": data.get("payment_within"),
-            "replacement_clause": data.get("replacement_clause"),
-            "interest_percentage": data.get("interest_percentage"),
-            "data":data
-        }
+        return Response({"data":terms_list}, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        try:
+            user = request.user
+            organization = Organization.objects.filter(manager=user).first()
+            if not organization:
+                return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            data = request.data
+            organization_total_terms = OrganizationTerms.objects.filter(organization = organization).count()
 
-        return render(request, "organizationTerms.html", context)
+            unique_code = data.get('unique_code')
+            print(unique_code, " is the unique code")
+            if unique_code == "" or unique_code == None:
+                unique_code = self.generate_unique_code(organization.org_code, organization_total_terms)
+
+            new_terms = OrganizationTerms.objects.create(
+                organization=organization,
+                service_fee=data.get("service_fee"),
+                invoice_after=data.get("invoice_after"),
+                payment_within=data.get("payment_within"),
+                replacement_clause=data.get("replacement_clause"),
+                interest_percentage=data.get("interest_percentage"),
+                ctc_range=data.get("ctc_range"),
+                unique_code= unique_code,
+            )
+
+            return Response({"message": "Organization terms added successfully", "id": new_terms.id}, status=status.HTTP_201_CREATED)
+
+        except IntegrityError as e:
+            if "unique_code" in str(e):
+                return Response({"error": "unique_code already exists"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Database error: " + str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+ 
 
     def put(self, request):
         try:
             user = request.user
             organization = Organization.objects.filter(manager = user).first()
-            organization_terms = get_object_or_404(OrganizationTerms, organization = organization)
             data = request.data
+            organization_terms = get_object_or_404(OrganizationTerms, organization = organization, id = request.data.get('id'))
             if data.get('description'):
                 organization_terms.description = data.get('description' , organization_terms.description)
                 organization_terms.save()
                 return Response({"message":"Organization description updated successfully"}, status = status.HTTP_200_OK)
             else:
+                organization_terms.unique_code = data.get('unique_code', organization_terms.unique_code)
                 organization_terms.service_fee = data.get('service_fee', organization_terms.service_fee)
                 organization_terms.replacement_clause = data.get('replacement_clause', organization_terms.replacement_clause)
                 organization_terms.invoice_after = data.get('invoice_after', organization_terms.invoice_after)
@@ -271,6 +306,40 @@ class JobDetailsAPIView(APIView):
 
         except JobPostings.DoesNotExist:
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+
+class CandidateJobDetailsAPIView(APIView):
+    permission_classes = [IsCandidate]
+    def get(self, request):
+        try:
+            job_id = request.GET.get('job_id')
+            job_posting = JobPostings.objects.get(id=job_id)
+            serializer = CandidateJobpostSerializer(job_posting)
+
+            # assigned_recruiters = AssignedJobs.objects.filter(job_location__job_id=job_id).prefetch_related('assigned_to', 'job_location')
+            
+            # assigned_recruiters_map = {}
+
+            # for assignment in assigned_recruiters:
+            #     location_id = str(assignment.job_location.id)
+            #     recruiter_ids = list(assignment.assigned_to.values_list('id', flat=True))
+
+            #     if location_id in assigned_recruiters_map:
+            #         assigned_recruiters_map[location_id] = list(
+            #             set(assigned_recruiters_map[location_id] + recruiter_ids)
+            #         )
+            #     else:
+            #         assigned_recruiters_map[location_id] = recruiter_ids    
+
+            return Response({
+                "job": serializer.data,
+            }, status=status.HTTP_200_OK)
+
+        except JobPostings.DoesNotExist:
+            return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 
         

@@ -391,17 +391,13 @@ class CandidateEducationView(APIView):
 
 # Candidates List Of Applications
 class CandidateApplicationsView(APIView):
+    permission_classes = [IsCandidate]
     def get(self, request):
         try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not request.user.role == 'candidate':
-                return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
-
             user = CustomUser.objects.get(username = request.user)
             candidate_resume = CandidateResume.objects.filter( candidate_email = user.email)
             applications= JobApplication.objects.filter(resume__in = candidate_resume)
+            print("applications are ", applications)
 
             application_details = []
             for application in applications:
@@ -411,13 +407,14 @@ class CandidateApplicationsView(APIView):
                     next_interview = '-'
                 application_details.append(
                     {
-                        "job_title": application.job_id.job_title,
+                        "job_title": application.job_location.job_id.job_title,
                         "application_status": application.status,
                         "sender": application.attached_to.username,
                         "receiver": application.receiver.username,
                         "round_number": application.round_num,
                         "next_interview" : next_interview,
-                        "job_id": application.job_id.id,
+                        "job_id": application.job_location.job_id.id,
+                        "job_location": application.job_location.location,
                         "application_id": application.id,
                     }
                 )
@@ -511,7 +508,6 @@ class SelectedJobsCandidate(APIView):
 class CandidateAcceptJob(APIView):
     permission_classes = [IsCandidate]
     def get(self, request):
-        print("calling the candidate")
         try:
             id = request.GET.get('selected_candidate_id')
             user = request.user
@@ -526,16 +522,17 @@ class CandidateAcceptJob(APIView):
             
             customCand =selected_candidate.candidate.name
             application=selected_candidate.application
+            job = application.job_location.job_id
             
             Notifications.objects.create(
     sender=request.user,
     receiver=application.attached_to,
     category = Notifications.CategoryChoices.CANDIDATE_ACCEPTED,
-    subject=f"Hey, Recruiter Candidate Accepts the offer position {application.job_id.job_title}",
+    subject=f"Hey, Recruiter Candidate Accepts the offer position {job.job_title}",
     message=(
         f"Offer Acceptance Notification\n\n"
         f"The candidate {customCand.username} has officially accepted the offer "
-        f"for the position of {application.job_id.job_title}.\n\n"
+        f"for the position of {job.job_title} - {application.job_location.location}.\n\n"
         f"Joining Date: {selected_candidate.joining_date}\n"
         f"Agreed CTC: {selected_candidate.ctc}\n\n"
         f"Please follow up to confirm whether {customCand.username} has joined on the scheduled date.\n\n"
@@ -543,22 +540,19 @@ class CandidateAcceptJob(APIView):
 )
             
             Notifications.objects.create(
-    sender=request.user,
-    receiver=application.job_id.username,
-    category = Notifications.CategoryChoices.CANDIDATE_ACCEPTED,
-    subject=f"Cand Accepted the offer role {application.job_id.job_title}",
-    message=(
-        f"Offer Acceptance Notification\n\n "
-        f"The candidate {customCand.username} has officially accepted the offer "
-        f"for the position of {application.job_id.job_title}.\n\n"
-        f"Joining Date: {selected_candidate.joining_date}\n"
-        f"Agreed CTC: {selected_candidate.ctc}\n\n"
-        f"Kindly confirm on the joining day if the candidate has reported and completed the joining formalities.  \n\n"
-    )
-)
-            
-            
-            
+                    sender=request.user,
+                    receiver=job.username,
+                    category = Notifications.CategoryChoices.CANDIDATE_ACCEPTED,
+                    subject=f"Cand Accepted the offer role {job.job_title}",
+                    message=(
+                                f"Offer Acceptance Notification\n\n "
+                                f"The candidate {customCand.username} has officially accepted the offer "
+                                f"for the position of {job.job_title} - {application.job_location.location}.\n\n"
+                                f"Joining Date: {selected_candidate.joining_date}\n"
+                                f"Agreed CTC: {selected_candidate.ctc}\n\n"
+                                f"Kindly confirm on the joining day if the candidate has reported and completed the joining formalities.  \n\n"
+                            )
+            )
             return Response({"message":"Accepted and Reconfirmation notification sent to recruiter successfully"}, status = status.HTTP_200_OK)
 
         except Exception as e:
@@ -579,6 +573,7 @@ class CandidateRejectJob(APIView):
                 return Response({"error":"Users are not matching"}, status=status.HTTP_400_BAD_REQUEST)
             
             selected_candidate.feedback = request.data.get('feedback')
+            selected_candidate.joining_status = 'rejected'
             selected_candidate.save()
 
             return Response({"message":"Your feedback send to client successfully"}, status=status.HTTP_200_OK)

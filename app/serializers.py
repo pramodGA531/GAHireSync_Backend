@@ -157,6 +157,32 @@ class JobPostingsSerializer(serializers.ModelSerializer):
 
         del data['skills']
         return data
+    
+class CandidateJobpostSerializer(serializers.ModelSerializer):
+
+    skills = SkillMetricSerializer(many=True)
+    locations = LocationSerializer(many=True, read_only = True, source = 'joblocationsmodel_set' )
+    interview_details = InterviewerDetailsSerializer(many=True, read_only = True, source = 'interviewerdetails_set')
+
+    class Meta:
+        model = JobPostings
+        fields = '__all__'
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        primary_skills = []
+        secondary_skills = []
+        for skill in data['skills']:
+            if skill.get('is_primary') == True:
+                primary_skills.append(skill)
+            else:
+                secondary_skills.append(skill)
+            
+        data['primary_skills'] = primary_skills
+        data['secondary_skills'] = secondary_skills
+
+        del data['skills']
+        return data
 
 class CandidateResumeSerializer(serializers.ModelSerializer):
     class Meta:

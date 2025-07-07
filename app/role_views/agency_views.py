@@ -98,7 +98,7 @@ class AgencyDashboardAPI(APIView):
             user = request.user
             agency_name = Organization.objects.get(manager = user).name
             all_applications = JobApplication.objects.filter(job_location__job_id__organization__name = agency_name)
-            all_jobs = JobPostings.objects.filter(organization__name = agency_name)
+            all_jobs = JobPostings.objects.filter(organization__name = agency_name) 
             pending_assigned = 0
             for job in all_jobs:
                 locations = JobLocationsModel.objects.filter(job_id = job).count()                
@@ -131,7 +131,7 @@ class AgencyDashboardAPI(APIView):
 
 
             latest_jobs_ids = all_jobs.order_by('-created_at')[:10].values('id')
-            latest_jobs = JobLocationsModel.objects.filter(job_id__in = latest_jobs_ids)
+            latest_jobs = JobLocationsModel.objects.filter(job_id__in = latest_jobs_ids)[:5]
             
             jobs_details = []
             for location in latest_jobs:
@@ -950,11 +950,12 @@ class RecruiterTaskTrackingView(APIView):
             job_data = []
 
             job_postings = JobPostings.objects.filter(organization__manager=user)
+            job_locations = JobLocationsModel.objects.filter(job_id__in = job_postings)
             current_time = now().date()
 
-            for job in job_postings:
+            for job in job_locations:
                 
-                job_close_duration = job.job_close_duration
+                job_close_duration = job.job_id.job_close_duration
 
                 if current_time > job_close_duration - timedelta(days=5):
                     priority = "high"
@@ -963,16 +964,18 @@ class RecruiterTaskTrackingView(APIView):
                 else:
                     priority = "low"
 
-                jobs_closed = JobApplication.objects.filter(job_id=job.id, status='selected').count()
-                status_percentage = (jobs_closed / job.num_of_positions * 100) if job.num_of_positions > 0 else 0
+                jobs_closed = JobApplication.objects.filter(job_location=job.id, status='selected').count()
+                status_percentage = (jobs_closed / job.positions * 100) if job.positions > 0 else 0
+                assigned_to = AssignedJobs.objects.filter(job_location = job).values_list('assigned_to__username', flat=True)
 
                 job_json = {
-                    "job_title": job.job_title,
-                    "num_of_positions": job.num_of_positions,
+                    "job_title": job.job_id.job_title,
+                    "num_of_positions": job.positions,
                     "priority": priority,
-                    "due_date": job.job_close_duration,
+                    "due_date": job_close_duration,
                     "status": round(status_percentage, 2),  
-                    "recruiters": list(job.assigned_to.values_list('username', flat=True)),
+                    "recruiters": assigned_to,
+                    "location": job.location,
                 }
                 job_data.append(job_json)
 
@@ -985,16 +988,17 @@ class RecruiterTaskTrackingView(APIView):
             recruiters_list = [{"name": recruiter.username} for recruiter in all_recruiters]
 
             recent_activities = []
-            resumes = JobApplication.objects.filter(attached_to__in=all_recruiters).order_by('-updated_at')[:6]
-            for resume in resumes:
+            applications = JobApplication.objects.filter(attached_to__in=all_recruiters).order_by('-updated_at')[:6]
+            for application in applications:
+                job = application.job_location.job_id
                 task = ""
-                if resume.status == 'pending':
-                    task = f"{resume.resume.candidate_name}'s Resume is sent to {resume.job_id.job_title}"
-                elif resume.status == 'processing' and resume.next_interview:
-                    task = f"New meeting scheduled for {resume.resume.candidate_name}"
+                if application.status == 'pending':
+                    task = f"{application.resume.candidate_name}'s Resume is sent to {job.job_title}"
+                elif application.status == 'processing' and application.next_interview:
+                    task = f"New meeting scheduled for {application.resume.candidate_name}"
                 
 
-                time_diff = now() - resume.updated_at
+                time_diff = now() - application.updated_at
 
                 if time_diff.seconds < 60:
                     thumbnail = f"Updated {time_diff.seconds} seconds ago"
@@ -1007,23 +1011,25 @@ class RecruiterTaskTrackingView(APIView):
 
 
                 recent_activities.append({
-                    "name": resume.attached_to.username,
-                    "job_title": resume.job_id.job_title,
+                    "name": application.attached_to.username,
+                    "job_title": job.job_title,
                     "task": task,
                     "thumbnail": thumbnail
                 })
 
             five_days_ago = datetime.now() - timedelta(days=5)
-            new_jobs = JobPostings.objects.filter(organization__manager=user, created_at__gte=five_days_ago).count()
-            on_going = JobPostings.objects.filter(organization__manager=user, assigned_to__isnull=False).count()
+            new_jobs = job_postings.filter(created_at__gte=five_days_ago).count()
+            on_going = job_postings.filter(status ='opened').count()
 
             completed_posts = 0
             completed_deadline = 0
-            completed_jobs = JobPostings.objects.filter(organization__manager=user, status='closed')
+            completed_jobs = job_postings.filter(status='closed')
 
             for job in completed_jobs:
-                positions_closed = JobApplication.objects.filter(job_id=job.id, status='selected').count()
-                if positions_closed >= job.num_of_positions:
+                job_locations = JobLocationsModel.objects.filter(job_id  = job)
+                total_positions = job_locations.aggregate(total=Sum('positions'))['total'] or 0
+                positions_closed = JobApplication.objects.filter(job_location__in=job_locations, status='selected').count()
+                if positions_closed >= total_positions:
                     completed_posts += 1
                 else:
                     completed_deadline += 1
@@ -1043,8 +1049,10 @@ class RecruiterTaskTrackingView(APIView):
             }, status=status.HTTP_200_OK)
 
         except ObjectDoesNotExist as e:
+            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            print(str(e))
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
         
 class ViewSelectedCandidates(APIView):
@@ -1132,8 +1140,21 @@ class OrganizationView(APIView):
         try:
             user = request.user
             organization = Organization.objects.get(manager=user)
-            serializer = OrganizationSerializer(organization)
-            return Response(serializer.data,status=status.HTTP_200_OK)
+
+            organization_data = {
+                "name": organization.name,
+                "org_code": organization.org_code,
+                "username": organization.manager.username,
+                "email": organization.manager.email,
+                "company_address": organization.company_address,
+                "gst_number": organization.gst_number,
+                "company_pan": organization.company_pan,
+                "contact_number": organization.contact_number,
+                "id": organization.id,
+                "website_url": organization.website_url,
+            }
+
+            return Response(organization_data,status=status.HTTP_200_OK)
         except ObjectDoesNotExist as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         

@@ -155,22 +155,22 @@ class GetOrganizationTermsView(APIView):
         try:
             user = request.user
             org_code = request.GET.get("org_code")
-            organization = get_object_or_404(Organization, org_code=org_code)
+            organization_terms = get_object_or_404(OrganizationTerms, unique_code=org_code)
             
             client = get_object_or_404(ClientDetails, user=user)
             
             clientTerms = ClientTermsAcceptance.objects.filter(
-                client=client, organization=organization, valid_until__gte=timezone.now()
+                client=client, organization=organization_terms.organization, valid_until__gte=timezone.now()
             )
 
             negotiation_request = NegotiationRequests.objects.filter(
-                client__user=user, organization=organization, status = 'pending'
+                client__user=user, organization=organization_terms.organization, status = 'pending'
             )
 
             if clientTerms.count() > 0:
              organization_terms=clientTerms.first()
-            else:
-                organization_terms = OrganizationTerms.objects.get(organization = organization)
+            # else:
+            #     organization_terms = OrganizationTerms.objects.get(organization = organization_terms.organization, uniqu)
 
             terms_serializer = OrganizationTermsSerializer(organization_terms)
             terms_data = terms_serializer.data
