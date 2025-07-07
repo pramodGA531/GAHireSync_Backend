@@ -158,7 +158,7 @@ class NegotiateTermsView(APIView):
 
         client = ClientDetails.objects.get(user=user)
         code = request.data.get('code')
-        organization = Organization.objects.filter(org_code=code).first()
+        organization = OrganizationTerms.objects.get(unique_code = code).organization
 
         if not organization:
             return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)

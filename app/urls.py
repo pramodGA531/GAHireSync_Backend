@@ -84,6 +84,7 @@ urlpatterns = [
     path('client/save-location-draft/', LocationDraftView.as_view(), name='save-location-draft'),
     path('client/save-job-draft/', JobDraftView.as_view(), name='save-location-draft'),
     path('client/save-interview-draft/', InterviewersDraftView.as_view(), name='save-location-draft'),
+    path('client/delete-negotiation/', DeleteNegotiation.as_view(), name='delete-negotiation'),
 
 
 

@@ -202,7 +202,7 @@ class GetOrganizationTermsView(APIView):
             html = render(request, "organizationTerms.html", html_context).content.decode("utf-8")
 
 
-            draft_jobs = JobPostingDraftVersion.objects.filter(username = request.user, organization__org_code = org_code)
+            draft_jobs = JobPostingDraftVersion.objects.filter(username = request.user, organization = organization_terms.organization)
 
             if draft_jobs.exists():
 
@@ -226,10 +226,11 @@ class GetOrganizationTermsView(APIView):
 class JobPostingView(APIView):
     permission_classes = [IsClient] 
 
-    def addTermsAndConditions(self, job_post):
+    def addTermsAndConditions(self, job_post, code):
         try:
-            organization = Organization.objects.get(org_code=job_post.organization.org_code)
-        except Organization.DoesNotExist:
+            organization = OrganizationTerms.objects.get(unique_code = code).organization
+
+        except OrganizationTerms.DoesNotExist:
             return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
         
         try:
@@ -245,7 +246,7 @@ class JobPostingView(APIView):
             organization_terms = clientTerms.first()
         else:
             try:
-                organization_terms = OrganizationTerms.objects.get(organization=organization)
+                organization_terms = OrganizationTerms.objects.get(unique_code = code)
             except OrganizationTerms.DoesNotExist:
 
                 return Response({"error": "Organization terms not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -262,7 +263,6 @@ class JobPostingView(APIView):
                 interest_percentage=organization_terms.interest_percentage,
                 # valid_until=timezone.now() + timedelta(days=organization_terms.replacement_clause) 
             )
-            print(job_post_terms)
         except Exception as e:
             print(str(e))
             return Response({"error": f"Failed to create job post terms: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -284,9 +284,10 @@ class JobPostingView(APIView):
 
     def post(self, request):
         data = request.data
-        username = request.user
+        username = request.user 
 
-        organization = Organization.objects.filter(org_code=data.get('organization_code')).first()
+        organization_terms_code = data.get('organization_code')
+        organization = OrganizationTerms.objects.get(unique_code=organization_terms_code).organization
 
         if not organization:
             return Response({"error": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
@@ -363,7 +364,6 @@ class JobPostingView(APIView):
                     )
 
                 for location in location_data:
-                    print(location)
                     JobLocationsModel.objects.create(
                         job_id = job_posting,
                         location = location.get('location'),
@@ -382,7 +382,7 @@ class JobPostingView(APIView):
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
 
-                self.addTermsAndConditions(job_posting)
+                self.addTermsAndConditions(job_posting, organization_terms_code)
 
                 job_draft = JobPostingDraftVersion.objects.get(organization = organization, username = request.user)
                 job_draft.delete()
@@ -2903,9 +2903,10 @@ class ContinueDraftView(APIView):
     def get(self, request):
         try:
             company_code = request.GET.get('company_code')
+            company = OrganizationTerms.objects.get(unique_code = company_code).organization
             user = request.user
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization__org_code = company_code)
+                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization = company)
             except JobPostingDraftVersion.DoesNotExist():
                 return Response({"error":"Draft doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -2920,15 +2921,15 @@ class CreateNewDraftView(APIView):
     def get(self, request):
         try:
             company_code = request.GET.get('company_code')
+            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization__org_code = company_code)
+                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization = organization)
                 job_draft.delete()
 
 
             except JobPostingDraftVersion.DoesNotExist:
                 pass
             
-            organization = Organization.objects.get(org_code = company_code)
             JobPostingDraftVersion.objects.create(username = request.user, organization=organization)
             return Response({"message":"Draft created successfully"}, status=status.HTTP_200_OK)
             
@@ -2940,6 +2941,7 @@ class SkillSetDraftView(APIView):
     def post(self, request):
         try:
             company_code = request.GET.get('company_code')
+            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
             is_primary = request.GET.get('is_primary')  == 'true'
             user = request.user
             data = request.data.get('skills')
@@ -2947,9 +2949,8 @@ class SkillSetDraftView(APIView):
 
             # Ensure JobPostingDraftVersion exists
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization = organization)
             except JobPostingDraftVersion.DoesNotExist:
-                organization = Organization.objects.get(org_code=company_code)
                 job_draft = JobPostingDraftVersion.objects.create(username=user, organization=organization)
 
             incoming_skill_names = [skill.get("skill_name") for skill in data]
@@ -2990,13 +2991,13 @@ class LocationDraftView(APIView):
     def post(self, request):
         try:
             company_code = request.GET.get('company_code')
+            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
             
             user = request.user
             data = request.data.get('locations')
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization = organization)
             except JobPostingDraftVersion.DoesNotExist:
-                organization = Organization.objects.get(org_code=company_code)
                 job_draft = JobPostingDraftVersion.objects.create( username=user, organization=organization)
 
             incoming_location_names = [location.get("location") for location in data]
@@ -3038,13 +3039,13 @@ class JobDraftView(APIView):
     def patch(self, request):
         try:
             company_code = request.GET.get('company_code')
+            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
             
             user = request.user
             data = request.data
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization=organization)
             except JobPostingDraftVersion.DoesNotExist:
-                organization = Organization.objects.get(org_code=company_code)
                 job_draft = JobPostingDraftVersion.objects.create( username=user, organization=organization)   
 
 
@@ -3065,13 +3066,13 @@ class InterviewersDraftView(APIView):
     def post(self, request):
         try:
             company_code = request.GET.get('company_code')
+            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
             user = request.user
             data = request.data.get("interview_rounds", [])
 
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username=user, organization__org_code=company_code)
+                job_draft = JobPostingDraftVersion.objects.get(username=user, organization=organization)
             except JobPostingDraftVersion.DoesNotExist:
-                organization = Organization.objects.get(org_code=company_code)
                 job_draft = JobPostingDraftVersion.objects.create(username=user, organization=organization)
 
             existing_rounds = list(job_draft.interviewers.all())
@@ -3115,6 +3116,18 @@ class InterviewersDraftView(APIView):
 
             return Response({"message": "Draft saved successfully"}, status=status.HTTP_200_OK)
 
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DeleteNegotiation(APIView):
+    def delete(self, request):
+        try:
+            company_code = request.GET.get('company_code')
+            organization = OrganizationTerms.objects.get(unique_code=company_code).organization
+            NegotiationRequests.objects.filter(organization=organization).delete()
+            return Response({"message":"Negotiations deleted successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             print("Error:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
