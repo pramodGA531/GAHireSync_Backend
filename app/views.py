@@ -139,35 +139,45 @@ class NegotiateTermsView(APIView):
         user = request.user
         if user.role == "manager":
             organization = Organization.objects.get(manager=user)
-            negotiationrequests = NegotiationRequests.objects.filter(organization=organization)
+            negotiationrequests = NegotiationRequests.objects.filter(client_organization__organization = organization, status = 'pending')
 
         elif user.role == "client":
             client = ClientDetails.objects.get(user=user)
-            negotiationrequests = NegotiationRequests.objects.filter(client=client)
+            negotiationrequests = NegotiationRequests.objects.filter(client_organization__client=client)
         else:
             return Response({"detail": "You are not authorized to access this page"}, status=status.HTTP_401_UNAUTHORIZED)
         
+        
         serializer = NegotiationSerializer(negotiationrequests, many=True)
         return Response(serializer.data)
+    
 
     def post(self, request, *args, **kwargs):
         user = request.user
 
         if user.role != "client":
             return Response({"detail": "Only clients can create negotiation requests"}, status=status.HTTP_403_FORBIDDEN)
+        
+        connection_id = request.GET.get('connection_id')
+        connection = ClientOrganizations.objects.get(id = connection_id)
+        organization = connection.organization
 
-        client = ClientDetails.objects.get(user=user)
-        code = request.data.get('code')
-        organization = OrganizationTerms.objects.get(unique_code = code).organization
+        if not connection:
+            return Response({"detail": "Invalid connection id"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not organization:
-            return Response({"detail": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
+        try: 
+            prev_negotiations = NegotiationRequests.objects.get(client_organization = connection)
+            
+            prev_negotiations.delete()
+        except NegotiationRequests.DoesNotExist:
+            pass
 
         try:
             data = request.data
             negotiation_request = NegotiationRequests.objects.create(
-                client=client,
-                organization=organization,
+                client_organization = connection,
+                ctc_range= data.get('ctc_range'),
+                service_fee_type = data.get('service_fee_type'),
                 service_fee=data.get('service_fee'),
                 replacement_clause=data.get('replacement_clause'),
                 invoice_after=data.get('invoice_after'),
@@ -214,23 +224,24 @@ HireSync Team
             
             if data.get('status') == "accepted":
                 negotiation_request.status = "accepted"
+                negotiation_request.expiry_date = datetime.today().date() + timedelta(days=365)
                 negotiation_request.save()
 
                 
-                ClientTermsAcceptance.objects.create(
-                    client=negotiation_request.client,
-                    organization=negotiation_request.organization,
-                    service_fee=negotiation_request.service_fee,
-                    replacement_clause=negotiation_request.replacement_clause,
-                    invoice_after=negotiation_request.invoice_after,
-                    payment_within=negotiation_request.payment_within,
-                    interest_percentage=negotiation_request.interest_percentage
-                )
+                # ClientOrganizationTerms.objects.create(
+                #     client_organization = negotiation_request.client_organization,
+                #     service_fee=negotiation_request.service_fee,
+                #     replacement_clause=negotiation_request.replacement_clause,
+                #     invoice_after=negotiation_request.invoice_after,
+                #     payment_within=negotiation_request.payment_within,
+                #     interest_percentage=negotiation_request.interest_percentage,
+                #     is_negotiated = True
+                # )
 
                 link = f"{frontend_url}/client/postjob"    
                 client_email_message = f"""
             
-Dear {negotiation_request.client.user.username},
+Dear {negotiation_request.client_organization.client.user.username},
 
 Your terms negotiation request has been accepted. You can proceed with the next steps.
 🔗 {link}
@@ -241,7 +252,7 @@ HireSync Team
 
                 """
 
-                send_custom_mail(subject="Job Terms & Conditions – Update",body=client_email_message, to_email=[negotiation_request.client.user.email])
+                send_custom_mail(subject="Job Terms & Conditions – Update",body=client_email_message, to_email=[negotiation_request.client_organization.client.user.email])
               
                 
             elif data.get('status') == "rejected":
@@ -251,7 +262,7 @@ HireSync Team
                 negotiation_request.save()
                 
                 client_email_message = f"""
-Dear {negotiation_request.client.user.first_name},
+Dear {negotiation_request.client_organization.client.user.first_name},
 
 Your terms negotiation request has been rejected. You can proceed with the next steps.
 
@@ -261,7 +272,7 @@ Best,
 HireSync Team
 
 """
-                send_custom_mail( subject="Job Terms & Conditions – Update",body=client_email_message,to_email=[negotiation_request.client.user.email])
+                send_custom_mail( subject="Job Terms & Conditions – Update",body=client_email_message,to_email=[negotiation_request.client_organization.client.user.email])
                 
                 #  accept notification  here i need to send the notification to the agency to the client find the emails of the client and the agency 
                 
@@ -1076,7 +1087,7 @@ class GetJobPostTerms(APIView):
             for job in jobs:
                 try:
                     # Get the single term for each job
-                    term = JobPostTerms.objects.get(job_id=job)
+                    job_post_terms = JobPostTerms.objects.filter(job_id=job)
                     job_terms_list.append({
                         'job_id':job.id,
                         'status':job.status,
@@ -1089,7 +1100,7 @@ class GetJobPostTerms(APIView):
                         'payment_within': term.payment_within,
                         'interest_percentage': term.interest_percentage,
                         'created_at': term.created_at,
-                    })
+                    } for term in job_post_terms)
 
                 except JobPostTerms.DoesNotExist:
                     # Skip if a job doesn't have associated terms

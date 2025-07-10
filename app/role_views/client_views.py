@@ -146,6 +146,49 @@ class ClientDashboard(APIView):
         
 
 # Job Postings
+class ConnectedOrganizations(APIView):
+    def get(self, request):
+        try:
+            client = request.user
+            connections = ClientOrganizations.objects.filter(client__user = client)
+            connection_list = []
+            for connection in connections:
+                connection_list.append({
+                    "organization": connection.organization.name,
+                    "manager": connection.organization.manager.username,
+                    "manager_email": connection.organization.manager.email,
+                    "id": connection.id,
+                    "organization_code": connection.organization.org_code,
+                    "approval_status": connection.approval_status
+                })
+            return Response({"data":connection_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class AddOrganization(APIView):
+    def post(self, request):
+        try:
+            code = request.data.get('code')
+            try:
+                organization = Organization.objects.get(org_code = code)
+                client = ClientDetails.objects.get(user = request.user)
+                try:
+                    clientorganization = ClientOrganizations.objects.get(client = client, organization = organization)
+                    return Response({"error":"Both are already connected!"}, status=status.HTTP_400_BAD_REQUEST)
+                except ClientOrganizations.DoesNotExist:
+                    ClientOrganizations.objects.create(
+                        organization = organization,
+                        client = client,
+                    )
+                return Response({"message":"Connected with organization successfully"}, status=status.HTTP_200_OK)
+            except Organization.DoesNotExist:
+                return Response({"error":"Organization does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
 
 # Get Terms and Conditions by company code
 class GetOrganizationTermsView(APIView):
@@ -153,121 +196,102 @@ class GetOrganizationTermsView(APIView):
 
     def get(self, request):
         try:
-            user = request.user
-            org_code = request.GET.get("org_code")
-            organization_terms = get_object_or_404(OrganizationTerms, unique_code=org_code)
+            connection_id = request.GET.get('connection_id')
+            connection = ClientOrganizations.objects.get(id = connection_id)
+            connection_terms = ClientOrganizationTerms.objects.filter(client_organization = connection)
+            terms_list = []
+            for terms in connection_terms:
+                terms_list.append({
+                    "ctc_range" : terms.ctc_range,
+                    "service_fee": terms.service_fee,
+                    "service_fee_type": terms.service_fee_type,
+                    "replacement_clause": terms.replacement_clause,
+                    "invoice_after": terms.invoice_after,
+                    "payment_within": terms.payment_within,
+                    "interest_percentage": terms.interest_percentage,
+                    "connection_id": connection.id,
+                    "is_negotiated" : False,
+                })
+            negotiation_request = False
+            try:
+                negotiated_terms = NegotiationRequests.objects.get(client_organization=connection)
+                today = date.today()
+
+                if negotiated_terms.status == 'pending':
+                    negotiation_request = True
+
+                elif negotiated_terms.expiry_date > today and negotiated_terms.status == 'accepted':
+                    terms_list.append({
+                        "ctc_range" : negotiated_terms.ctc_range,
+                        "service_fee": negotiated_terms.service_fee,
+                        "replacement_clause": negotiated_terms.replacement_clause,
+                        "invoice_after": negotiated_terms.invoice_after,
+                        "payment_within": negotiated_terms.payment_within,
+                        "interest_percentage": negotiated_terms.interest_percentage,
+                        "connection_id": connection.id,
+                        "is_negotiated":True,
+                    })
+            except NegotiationRequests.DoesNotExist:
+                pass
+
+            isDraftExists = False
+            try:
+                draft = JobPostingDraftVersion.objects.get(username = request.user, organization= connection.organization)
+                isDraftExists= True
+            except JobPostingDraftVersion.DoesNotExist:
+                isDraftExists = False
+
             
-            client = get_object_or_404(ClientDetails, user=user)
-            
-            clientTerms = ClientTermsAcceptance.objects.filter(
-                client=client, organization=organization_terms.organization, valid_until__gte=timezone.now()
-            )
-
-            negotiation_request = NegotiationRequests.objects.filter(
-                client__user=user, organization=organization_terms.organization, status = 'pending'
-            )
-
-            if clientTerms.count() > 0:
-             organization_terms=clientTerms.first()
-            # else:
-            #     organization_terms = OrganizationTerms.objects.get(organization = organization_terms.organization, uniqu)
-
-            terms_serializer = OrganizationTermsSerializer(organization_terms)
-            terms_data = terms_serializer.data
-
-
-
-            negotiated_data = (
-                NegotiationSerializer(negotiation_request.first()).data if negotiation_request.exists() else None
-            )
-
-            context = {
-                "service_fee": terms_data.get("service_fee"),
-                "invoice_after": terms_data.get("invoice_after"),
-                "payment_within": terms_data.get("payment_within"),
-                "replacement_clause": terms_data.get("replacement_clause"),
-                "interest_percentage": terms_data.get("interest_percentage"),
-                "data": terms_data,
-            }
-
-            context["data_json"] = json.dumps(context["data"])
-
-            html_context = {"service_fee": terms_data.get("service_fee"), 
-                "invoice_after": terms_data.get("invoice_after"), 
-                "payment_within": terms_data.get("payment_within"), 
-                "replacement_clause": terms_data.get("replacement_clause"), 
-                "data_json": json.dumps(terms_data)}
-            
-            
-            html = render(request, "organizationTerms.html", html_context).content.decode("utf-8")
-
-
-            draft_jobs = JobPostingDraftVersion.objects.filter(username = request.user, organization = organization_terms.organization)
-
-            if draft_jobs.exists():
-
-                return Response({"negotiated_data": negotiated_data, "terms_data": context, "html": html, "draft_exists": True},
-                status=status.HTTP_200_OK,)
-
-
-            return JsonResponse(
-                {"negotiated_data": negotiated_data, "terms_data": context, "html": html},
-                safe=False,
-                status=status.HTTP_200_OK,
-            )
-
+            return Response({"data": terms_list, "negotiation_request": negotiation_request, "isDraftExists":isDraftExists},status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))  
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
-
-
 class JobPostingView(APIView):
     permission_classes = [IsClient] 
 
-    def addTermsAndConditions(self, job_post, code):
+    def addTermsAndConditions(self, job_post, connection_id):
         try:
-            organization = OrganizationTerms.objects.get(unique_code = code).organization
+            connection = ClientOrganizations.objects.get(id = connection)
+            client_organization_terms = ClientOrganizationTerms.objects.filter(client_organization = connection)
+            negotiated_terms = NegotiationRequests.objects.get(client_organization = connection, status = "accepted", expiry_date__gt = datetime.today().date)
 
-        except OrganizationTerms.DoesNotExist:
+            
+            for terms in client_organization_terms:
+                
+                JobPostTerms.objects.create(
+                        job_id=job_post,
+                        service_fee = terms.service_fee,
+                        replacement_clause = terms.replacement_clause,
+                        invoice_after = terms.invoice_after,
+                        payment_within = terms.payment_within,
+                        interest_percentage = terms.interest_percentage,
+                )
+            if negotiated_terms:
+
+                JobPostTerms.objects.create(
+                        job_id=job_post,
+                        service_fee = negotiated_terms.service_fee,
+                        replacement_clause = negotiated_terms.replacement_clause,
+                        invoice_after = negotiated_terms.invoice_after,
+                        payment_within = negotiated_terms.payment_within,
+                        interest_percentage = negotiated_terms.interest_percentage,
+                        is_negotiated =True,
+                )
+            
+            return Response({"message": "Job post terms added successfully"}, status=status.HTTP_201_CREATED)
+
+        except ClientOrganizations.DoesNotExist:
             return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        try:
-            client = ClientDetails.objects.get(user=job_post.username)
-        except ClientDetails.DoesNotExist:
-            return Response({"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        clientTerms = ClientTermsAcceptance.objects.filter(
-            client=client, organization=organization, valid_until__gte=timezone.now()
-        )
-        
-        if clientTerms.exists():
-            organization_terms = clientTerms.first()
-        else:
-            try:
-                organization_terms = OrganizationTerms.objects.get(unique_code = code)
-            except OrganizationTerms.DoesNotExist:
-
-                return Response({"error": "Organization terms not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        
-        try:
-            job_post_terms = JobPostTerms.objects.create(
-                job_id=job_post,
-                description=organization_terms.description,
-                service_fee=organization_terms.service_fee,
-                replacement_clause=organization_terms.replacement_clause,
-                invoice_after=organization_terms.invoice_after,
-                payment_within=organization_terms.payment_within,
-                interest_percentage=organization_terms.interest_percentage,
-                # valid_until=timezone.now() + timedelta(days=organization_terms.replacement_clause) 
-            )
+        except ClientOrganizationTerms.DoesNotExist:
+            return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+    
         except Exception as e:
             print(str(e))
             return Response({"error": f"Failed to create job post terms: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
             
-        return Response({"message": "Job post terms added successfully", "terms_id": job_post_terms.id}, status=status.HTTP_201_CREATED)
         
     def generate_unique_jobcode(self, user):
         try:
@@ -286,9 +310,8 @@ class JobPostingView(APIView):
         data = request.data
         username = request.user 
 
-        organization_terms_code = data.get('organization_code')
-        organization = OrganizationTerms.objects.get(unique_code=organization_terms_code).organization
-
+        connection_id = request.data.get('connection_id')
+        organization = ClientOrganizations.objects.get(id= connection_id).organization
         if not organization:
             return Response({"error": "Invalid organization code"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -297,6 +320,16 @@ class JobPostingView(APIView):
         if not generated_job_code:
                 return Response({"error": "Failed to generate job code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+        description_file = None
+
+        # If user uploaded a new file
+        if 'description_file' in request.FILES:
+            description_file = request.FILES['description_file']
+        # If it's coming as a URL (previously uploaded file from draft)
+        elif request.data.get("description_file") and isinstance(request.data.get("description_file"), str):
+            description_file = request.data.get("description_file")  # Save the URL as string or handle logic
+
+        
         try:
             with transaction.atomic():
                 job_close_duration= data.get('job_close_duration')
@@ -304,7 +337,7 @@ class JobPostingView(APIView):
 
                 job_posting = JobPostings.objects.create(
                     username=username,
-                    description_file = request.FILES.get('description_file') if request.FILES.get('description_file') else None,
+                    description_file = description_file,
                     organization=organization,
                     jobcode = generated_job_code,
                     job_title=data.get('job_title', ''),
@@ -382,7 +415,7 @@ class JobPostingView(APIView):
                             mode_of_interview=round_data.get('mode_of_interview'),
                         )
 
-                self.addTermsAndConditions(job_posting, organization_terms_code)
+                self.addTermsAndConditions(job_posting, connection_id)
 
                 job_draft = JobPostingDraftVersion.objects.get(organization = organization, username = request.user)
                 job_draft.delete()
@@ -2124,7 +2157,7 @@ class CandidateLeftView(APIView):
             reason = request.data.get('reason')
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
-            candidate.joining_status = 'left'      # by default candidate resigned date is considered as today
+            candidate.joining_status = 'left'      
             candidate.resigned_date = date.today()
             candidate.left_reason = reason
             candidate.save()
@@ -2132,8 +2165,9 @@ class CandidateLeftView(APIView):
             if reason == "performance_issues":  
                 candidate.is_replacement_eligible = False
             else:
-                terms = JobPostTerms.objects.get(job_id=candidate.application.job_location.job_id)
-                replacement_clause = terms.replacement_clause  # Number of days within which replacement is allowed
+                job_post_terms = JobPostTerms.objects.filter(job_id=candidate.application.job_location.job_id)
+
+                replacement_clause = 30 #change here
 
                 resigned_date = candidate.resigned_date
                 candidate_joining_date = candidate.joining_date
@@ -2902,11 +2936,11 @@ class FullJobDraftView(APIView):
 class ContinueDraftView(APIView):
     def get(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            company = OrganizationTerms.objects.get(unique_code = company_code).organization
+            connection_id = request.GET.get('connection_id')
+            organization = ClientOrganizations.objects.get(id = connection_id).organization
             user = request.user
             try:
-                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization = company)
+                job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization = organization)
             except JobPostingDraftVersion.DoesNotExist():
                 return Response({"error":"Draft doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -2918,14 +2952,14 @@ class ContinueDraftView(APIView):
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 class CreateNewDraftView(APIView):
-    def get(self, request):
+    def post(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
+            connection_id = request.GET.get('connection_id')
+            organization = ClientOrganizations.objects.get(id= connection_id).organization
             try:
+                print("draft exists")
                 job_draft = JobPostingDraftVersion.objects.get(username = request.user, organization = organization)
                 job_draft.delete()
-
 
             except JobPostingDraftVersion.DoesNotExist:
                 pass
@@ -2940,8 +2974,9 @@ class CreateNewDraftView(APIView):
 class SkillSetDraftView(APIView):
     def post(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
+            connection_id = request.GET.get('connection_id')
+            organization = ClientOrganizations.objects.get(id= connection_id).organization
+
             is_primary = request.GET.get('is_primary')  == 'true'
             user = request.user
             data = request.data.get('skills')
@@ -2990,8 +3025,8 @@ class SkillSetDraftView(APIView):
 class LocationDraftView(APIView):
     def post(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
+            connection_id = request.GET.get('connection_id')
+            organization = ClientOrganizations.objects.get(id= connection_id).organization
             
             user = request.user
             data = request.data.get('locations')
@@ -3038,8 +3073,8 @@ class LocationDraftView(APIView):
 class JobDraftView(APIView):
     def patch(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
+            connection_id = request.GET.get('connection_id')
+            organization = ClientOrganizations.objects.get(id= connection_id).organization
             
             user = request.user
             data = request.data
@@ -3065,8 +3100,9 @@ class JobDraftView(APIView):
 class InterviewersDraftView(APIView):
     def post(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            organization = OrganizationTerms.objects.get(unique_code = company_code).organization
+            connection_id = request.GET.get('connection_id')
+            organization = ClientOrganizations.objects.get(id= connection_id).organization
+
             user = request.user
             data = request.data.get("interview_rounds", [])
 
@@ -3124,9 +3160,9 @@ class InterviewersDraftView(APIView):
 class DeleteNegotiation(APIView):
     def delete(self, request):
         try:
-            company_code = request.GET.get('company_code')
-            organization = OrganizationTerms.objects.get(unique_code=company_code).organization
-            NegotiationRequests.objects.filter(organization=organization).delete()
+            connection_id = request.GET.get('connection_id')
+            connection = ClientOrganizations.objects.get(id = connection_id)
+            NegotiationRequests.objects.filter(client_organization = connection).delete()
             return Response({"message":"Negotiations deleted successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             print("Error:", str(e))

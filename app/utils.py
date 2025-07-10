@@ -732,3 +732,61 @@ def get_resume_storage_usage(manager_user):
         'total_size_mb': total_size_mb,
         'total_files': len(seen_files)
     }
+def get_invoice_terms(selected_application_id):
+    from decimal import Decimal
+
+    selected_application = SelectedCandidates.objects.get(id=selected_application_id)
+    job = selected_application.application.job_location.job_id
+    job_terms = JobPostTerms.objects.filter(job_id=job)
+
+    selected_ctc = float(selected_application.ctc)
+
+    def parse_ctc_range(ctc_range_str):
+        try:
+            clean_range = ctc_range_str.replace("LPA", "").replace(" ", "")
+            min_str, max_str = clean_range.split("-")
+            return float(min_str), float(max_str)
+        except Exception as e:
+            raise ValueError(f"Invalid CTC range format: '{ctc_range_str}'")
+
+    # Step 1: Try negotiated terms first
+    try:
+        negotiated_terms = job_terms.get(is_negotiated=True)
+        min_ctc, max_ctc = parse_ctc_range(negotiated_terms.ctc_range)
+
+        if selected_ctc <= max_ctc:
+            service_fee = float(negotiated_terms.service_fee)
+            invoice_amount = round((selected_ctc * 100000) * (service_fee / 100), 2)
+
+            return {
+                "source": "negotiated",
+                "selected_ctc": selected_ctc,
+                "service_fee_percent": service_fee,
+                "invoice_amount": invoice_amount,
+                "terms": negotiated_terms
+            }
+    except JobPostTerms.DoesNotExist:
+        pass  
+
+    # Step 2: Try matching from regular terms
+    fallback_terms = job_terms.filter(is_negotiated=False)
+
+    for term in fallback_terms:
+        try:
+            min_ctc, max_ctc = parse_ctc_range(term.ctc_range)
+            if min_ctc <= selected_ctc <= max_ctc:
+                service_fee = float(term.service_fee)
+                invoice_amount = round((selected_ctc * 100000) * (service_fee / 100), 2)
+
+                return {
+                    "source": "standard",
+                    "selected_ctc": selected_ctc,
+                    "service_fee_percent": service_fee,
+                    "invoice_amount": invoice_amount,
+                    "terms": term
+                }
+        except Exception as e:
+            continue  # Skip invalid range terms
+
+    # Step 3: No matching terms found
+    return {"error": "No applicable service fee terms for the selected CTC"}

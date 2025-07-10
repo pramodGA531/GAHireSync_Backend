@@ -61,9 +61,16 @@ class OrganizationTermsSerializer(serializers.ModelSerializer):
         model = OrganizationTerms
         fields = '__all__'
 
-class NegotiationSerializer(serializers.ModelSerializer):
+class ClientOrganziationSerializer(serializers.ModelSerializer):
     organization = OrganizationSerializer()
     client = ClientDetailsSerializer()
+
+    class Meta:
+        model = ClientOrganizations
+        fields = '__all__'
+
+class NegotiationSerializer(serializers.ModelSerializer):
+    client_organization = ClientOrganziationSerializer()
     class Meta:
         model = NegotiationRequests
         fields = '__all__' 
@@ -255,11 +262,6 @@ class InterviewScheduleSerializer(serializers.ModelSerializer):
 class CandidateEvaluationSerializer(serializers.ModelSerializer):
     class Meta:
         model = CandidateEvaluation
-        fields = '__all__'  
-
-class ClientTermsAcceptanceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ClientTermsAcceptance
         fields = '__all__'  
 
 class InterviewDetailsEditedSerializer(serializers.ModelSerializer):

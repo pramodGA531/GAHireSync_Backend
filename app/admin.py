@@ -79,12 +79,6 @@ class CandidateEvaluationAdmin(admin.ModelAdmin):
     list_filter = ('score',)
     ordering = ('-interview_schedule__scheduled_date',)
 
-@admin.register(ClientTermsAcceptance)
-class ClientTermsAcceptanceAdmin(admin.ModelAdmin):
-    list_display = ('client', 'accepted_date', 'valid_until')
-    search_fields = ('client__name_of_organization',)
-    ordering = ('-accepted_date',)
-
 @admin.register(JobPostingsEditedVersion)
 class JobPostingEditedVersionAdmin(admin.ModelAdmin):
     list_display= ('id','version_number','user','status')
@@ -99,6 +93,7 @@ admin.site.register(CandidateCertificates)
 admin.site.register(CandidateEducation)
 admin.site.register(CandidateExperiences)
 admin.site.register(RecruiterProfile)
+admin.site.register(ClientOrganizationTerms)
 
 @admin.register(SelectedCandidates)
 class SelectedCandidatesAdmin(admin.ModelAdmin):
@@ -153,7 +148,7 @@ class NotificationsAdmin(admin.ModelAdmin):
 
 @admin.register(NegotiationRequests)
 class NegotiationRequestsAdmin(admin.ModelAdmin):
-    list_display = ('client','organization','status')
+    list_display = ('client_organization','status')
 
 admin.site.register(LinkedinIntegrations)
 
@@ -170,7 +165,10 @@ class JobLocationsModelAdmin(admin.ModelAdmin):
 admin.site.register(JobLocationsDraftVersion)
 admin.site.register(AssignedJobs)
 
-
+@admin.register(ClientOrganizations)
+class ClientOrganizationsAdmin(admin.ModelAdmin):
+    list_display = ('client','organization','approval_status')
+    search_fields = ('client__user__username', 'organization__manager__username')
 
 
 admin.site.register(ReplacementCandidates)

@@ -44,6 +44,8 @@ urlpatterns = [
 
     path("client/information/", ClientInfo.as_view(), name="client-info"),
     path('client/dashboard/',ClientDashboard.as_view(), name='client-dashboard-details'),
+    path('client/connected-organizations/',ConnectedOrganizations.as_view(), name='client-connected-organizations'),
+    path('client/add-organization/',AddOrganization.as_view(), name='client-add-organization'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
     path('client/edit-job-count/', EditJobsCountView.as_view(), name='count-of-number-of-edit-requests'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
@@ -144,7 +146,6 @@ urlpatterns = [
     
     path('manager/clients-data/', ClientsData.as_view(), name='get-invoices'),
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
-    
     path('manager/all-alerts/', ManagerAllAlerts.as_view(), name='manager-all-alerts'),
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
     path('manager/information/',OrganizationView.as_view(),name='org-info'),
@@ -165,6 +166,8 @@ urlpatterns = [
     path('manager/job/post_on_linkedin/',PostOnLinkedIn.as_view(), name='manager-tracking-recruiters'),
     path('manager/recruiter-summary/',RecSummaryMetrics.as_view(), name='manager-recruiter-summary'),
     path('manager/fetch-reumes/',ManagerResumeBankView.as_view(), name='manager-fetch-all-resumes'),
+    path('manager/reject-approval-client/',RejectApprovalClient.as_view(), name='manager-reject-client-approval'),
+    path('manager/accept-approval-client/',AcceptApprovalClient.as_view(), name='manager-accept-client-approval'),
     
 
     

@@ -137,13 +137,46 @@ class ClientDetails(models.Model):
     interviewers = models.ManyToManyField(CustomUser, related_name="client_interviewers", blank=True)
     def __str__(self):
         return self.name_of_organization
+    
 
+class ClientOrganizations(models.Model):
+    client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    approval_status = models.CharField(default='pending',max_length=20)
+    created_at = models.DateField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ('client','organization')
+
+    def __str__(self):
+        return f"{self.client.user.username} - {self.organization.manager.username}"
+    
+class ClientOrganizationTerms(models.Model):
+    PERCENTAGE = 'percentage'
+    FIXED = 'fixed'
+    SERVICE_TYPE_CHOICES = [
+        (PERCENTAGE, 'percentage'),
+        (FIXED, 'fixed')
+    ]
+
+    client_organization = models.ForeignKey(ClientOrganizations, on_delete=models.CASCADE)
+    ctc_range = models.CharField(default="5,6", max_length=30)
+    service_fee_type = models.CharField(default="percentage", max_length=20, choices=SERVICE_TYPE_CHOICES)
+    service_fee = models.DecimalField(max_digits=15, decimal_places=2, default=8.33)
+    description = models.TextField(default ='')
+    replacement_clause = models.IntegerField(default=90)
+    invoice_after = models.IntegerField(default=30)
+    payment_within = models.IntegerField(default=7)
+    interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
+    is_negotiated = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.client_organization} terms"
 
 # Job Postings Model
 class JobPostings(models.Model):
     id = models.AutoField(primary_key=True)
-    description_file = models.FileField(upload_to='Resumes/', blank=True, null=True)
+    description_file = models.FileField(upload_to='JobDescriptions/', blank=True, null=True)
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
     jobcode = models.CharField(max_length=40,default='jcd0')
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
@@ -420,7 +453,7 @@ class CandidateSkillSet(models.Model):
         return f"{self.candidate.candidate_name}'s skill {self.skill_name}"
     
 class JobPostTerms(models.Model):
-    job_id = models.OneToOneField(JobPostings, on_delete=models.CASCADE)
+    job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     description = models.TextField(default ='')
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
     replacement_clause = models.IntegerField(default=90)
@@ -428,7 +461,7 @@ class JobPostTerms(models.Model):
     payment_within = models.IntegerField(default=7)
     interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    is_negotiated = models.BooleanField(default=False)
 
     def is_valid(self):
         return self.valid_until >= timezone.now()
@@ -509,37 +542,6 @@ class JobApplication(models.Model):
     def __str__(self):
         return f"{self.resume.candidate_name} applied for {self.job_location.job_id.job_title}"
 
-
-
-# Terms Acceptance Model
-class ClientTermsAcceptance(models.Model):
-
-    client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="client_terms")
-    description = models.TextField(default ='')
-    service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
-    replacement_clause = models.IntegerField(default=90)
-    invoice_after = models.IntegerField(default=30)
-    payment_within = models.IntegerField(default=7)
-    interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
-    accepted_date = models.DateTimeField(auto_now_add=True)
-    valid_until = models.DateTimeField()
-
-
-    def is_valid(self):
-        return self.valid_until >= timezone.now()
-
-    def save(self, *args, **kwargs):
-        if not self.valid_until:
-            accepted_date = timezone.now()
-            self.valid_until = accepted_date + timedelta(days=180)
-        super(ClientTermsAcceptance, self).save(*args, **kwargs)
-
-    def __str__(self):
-        return f"Terms accepted by {self.client.name_of_organization}"
-
-
-
 class NegotiationRequests(models.Model):
 
     ACCEPTED = 'accepted'
@@ -552,9 +554,10 @@ class NegotiationRequests(models.Model):
         (REJECTED, 'rejected')
     ]
     
-    client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="negotiation_client_terms")
+    client_organization = models.ForeignKey(ClientOrganizations,  on_delete=models.CASCADE, related_name='negotiation_requests')
+    ctc_range = models.CharField(max_length=50, null=True, blank=True)
     service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
+    service_fee_type = models.CharField(max_length= 20, choices=ClientOrganizationTerms.SERVICE_TYPE_CHOICES, default="percentage")
     replacement_clause = models.IntegerField(default=90)
     description = models.TextField(default = '', blank=True, null=True)
     invoice_after = models.IntegerField(default=30)
@@ -567,7 +570,7 @@ class NegotiationRequests(models.Model):
     expiry_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
-        return f"negotiation by {self.client.name_of_organization}"
+        return f"negotiation by {self.client_organization.client.name_of_organization}"
 
 
 # Candidate profile model to store all the candidate details
@@ -930,7 +933,6 @@ class HiresyncLinkedinCred(models.Model):
 class JobPostingDraftVersion(models.Model):
     username = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={"role": "client"})
     description_file = models.FileField(upload_to='Resumes/', blank=True, null=True)
-    jobcode = models.CharField(max_length=40, default='jcd0', blank=True)
     current_step = models.IntegerField(default=1)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, blank=True, null=True)
     job_title = models.CharField(max_length=255, blank=True)
@@ -952,7 +954,6 @@ class JobPostingDraftVersion(models.Model):
     decision_maker_email = models.CharField(max_length=100, blank=True)
     bond = models.CharField(max_length=255, blank=True)
     rotational_shift = models.BooleanField(default=False)
-    status = models.CharField(max_length=10, default='opened', blank=True)
     assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_jobs_draft', limit_choices_to={"role": "recruiter"}, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     age = models.CharField(max_length=255, blank=True)
@@ -966,12 +967,9 @@ class JobPostingDraftVersion(models.Model):
     differently_abled = models.CharField(max_length=40, blank=True)
     languages = models.CharField(max_length=100, blank=True)
     job_close_duration = models.DateField(null=True, blank=True)
-    approval_status = models.CharField(max_length=10, default="pending", blank=True)
-    reason = models.TextField(default="", null=True, blank=True)
-    is_linkedin_posted = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ('username', 'jobcode')
+        unique_together = ('username','organization')
 
     def get_languages(self):
         return self.languages.split(",") if self.languages else []

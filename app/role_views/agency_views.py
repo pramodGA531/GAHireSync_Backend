@@ -20,6 +20,8 @@ from rest_framework.views import APIView
 import requests
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Sum  
+from decimal import Decimal, InvalidOperation
+
 
 
 class AgencyJobApplications(APIView):
@@ -1261,6 +1263,18 @@ class ClientsData(APIView):
             else:
                 jobs = JobPostings.objects.filter(organization__manager=user).order_by('created_at')
                 data = []
+                requests = ClientOrganizations.objects.filter(organization__manager = request.user, approval_status = 'pending')
+                requests_list= []
+                for connection_request in requests:
+                    requests_list.append(
+                        {
+                            "company_name": connection_request.client.name_of_organization,
+                            "client_name": connection_request.client.user.username,
+                            "client_email": connection_request.client.user.email,
+                            "id": connection_request.id
+                        }
+                    )
+
                 added_clients = set()  
                 for job_item in jobs:
                     client = ClientDetails.objects.filter(user=job_item.username).first()
@@ -1277,8 +1291,68 @@ class ClientsData(APIView):
                         })
                         added_clients.add(client.username)  
 
-                return Response(data, status=200)
+                return Response({"data":data, "connection_requests":requests_list}, status=200)
 
+
+        except Exception as e:
+            print(str(e))
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class RejectApprovalClient(APIView):
+    permission_classes = [IsManager]
+    def post(self, request):
+        try:
+            connection_id = request.GET.get('connection_id')
+            connection = ClientOrganizations.objects.get(id = connection_id)
+            connection.approval_status = 'rejected'
+            connection.save()
+            return Response({"message":"Rejected successfully"}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(str(e))
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class AcceptApprovalClient(APIView):
+    permission_classes = [IsManager]
+    def post(self, request):
+        try:
+            connection_id = request.GET.get('connection_id')
+            if not connection_id:
+                return Response({'error': 'Missing connection_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                connection = ClientOrganizations.objects.get(id=connection_id)
+            except ClientOrganizations.DoesNotExist:
+                return Response({'error': 'Invalid connection_id'}, status=status.HTTP_404_NOT_FOUND)
+            connection = ClientOrganizations.objects.get(id = connection_id)
+
+            terms_list = request.data.get('terms')
+            if not isinstance(terms_list, list):
+                return Response({'error': 'Expected a list of terms'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            
+            with transaction.atomic():
+                connection.approval_status = "accepted"
+                connection.save()
+                for terms in terms_list:
+                    print(terms.get('service_fee_type'), terms)
+                    try:
+                        raw_fee = terms.get('service_fee')
+                        service_fee = Decimal(str(raw_fee)) if raw_fee is not None else Decimal("0.00")
+                        print(service_fee)
+                    except InvalidOperation:
+                        return Response({'error': f"Invalid service_fee value: {raw_fee}"}, status=status.HTTP_400_BAD_REQUEST)
+                    ClientOrganizationTerms.objects.create(
+                        client_organization = connection,
+                        service_fee_type = terms.get('service_fee_type'),
+                        ctc_range = terms.get('ctc_range'),
+                        service_fee = service_fee,
+                        replacement_clause = terms.get('replacement_clause'),
+                        invoice_after = terms.get('invoice_after'),
+                        payment_within = terms.get('payment_within'),
+                        interest_percentage = terms.get('interest_percentage')
+                    )
+            return Response({"message":"Accepted successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
             print(str(e))
@@ -1825,6 +1899,30 @@ class ManagerResumeBankView(APIView):
                 "recruiters": recruiters
             })
 
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class ConnectionRequests(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            connection_id = request.GET.get('connection_id')
+            if connection_id:
+                pass
+            
+            requests = ClientOrganizations.objects.filter(organization__manager = request.user, approval_status = 'pending')
+            requests_list= []
+            for connection_request in requests:
+                requests_list.append(
+                    {
+                        "company_name": connection_request.client.name_of_organization,
+                        "client_name": connection_request.client.user.username,
+                        "client_email": connection_request.client.user.email,
+                        "id": connection_request.id
+                    }
+                )
+            return Response({"data":requests_list}, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
