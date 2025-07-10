@@ -1452,6 +1452,8 @@ class CandidatesOnHold(APIView):
 
 class HandleSelect(APIView):
     permission_classes = [IsClient]
+
+
     def post(self, request):
         try:
             id = request.GET.get('id')
@@ -1460,7 +1462,7 @@ class HandleSelect(APIView):
 
             job_post = JobPostings.objects.get(id = application.job_location.job_id.id)
 
-            selected_applications = SelectedCandidates.objects.filter(application__job_location__job_id = job_post.id , joining_status = 'joined').count()
+            selected_applications = application.job_location.positions_closed
 
             if selected_applications >= application.job_location.positions or application.job_location.status == 'closed':
                 return Response({"error":"All Job Postings are filled, If you want to recruit extra members recruit renew your job post with locations"}, status = status.HTTP_400_BAD_REQUEST)
@@ -1479,10 +1481,11 @@ class HandleSelect(APIView):
             application.status = 'selected'
             application.save()
             
+            update_location_status(application.job_location.id)
+            
             customCand=CustomUser.objects.get(email=candidate.email)
             job = application.job_location.job_id
-            
-            
+        
             Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
@@ -1492,7 +1495,7 @@ class HandleSelect(APIView):
     f"Dear {customCand.username},\n\n"
     f"Congratulations!\n\n"
     f"We are excited to inform you that you have been selected for the position of {job.job_title}"
-    f"Your joining date is scheduled for{selectedCand.joining_date}, and your agreed CTC is {selectedCand.ctc}.\n\n"
+    f"Your joining date is scheduled for {selectedCand.joining_date}, and your agreed CTC is {selectedCand.ctc}.\n\n"
     f"We look forward to having you on board!\n\n"
     f"please accept the offer In the dashboard"
     f"link::candidate/selected_jobs/"
@@ -1519,7 +1522,7 @@ class HandleSelect(APIView):
         
     def put(self, request):
         try:
-            id = request.GET.get('id')  # ID of the SelectedCandidates entry
+            id = request.GET.get('id')  
             new_date = request.data.get('joining_date')
 
             if not new_date:
@@ -2060,11 +2063,14 @@ class ShortlistedCandidatesView(APIView):
                 applications_list.append(
                     {
                         "application_id": application.id,
+                        "job_id":application.job_location.job_id.id,
                         "job_title":application.job_location.job_id.job_title,
                         "candidate_name": application.resume.candidate_name,
                         "current_status": application.round_num,
                         "agency": application.job_location.job_id.organization.name,
+                        "job_location": application.job_location.location,
                         "next_interview": application.next_interview.scheduled_date if application.next_interview else "No Interviews",
+                        "location_status": application.job_location.status,
                     }
                 )
             return Response(applications_list, status=status.HTTP_200_OK)
@@ -2393,7 +2399,8 @@ class CompareListView(APIView):
                                 status=status.HTTP_400_BAD_REQUEST)
 
             # Fetch the job details
-            job = JobLocationsModel.objects.filter(id=location_id).first().job_id
+            job_location = JobLocationsModel.objects.filter(id = location_id).first()
+            job = job_location.job_id
             if not job:
                 return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -2402,6 +2409,7 @@ class CompareListView(APIView):
                 "job_id": job.id,
                 "job_title": job.job_title,
                 "job_description": job.job_description,
+                "location_status": job_location.status,
                 "ctc": job.ctc,
                 "interviews": interviews.count()
             }
@@ -3167,3 +3175,4 @@ class DeleteNegotiation(APIView):
         except Exception as e:
             print("Error:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+

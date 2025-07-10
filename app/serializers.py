@@ -470,10 +470,11 @@ class IncomingApplicationSerializer(serializers.ModelSerializer):
     candidate_name = serializers.CharField(source='resume.candidate_name')
     candidate_email = serializers.EmailField(source='resume.candidate_email')
     date_of_birth = serializers.DateField(source='resume.date_of_birth')
+    location_status = serializers.CharField(source= 'job_location.status')
 
     class Meta:
         model = JobApplication
-        fields = ['id', 'candidate_name', 'candidate_email', 'date_of_birth', 'status']
+        fields = ['id', 'candidate_name', 'candidate_email', 'date_of_birth', 'status', 'location_status']
 
 
 class IncomingApplicationDetailSerializer(serializers.ModelSerializer):

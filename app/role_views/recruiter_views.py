@@ -253,6 +253,8 @@ class ScheduleInterview(APIView):
                         "to_time":application.next_interview.to_time if application.next_interview else None,
                         "status":application.next_interview.status if application.next_interview else None,
                         "scheduled_date":application.next_interview.scheduled_date if application.next_interview else None,
+                        "job_location": application.job_location.location,
+                        "location_status": application.job_location.status,
                         "interviewer_name": interviewer,
                     })
                 
@@ -657,7 +659,7 @@ class RecJobDetails(APIView):
                 summary = summarize_jd(job)
             except:
                 summary = ''
-            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count}, status=status.HTTP_200_OK)
+            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count, "job_status": job.status}, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"detail": "Job not found"}, status=status.HTTP_400_BAD_REQUEST)
@@ -744,7 +746,7 @@ class ResumesSent(APIView):
         if not job_posting:
             return Response({"error": "Job posting not found or not assigned to you"}, status=404)
 
-        applications = JobApplication.objects.filter(job_location = job_assigned.job_location , attached_to=user)
+        applications = JobApplication.all_objects.filter(job_location = job_assigned.job_location , attached_to=user)
 
         applications_data = [
             {
@@ -754,6 +756,7 @@ class ResumesSent(APIView):
                 "status": app.status,
                 "app_sent_date":app.created_at,
                 "application_id": app.id,
+                "application_closed": app.is_closed,
             }
             for app in applications
         ]
@@ -867,7 +870,7 @@ class IncomingApplicationsView(APIView):
                     primary_skills = SkillMetricsModel.objects.filter(job_id = application.job_location.job_id, is_primary = True).values('skill_name')
                     secondary_skills = SkillMetricsModel.objects.filter(job_id = application.job_location.job_id, is_primary = False).values('skill_name')
             
-                    return Response({"data":application_json, "primary_skills": primary_skills, "secondary_skills": secondary_skills}, status=status.HTTP_200_OK)
+                    return Response({"data":application_json, "primary_skills": primary_skills, "secondary_skills": secondary_skills, "location_status":application.job_location.status}, status=status.HTTP_200_OK)
 
                 except JobApplication.DoesNotExist:
                     print(str(e))
@@ -880,8 +883,6 @@ class IncomingApplicationsView(APIView):
                 sender=None,
                 attached_to=None
             )
-
-            print(applications)
 
             serializer = IncomingApplicationSerializer(applications,many= True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -991,3 +992,15 @@ class RejectIncomingApplication(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ReopenApplication(APIView):
+    def put(self, request):
+        try:
+            application_id = request.GET.get('application_id')
+            application = JobApplication.all_objects.get(id = application_id)
+            application.is_closed = False
+            application.save()
+            return Response({'message':"Application Reopened successfully"}, status = status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   

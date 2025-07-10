@@ -8,15 +8,8 @@ from django.core.mail import EmailMultiAlternatives, EmailMessage
 import fitz
 from django.template.loader import render_to_string
 from docx import Document
-import io
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from reportlab.platypus import Table, TableStyle
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.utils.encoding import force_bytes, force_str
-from django.contrib.sites.shortcuts import get_current_site
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.http import urlsafe_base64_encode
 import six
 from rest_framework.pagination import PageNumberPagination
 from .models import *
@@ -31,6 +24,7 @@ import logging
 from pdf2image import convert_from_path
 import uuid
 from django.http import JsonResponse, Http404
+from django.db.models import Q
 
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -790,3 +784,62 @@ def get_invoice_terms(selected_application_id):
 
     # Step 3: No matching terms found
     return {"error": "No applicable service fee terms for the selected CTC"}
+
+
+
+def update_location_status(location_id):
+    try:
+        location_instance = JobLocationsModel.objects.get(id = location_id)
+        location_instance.positions_closed += 1
+        if(location_instance.positions_closed == location_instance.positions):
+            location_instance.status = 'closed'
+            applications = JobApplication.objects.filter(
+                Q(job_location=location_id), ~Q(status__in = ['rejected','selected'])
+            )
+
+            for application in applications:
+                application.next_interview = None
+                application.is_closed = True
+                application.save()
+                
+                # send mail here
+
+
+        location_instance.save()
+        job_locations = JobLocationsModel.objects.filter(job_id=location_instance.job_id)
+
+        for location in job_locations:
+            if location.status == 'opened':
+                return False 
+
+        job = JobPostings.objects.get(id=location_instance.job_id.id)
+        job.status = 'closed'
+        job.save()
+        return True  
+    
+    except Exception as e:
+        print(f"Error verifying job status: {str(e)}")
+        return False  
+
+
+def reopen_joblocation(location_id):
+    try:
+        
+
+        job_location = JobLocationsModel.objects.get(id = location_id)
+        job_location.status = 'opened'
+        job_location.positions_closed = max(0, job_location.positions_closed - 1)  # prevent negative
+        job_location.save()
+
+        job = job_location.job_id
+        job.status = 'opened'
+        job.save()
+
+        return "Job location reopened successfully"
+    
+    except JobApplication.DoesNotExist:
+        return "Joblocation not found."
+
+    except Exception as e:
+        print(f"Error updating candidate left status: {str(e)}")
+        return False

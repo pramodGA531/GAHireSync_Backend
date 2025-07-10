@@ -248,6 +248,7 @@ class JobLocationsModel(models.Model):
     location = models.CharField(max_length=50)
     job_type = models.CharField(max_length=10, choices=WORK_CHOICES)
     positions = models.IntegerField(default=0)
+    positions_closed = models.IntegerField(default=0)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='opened')
 
     def __str__(self):
@@ -499,7 +500,12 @@ class InterviewSchedule(models.Model):
     def __str__(self):
         return f"Interview scheduled for {self.candidate.candidate_name} at {self.scheduled_date}"
     
-    
+
+# Job Applicaiton manager to hide the applications which are closed
+class ActiveApplicationsManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_closed=False)    
+
 # Job Application Model
 class JobApplication(models.Model):
     SELECTED = 'selected'
@@ -536,8 +542,12 @@ class JobApplication(models.Model):
     updated_at = models.DateTimeField(auto_now = True,)
     sender = models.ForeignKey(CustomUser, related_name='Actual_sender', on_delete=models.CASCADE, null=True, limit_choices_to={'role':"recruiter"})
     is_incoming = models.BooleanField(default=False)
+    is_closed = models.BooleanField(default = False)
+    objects = ActiveApplicationsManager() 
+    all_objects = models.Manager()
     class Meta:
         unique_together = ('job_location','resume')
+        default_manager_name = 'objects'
 
     def __str__(self):
         return f"{self.resume.candidate_name} applied for {self.job_location.job_id.job_title}"

@@ -703,6 +703,7 @@ class BasicApplicationDetails(APIView):
                 "job_type": resume_details.current_job_type,
                 "notice_period": resume_details.notice_period,
                 "resume": resume_details.resume.url if resume_details.resume else None,
+                "application_id": application.id,
             }
 
             return Response(application_json, status=status.HTTP_200_OK)
@@ -1561,3 +1562,54 @@ class SendApplicationDetailsView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+class UpdateJoiningDate(APIView):
+    permission_classes = [IsClient]
+    def put(self, request):
+        try:
+            selected_candidate_id = request.GET.get('candidate_id')
+            selected_candidate = SelectedCandidates.objects.get(id = selected_candidate_id)
+            joining_date = request.data.get('updated_date')
+            selected_candidate.joining_date = joining_date
+            selected_candidate.save()
+            # send maiil to recruiter and candidate that the joining date is updates
+            return Response({"message":"Joining date updated successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class UpdateCandidateLeft(APIView):
+    permission_classes = [IsClient]
+
+    def put(self, request):
+        try:
+            selected_candidate_id = request.GET.get('candidate_id')
+            want_new_candidate = request.data.get('want_new_candidate', False)
+
+            if not selected_candidate_id:
+                return Response({"error": "Missing candidate_id in query params."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                selected_candidate = SelectedCandidates.objects.get(id=selected_candidate_id)
+            except SelectedCandidates.DoesNotExist:
+                return Response({"error": "Selected candidate not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            # Update statuses
+            selected_candidate.joining_status = 'left'
+            selected_candidate.application.status = 'left'
+            selected_candidate.left_reason = "Candidate did not join on the joining date"
+
+            selected_candidate.application.save()
+            selected_candidate.save()
+
+            # Handle reopening if requested
+            if str(want_new_candidate).lower() == "true":
+                reopen_joblocation(selected_candidate.application.job_location.id)
+                return Response({"message": "Job reopened successfully."}, status=status.HTTP_200_OK)
+
+            return Response({"message": "Candidate left status updated successfully."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": "Internal server error: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

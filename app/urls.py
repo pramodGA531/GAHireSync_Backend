@@ -136,9 +136,10 @@ urlpatterns = [
     path('recruiter/resumesent/',ResumesSent.as_view(),name="resumes-sent"),
     path('recruiter/all-scheduled-interviews/',AllScheduledInterviews.as_view(), name='all-scheduled-interviews' ),
     path('recruiter/get-interview-marks/', GetIntervieweRemarks.as_view(), name='get-interview-remarks'),
-    path('recruiter/incoming-applications/', IncomingApplicationsView.as_view(), name='get-interview-remarks'),
-    path('recruiter/accept-incoming-applications/', AcceptIncomingApplication.as_view(), name='get-interview-remarks'),
-    path('recruiter/reject-incoming-applications/', RejectIncomingApplication.as_view(), name='get-interview-remarks'),
+    path('recruiter/incoming-applications/', IncomingApplicationsView.as_view(), name='incoming-applications'),
+    path('recruiter/accept-incoming-applications/', AcceptIncomingApplication.as_view(), name='accept-incoming-application'),
+    path('recruiter/reject-incoming-applications/', RejectIncomingApplication.as_view(), name='reject-incoming-application'),
+    path('recruiter/application/reopen/', ReopenApplication.as_view(), name='reopen-the-application'),
 
     path('get_invoices/',Invoices.as_view()),
     path('update_invoices/',Invoices.as_view()),
@@ -372,6 +373,9 @@ urlpatterns = [
     path('change-password/', ChangePassword.as_view(), name='change-password'),
     
     path('view-applications/', AllApplicationsForJob.as_view(), name='view-all-applications-for-job-id'),
+    path('application/update-joining/', UpdateJoiningDate.as_view(), name='updated-candidate-joining-date'),
+    path('application/candidate-left/', UpdateCandidateLeft.as_view(), name='updated-candidate-joining-date'),
+
 
     path('view_candidate_profile/', ViewCandidateProfileAPI.as_view(), name = 'view candidate profile'),
     path('candidate_status_for_job/',CandidateStatusForJobView.as_view(), name='candidate-status-for-particular-job'),
