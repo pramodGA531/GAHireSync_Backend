@@ -151,7 +151,36 @@ def confirm_joining_client(self):
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
-    
+
+
+@shared_task(bind=True)
+def notify_invoice_client_task(self, invoice_id):
+    try:
+        invoice = InvoiceGenerated.objects.get(id=invoice_id)
+
+        if getattr(invoice, "is_canceled", False) or invoice.invoice_status == InvoiceGenerated.SENT:
+            return "Invoice is canceled or already sent"
+
+        subject = f"Invoice Reminder: Application #{invoice.application_id}"
+        message = f"""Dear {invoice.client.email},
+
+This is a reminder for your invoice of ₹{invoice.final_price} scheduled on {invoice.scheduled_date}.
+"""
+
+        send_custom_mail(subject, body=message, to_email=[invoice.client.user.email])
+
+        invoice.invoice_status = InvoiceGenerated.SENT
+        invoice.save()
+
+        return "Invoice notification sent successfully"
+
+    except InvoiceGenerated.DoesNotExist:
+        return f"Invoice with ID {invoice_id} does not exist"
+
+    except Exception as e:
+        self.retry(exc=e, countdown=60, max_retries=3)
+        return f"Retrying due to error: {e}"
+
 
     
 

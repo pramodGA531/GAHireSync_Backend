@@ -109,7 +109,7 @@ class JobPostTermsAdmin(admin.ModelAdmin):
     
 @admin.register(InvoiceGenerated)
 class InvoiceGeneratedAdmin(admin.ModelAdmin):
-    list_display = ('application_id','organization_id','organization_email','client_id','client_email','terms_id','status','created_at','payment_method','payment_transaction_id','payment_verification')
+    list_display = ('selected_candidate','invoice_calculated','created_at','invoice_status','payment_status')
     
 
 
@@ -172,3 +172,4 @@ class ClientOrganizationsAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ReplacementCandidates)
+

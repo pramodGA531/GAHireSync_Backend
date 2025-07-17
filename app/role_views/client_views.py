@@ -7,8 +7,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
 from datetime import datetime
-from django.http import HttpResponse, JsonResponse
-from django.template.loader import render_to_string
 from datetime import date
 from django.db.utils import IntegrityError
 from django.shortcuts import get_object_or_404
@@ -18,6 +16,9 @@ from collections import defaultdict
 from django.utils.timesince import timesince
 from django.shortcuts import render
 from rest_framework.viewsets import ModelViewSet
+from django.utils.timezone import now
+from datetime import date
+
 
 
 
@@ -147,6 +148,36 @@ class ClientDashboard(APIView):
 
 # Job Postings
 class ConnectedOrganizations(APIView):
+    def get_job_post_limit(self, organization_id):
+        try:
+            organization = Organization.objects.get(id=organization_id)
+        except Organization.DoesNotExist:
+            return False
+
+        try:
+            org_plan = OrganizationPlan.objects.get(organization=organization, is_active=True)
+        except OrganizationPlan.DoesNotExist:
+            return False
+
+        plan = org_plan.plan
+        if not plan:
+            return False
+
+        try:
+            feature = Feature.objects.get(code='active_job_posts')
+        except Feature.DoesNotExist:
+            return False
+
+        try:
+            plan_feature = PlanFeature.objects.get(plan=plan, feature=feature)
+            job_limit = plan_feature.limit
+        except PlanFeature.DoesNotExist:
+            return False
+
+        current_jobs = JobPostings.objects.filter(organization=organization, is_active=True).count()
+
+        return current_jobs < job_limit if job_limit is not None else True
+
     def get(self, request):
         try:
             client = request.user
@@ -159,7 +190,8 @@ class ConnectedOrganizations(APIView):
                     "manager_email": connection.organization.manager.email,
                     "id": connection.id,
                     "organization_code": connection.organization.org_code,
-                    "approval_status": connection.approval_status
+                    "approval_status": connection.approval_status,
+                    "can_add_new": self.get_job_post_limit(connection.organization.id)
                 })
             return Response({"data":connection_list}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -252,33 +284,45 @@ class JobPostingView(APIView):
     permission_classes = [IsClient] 
 
     def addTermsAndConditions(self, job_post, connection_id):
+        print("adding terms and conditions")
         try:
-            connection = ClientOrganizations.objects.get(id = connection)
-            client_organization_terms = ClientOrganizationTerms.objects.filter(client_organization = connection)
-            negotiated_terms = NegotiationRequests.objects.get(client_organization = connection, status = "accepted", expiry_date__gt = datetime.today().date)
+            connection = ClientOrganizations.objects.get(id = connection_id)
+            print("connectio is", connection)
+   
 
-            
+            client_organization_terms = ClientOrganizationTerms.objects.filter(client_organization = connection)
+            try:
+                negotiated_terms = NegotiationRequests.objects.get(client_organization = connection, status = "accepted", expiry_date__gt = date.today())
+            except NegotiationRequests.DoesNotExist:
+                pass
+
             for terms in client_organization_terms:
-                
+                print(terms.service_fee, terms.interest_percentage, type(terms.service_fee), type(terms.interest_percentage))
                 JobPostTerms.objects.create(
                         job_id=job_post,
-                        service_fee = terms.service_fee,
+                        service_fee_type = terms.service_fee_type,
+                        service_fee=safe_decimal(terms.service_fee),
                         replacement_clause = terms.replacement_clause,
                         invoice_after = terms.invoice_after,
                         payment_within = terms.payment_within,
-                        interest_percentage = terms.interest_percentage,
+                        interest_percentage=safe_decimal(terms.interest_percentage),
+                        ctc_range = terms.ctc_range,
                 )
             if negotiated_terms:
 
                 JobPostTerms.objects.create(
                         job_id=job_post,
-                        service_fee = negotiated_terms.service_fee,
+                        service_fee = safe_decimal(negotiated_terms.service_fee),
+                        service_fee_type = negotiated_terms.service_fee_type,
                         replacement_clause = negotiated_terms.replacement_clause,
                         invoice_after = negotiated_terms.invoice_after,
                         payment_within = negotiated_terms.payment_within,
-                        interest_percentage = negotiated_terms.interest_percentage,
+                        interest_percentage = safe_decimal(negotiated_terms.interest_percentage),
                         is_negotiated =True,
-                )
+                        ctc_range = negotiated_terms.ctc_range,
+                )  
+            
+            print("job post terms aare added")
             
             return Response({"message": "Job post terms added successfully"}, status=status.HTTP_201_CREATED)
 
@@ -289,7 +333,7 @@ class JobPostingView(APIView):
             return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
     
         except Exception as e:
-            print(str(e))
+            print(str(e), " is the error")
             return Response({"error": f"Failed to create job post terms: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
             
         
@@ -322,12 +366,10 @@ class JobPostingView(APIView):
         
         description_file = None
 
-        # If user uploaded a new file
         if 'description_file' in request.FILES:
             description_file = request.FILES['description_file']
-        # If it's coming as a URL (previously uploaded file from draft)
         elif request.data.get("description_file") and isinstance(request.data.get("description_file"), str):
-            description_file = request.data.get("description_file")  # Save the URL as string or handle logic
+            description_file = request.data.get("description_file")  
 
         
         try:
@@ -376,6 +418,8 @@ class JobPostingView(APIView):
                 primary_skills = json.loads(data.get('primary_skills'))
                 secondary_skills = json.loads(data.get('secondary_skills'))
                 location_data = json.loads(data.get('location_data'))
+
+                print("entered here")
 
                 for skill in primary_skills:
                     skill_metric = SkillMetricsModel.objects.create(
@@ -1668,7 +1712,7 @@ class ReopenJob(APIView):
             new_positions = request.data.get('num_of_positions', job_post.num_of_positions)
             new_ctc_range = request.data.get('ctc', job_post.ctc)
             new_job_close_duration = request.data.get('job_close_duration', job_post.job_close_duration)
-
+            locations = JobLocationsModel.objects.filter(job_id = job_post).values_list('location','positions')
             generated_job_code = self.generate_unique_jobcode(request.user)
 
             if not generated_job_code:
@@ -1687,10 +1731,10 @@ class ReopenJob(APIView):
                         organization=job_post.organization,
                         job_title=job_post.job_title,
                         job_department=job_post.job_department,
+                        job_locations = locations,
                         job_description=job_post.job_description,
                         years_of_experience=job_post.years_of_experience,
                         rounds_of_interview=job_post.rounds_of_interview,
-                        job_locations=job_post.job_locations,
                         job_type=job_post.job_type,
                         probation_type=job_post.probation_type,
                         job_level=job_post.job_level,
@@ -1707,7 +1751,6 @@ class ReopenJob(APIView):
                         visa_status=job_post.visa_status,
                         passport_availability=job_post.passport_availability,
                         time_period=job_post.time_period,
-                        qualification_department=job_post.qualification_department,
                         notice_period=job_post.notice_period,
                         notice_time=job_post.notice_time,
                         industry=job_post.industry,
@@ -1910,55 +1953,17 @@ class AllSelectedCandidates(APIView):
         except Exception as e:
             return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
         
-
-class AllJoinedCandidates(APIView):
-    permission_classes = [IsClient]
-
-    def get(self, request):
-        try:
-            applications = JobApplication.objects.filter(
-                job_id__username=request.user
-            ).select_related("selected_candidates")  # Use select_related for OneToOneField
-
-            candidates_list = []
-
-            for application in applications:
-                candidate = getattr(application, "selected_candidates", None)  # Safely get the attribute
-                
-                if candidate :
-                    job_details_json = {
-                        "job_title": application.job_id.job_title,
-                        "created_at": application.job_id.created_at,
-                        "candidates": [
-                            {
-                                "candidate_name": candidate.candidate.name.username,
-                                "joining_status": candidate.joining_status,
-                                "candidate_id": candidate.id,
-                                "is_replacement_eligible": candidate.is_replacement_eligible,
-                            }
-                        ],
-                    }
-                    candidates_list.append(job_details_json)
-
-            if not candidates_list:
-                return Response({"message": "No joined candidates found"}, status=status.HTTP_404_NOT_FOUND)
-
-            return Response(candidates_list, status=status.HTTP_200_OK)
-
-        except JobApplication.DoesNotExist:
-            return Response({"error": "No job applications found"}, status=status.HTTP_404_NOT_FOUND)
-
-        except Exception as e:
-            return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
 class CandidateLeftView(APIView):
     def post(self, request):
         try:
             reason = request.data.get('reason')
             candidate_id = request.GET.get('candidate_id')
             candidate = SelectedCandidates.objects.get(id = candidate_id)
+            invoice = InvoiceGenerated.objects.get(selected_candidate = candidate)
             candidate.joining_status = 'left'
             candidate.resigned_date = date.today()
+            if invoice.payment_status == 'Paid':
+                pass
             if reason == "performance_issues":
                 candidate.is_replacement_eligible = False
             else:
@@ -2221,34 +2226,41 @@ class CandidateLeftView(APIView):
 class CandidateJoined(APIView):
     permission_classes = [IsClient]
 
-    def check_all_positions_filled(self, application_id):
-        application = JobApplication.objects.get(id = application_id)
-        total_location_positions = application.job_location.positions
+    def generateInvoice(self, selected_candidate_id):
+        selected_candidate = SelectedCandidates.objects.get(id = selected_candidate_id)
+        job = selected_candidate.application.job_location.job_id
+        client = ClientDetails.objects.get(user = job.username)
+        organization = job.organization
+        terms_result = get_invoice_terms(selected_candidate_id)
 
-        all_applications = JobApplication.objects.filter(job_location = application.job_location)
-        number_of_filled = SelectedCandidates.objects.filter(application__in = all_applications, joining_status = 'joined').count()
-
-
-        if(total_location_positions <= number_of_filled):
-            job_location = application.job_location
-            job_location.status = 'closed'
-            job_location.save()
-
-            for application in all_applications:
-                if application.next_interview:
-                    application.next_interview.status = "cancelled"
-                    application.next_interview.save()
+        if "error" in terms_result:
+            raise ValueError(terms_result["error"])
 
 
-        opened_locations = JobLocationsModel.objects.filter(job_id = application.job_location.job_id, status = 'opened')
-        if opened_locations.exists():
-            return False
-    
-        application.job_location.job_id.status = 'closed'
-        application.job_location.job_id.save()
+        selected_ctc = terms_result["selected_ctc"]
+        service_fee = terms_result["service_fee_percent"]
+        invoice_amount = terms_result["invoice_amount"]
+        terms_id = terms_result["terms_id"]
+        cgst = terms_result['cgst']
+        sgst = terms_result['sgst']
+        final_price = terms_result['final_price']
 
-        return True
+        job_terms = JobPostTerms.objects.get(id = terms_id)
+        invoice_after = job_terms.invoice_after
 
+        scheduled_date = now() + timedelta(days=invoice_after)
+            
+        new_invoice = InvoiceGenerated.objects.create(
+            client = client,
+            organization = organization, 
+            selected_candidate = selected_candidate,
+            terms_id = job_terms,
+            invoice_calculated = invoice_amount,
+            final_price = final_price,
+            cgst = cgst,
+            sgst = sgst,
+            scheduled_date = scheduled_date,
+        )
 
     def post(self, request):
         try:
@@ -2258,6 +2270,8 @@ class CandidateJoined(APIView):
                 candidate = SelectedCandidates.objects.get(id = candidate_id)
                 candidate.joining_status = "joined"
                 candidate.save()
+
+                self.generateInvoice(candidate_id)
                 
 
                 Notifications.objects.create(
@@ -2271,14 +2285,11 @@ class CandidateJoined(APIView):
                         f"has successfully joined for the position of {candidate.application.job_location.job_id.job_title}.\n\n"
                     )
                 )
-
-                is_filled = self.check_all_positions_filled(candidate.application.id)
-
-                if is_filled:
-                    return Response({"message":"All Job openings are filled, job post is closed successfully"}, status=status.HTTP_200_OK)
                 
-                else:
-                    return Response({"candidate status updated successfully"}, status=status.HTTP_200_OK)
+                return Response({"candidate status updated successfully"}, status=status.HTTP_200_OK)
+            
+        except SelectedCandidates.DoesNotExist:
+            return Response({"error": "Candidate not found"}, status=status.HTTP_404_NOT_FOUND)
                 
         except Exception as e:
             print(str(e))

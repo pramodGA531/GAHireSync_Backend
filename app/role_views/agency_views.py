@@ -1892,11 +1892,17 @@ class ManagerResumeBankView(APIView):
                     "attached_to":application.attached_to.email
                 })
 
+            
+            selectedPlan = OrganizationPlan.objects.get(organization__manager = request.user ).plan
+            storage_feature = PlanFeature.objects.get(feature__code = 'storage', plan = selectedPlan)
+            storage_limit = storage_feature.limit
+
             return paginator.get_paginated_response({
                 "resumes": page,
                 "storage": get_resume_storage_usage(request.user) ,
                 "applications": applications_list,
-                "recruiters": recruiters
+                "recruiters": recruiters,
+                "storage_limit": storage_limit
             })
 
         except Exception as e:

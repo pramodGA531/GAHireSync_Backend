@@ -25,6 +25,11 @@ from pdf2image import convert_from_path
 import uuid
 from django.http import JsonResponse, Http404
 from django.db.models import Q
+from celery.app.control import Control
+from decimal import Decimal, InvalidOperation
+from django.utils.encoding import force_bytes
+
+
 
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -726,6 +731,8 @@ def get_resume_storage_usage(manager_user):
         'total_size_mb': total_size_mb,
         'total_files': len(seen_files)
     }
+
+
 def get_invoice_terms(selected_application_id):
     from decimal import Decimal
 
@@ -743,7 +750,6 @@ def get_invoice_terms(selected_application_id):
         except Exception as e:
             raise ValueError(f"Invalid CTC range format: '{ctc_range_str}'")
 
-    # Step 1: Try negotiated terms first
     try:
         negotiated_terms = job_terms.get(is_negotiated=True)
         min_ctc, max_ctc = parse_ctc_range(negotiated_terms.ctc_range)
@@ -751,13 +757,19 @@ def get_invoice_terms(selected_application_id):
         if selected_ctc <= max_ctc:
             service_fee = float(negotiated_terms.service_fee)
             invoice_amount = round((selected_ctc * 100000) * (service_fee / 100), 2)
+            cgst = 0
+            sgst = 0
+            final_price = 0
 
             return {
                 "source": "negotiated",
                 "selected_ctc": selected_ctc,
                 "service_fee_percent": service_fee,
                 "invoice_amount": invoice_amount,
-                "terms": negotiated_terms
+                "terms_id": negotiated_terms.id,
+                "cgst":cgst,
+                "sgst":sgst,
+                "final_price":final_price,
             }
     except JobPostTerms.DoesNotExist:
         pass  
@@ -769,15 +781,26 @@ def get_invoice_terms(selected_application_id):
         try:
             min_ctc, max_ctc = parse_ctc_range(term.ctc_range)
             if min_ctc <= selected_ctc <= max_ctc:
+                service_fee_type = term.service_fee_type
                 service_fee = float(term.service_fee)
-                invoice_amount = round((selected_ctc * 100000) * (service_fee / 100), 2)
+                if service_fee_type == 'percentage':
+                    invoice_amount = round((selected_ctc * 100000) * (service_fee / 100), 2)
+                else:
+                    invoice_amount = service_fee
+                
+                cgst = 0
+                sgst = 0
+                final_price = 0
 
                 return {
                     "source": "standard",
                     "selected_ctc": selected_ctc,
                     "service_fee_percent": service_fee,
                     "invoice_amount": invoice_amount,
-                    "terms": term
+                    "terms_id": term.id,     
+                    "cgst":cgst,
+                    "sgst":sgst,
+                    "final_price":final_price,
                 }
         except Exception as e:
             continue  # Skip invalid range terms
@@ -843,3 +866,20 @@ def reopen_joblocation(location_id):
     except Exception as e:
         print(f"Error updating candidate left status: {str(e)}")
         return False
+
+
+def cancel_invoice_notification(invoice):
+
+    try:
+        task_record = InvoiceNotificationTask.objects.get(invoice=invoice)
+        Control.revoke(task_record.task_id, terminate=True)  
+        task_record.delete()  
+        return True
+    except InvoiceNotificationTask.DoesNotExist:
+        return False  
+    
+def safe_decimal(val):
+    try:
+        return Decimal(str(val)) if val is not None else Decimal("0.0")
+    except InvalidOperation:
+        raise ValueError(f"Invalid decimal value: {val}")

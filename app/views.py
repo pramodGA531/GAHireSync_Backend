@@ -1613,3 +1613,21 @@ class UpdateCandidateLeft(APIView):
         except Exception as e:
             print("Error:", str(e))
             return Response({"error": "Internal server error: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FetchPlans(APIView):
+    def get(self, request):
+        try:
+            plans = Plan.objects.all()
+            plans_list = []
+            for plan in plans:
+                plans_list.append({
+                    "name": plan.name,
+                    "price": plan.price,
+                    "duration": plan.duration_days,
+                    "id":plan.id,
+                })
+            return Response({"data":plans_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)

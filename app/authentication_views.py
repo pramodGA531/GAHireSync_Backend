@@ -19,6 +19,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.template import Template, Context
 from django.shortcuts import get_object_or_404
 from .utils import *
+from django.utils.encoding import force_str
 
 
 frontend_url = os.environ['FRONTENDURL']
@@ -220,8 +221,8 @@ class AgencySignupView(APIView):
         if Organization.objects.filter(org_code=org_code).exists():
             return Response({"error": "Organization with the give code already exists"}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            print(combined_values.get('company_pan'), " These are the combined values")
             with transaction.atomic():
+                selected_plan_id = combined_values.get('selected_plan')
                 user_serializer = CustomUserSerializer(data={
                     'email': combined_values.get('email'),
                     'username': combined_values.get('username'),
@@ -247,14 +248,21 @@ class AgencySignupView(APIView):
                     }
                     
                     org_serializer = OrganizationSerializer(data=org_data)
+                    selected_plan = Plan.objects.get(id = selected_plan_id)
                     
                     if org_serializer.is_valid(raise_exception=True):
-                        org_serializer.save()
+                        organization = org_serializer.save()
+                        organization_plan = OrganizationPlan.objects.create(
+                            organization = organization,
+                            plan = selected_plan,
+                            expiry_date  = timezone.now() + timedelta(days=selected_plan.duration_days),
+                        )
 
                     try:
                         send_email_verification_link(user, True , "manager")
 
                     except Exception as e:
+                        print(str(e))
                         print(f"Error sending verification link: {str(e)}")
 
                     return Response({"message": "Verification link successfully sent to your mail"}, status=status.HTTP_201_CREATED)

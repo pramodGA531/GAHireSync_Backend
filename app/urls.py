@@ -5,7 +5,9 @@ from .views import *
 
 urlpatterns = [
     path('signup/client/',ClientSignupView.as_view(),name="client_signup"),
+
     path('signup/agency/',AgencySignupView.as_view(),name="agency_signup"),
+    path('get-plans/',FetchPlans.as_view(),name="agency_signup"),
     path('login/', LoginView.as_view(), name='login'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('verify-token/',VerifyTokenView.as_view(), name='verify-token'),

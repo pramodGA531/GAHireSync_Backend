@@ -4,6 +4,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 import uuid
+from django.utils.timezone import now
 # Custom User Manager
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, role=None, **extra_fields):
@@ -72,10 +73,10 @@ class Organization(models.Model):
     name = models.CharField(max_length=255)
     org_code = models.CharField(max_length=255,unique=True)
     contact_number = models.CharField(max_length=255,unique=True)
-    website_url = models.CharField(max_length=255,unique=True)
+    website_url = models.CharField(max_length=255, blank=True)
     gst_number = models.CharField(max_length=255,blank=True)
-    company_pan = models.CharField(max_length=255,unique=True)
-    company_address = models.CharField(max_length=255,unique=True)
+    company_pan = models.CharField(max_length=255)
+    company_address = models.CharField(max_length=255)
     is_subscribed = models.BooleanField(default=False)
     manager = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="managing_organization")
     recruiters = models.ManyToManyField(CustomUser, related_name="recruiting_organization", blank=True)
@@ -132,7 +133,7 @@ class ClientDetails(models.Model):
     contact_number = models.BigIntegerField()
     website_url = models.CharField(max_length=255)
     gst_number = models.CharField(max_length=100, blank=True)
-    company_pan = models.CharField(max_length=20)
+    company_pan = models.CharField(max_length=20, blank=True)
     company_address = models.TextField()
     interviewers = models.ManyToManyField(CustomUser, related_name="client_interviewers", blank=True)
     def __str__(self):
@@ -456,12 +457,14 @@ class CandidateSkillSet(models.Model):
 class JobPostTerms(models.Model):
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     description = models.TextField(default ='')
-    service_fee = models.DecimalField(max_digits=5, decimal_places=2, default=8.33)
+    service_fee_type = models.CharField(max_length=30, choices=ClientOrganizationTerms.SERVICE_TYPE_CHOICES, default="percentage")
+    service_fee = models.DecimalField(max_digits=20, decimal_places=2, default=8.33)
     replacement_clause = models.IntegerField(default=90)
     invoice_after = models.IntegerField(default=30)
     payment_within = models.IntegerField(default=7)
     interest_percentage = models.DecimalField(max_digits=4, decimal_places=2, default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
+    ctc_range  = models.CharField(default="",null=True, max_length=50, blank=True)
     is_negotiated = models.BooleanField(default=False)
 
     def is_valid(self):
@@ -756,32 +759,71 @@ class SelectedCandidates(models.Model):
         return self.application.resume.candidate_name
     
 class InvoiceGenerated(models.Model):
+    # Status constants
     PENDING = 'Pending'
     PAID = 'Paid'
+    SCHEDULED = 'Scheduled'
+    SENT = 'Sent'
 
     STATUS_CHOICES = [
         (PENDING, 'Pending'),
         (PAID, 'Paid'),
     ]
 
-    application = models.ForeignKey('JobApplication', on_delete=models.CASCADE,null=True,blank=True)
-    organization = models.ForeignKey('Organization', on_delete=models.CASCADE,null=True,blank=True)
-    client =models.ForeignKey('CustomUser', on_delete=models.CASCADE,null=True,blank=True)
-    organization_email = models.EmailField()
-    payment_transaction_id=models.CharField(null=True,blank=True,default="null",max_length=20)
-    client_email = models.EmailField()
-    terms_id = models.IntegerField()
-    payment_method=models.CharField(null=True,blank=True,default="null",max_length=20)
+    INVOICE_STATUS_CHOICES = [
+        (SCHEDULED, 'Scheduled'),
+        (SENT, 'Sent'),
+    ]
+
+    selected_candidate = models.ForeignKey(SelectedCandidates, on_delete=models.CASCADE)
+    organization = models.ForeignKey('Organization', on_delete=models.CASCADE)
+    client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
+    terms_id = models.ForeignKey(JobPostTerms, on_delete=models.CASCADE)
+
+    invoice_calculated = models.DecimalField(default=0.0, null=True, max_digits=30, decimal_places=3)
+    final_price = models.DecimalField(default=0.0, null=True, max_digits=30, decimal_places=3)
+    cgst = models.DecimalField(default=0.0, null=True, blank=True, max_digits=30, decimal_places=3)
+    sgst = models.DecimalField(default=0.0, null=True, blank=True, max_digits=30, decimal_places=3)
+
+    invoice_status = models.CharField(max_length=20, choices=INVOICE_STATUS_CHOICES, default=SCHEDULED)
+    is_canceled = models.BooleanField(default=False)
+
+    scheduled_date = models.DateTimeField()
+    payment_transaction_id = models.CharField(null=True, blank=True, default="null", max_length=50)
+    payment_method = models.CharField(null=True, blank=True, default="null", max_length=50)
     payment_verification = models.BooleanField("Payment Verified", default=False)
-    status = models.CharField(
+
+    payment_status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
-        default=PENDING 
+        default=PENDING
     )
-    created_at = models.DateTimeField(auto_now_add=True)  
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Invoice for Application {self.application_id} - {self.client_email} ({self.status})"
+        return f"Invoice #{self.id} for Application {self.selected_candidate.application} - {self.client.user.email} ({self.invoice_status})"
+
+    def save(self, *args, **kwargs):
+        from .tasks import notify_invoice_client_task 
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        # if is_new or kwargs.get('force_reschedule', False):
+        #     eta = self.scheduled_date
+        #     if eta > now():
+        #         result = notify_invoice_client_task.apply_async(args=[self.id], eta=eta)
+        #         InvoiceNotificationTask.objects.update_or_create(
+        #             invoice=self,
+        #             defaults={"task_id": result.id, "scheduled_time": eta}
+        #         )
+
+
+class InvoiceNotificationTask(models.Model):
+    invoice = models.OneToOneField('InvoiceGenerated', on_delete=models.CASCADE)
+    task_id = models.CharField(max_length=255)
+    scheduled_time = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
 
 
 class Accountants(models.Model):
@@ -1048,3 +1090,74 @@ class InterviewerDetailsDraftVersion(models.Model):
 
     def __str__(self):
         return self.name.username if self.name else "Unnamed Interviewer"
+    
+
+class Feature(models.Model):
+    code = models.CharField(max_length=100, unique=True) 
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Plan(models.Model):
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(unique=True)
+    duration_days = models.PositiveIntegerField(default=30)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    features = models.ManyToManyField(Feature, through='PlanFeature', related_name='plans')
+
+    def __str__(self):
+        return self.name
+    
+class PlanFeature(models.Model):
+    plan = models.ForeignKey(Plan, on_delete=models.CASCADE)
+    feature = models.ForeignKey(Feature, on_delete=models.CASCADE)
+    limit = models.IntegerField(null=True, blank=True)  # None = Unlimited
+
+    class Meta:
+        unique_together = ('plan', 'feature')
+
+    def __str__(self):
+        return f"{self.plan.name} - {self.feature.code}: {self.limit if self.limit is not None else 'Unlimited'}"
+
+class OrganizationPlan(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='subscriptions')
+    plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, related_name='organization_plans')
+    start_date = models.DateTimeField(default=timezone.now)
+    expiry_date = models.DateTimeField()
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    payment_reference = models.CharField(max_length=255, null=True, blank=True)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    is_active = models.BooleanField(default=True)  # Marks if this is the current active plan
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.plan.name if self.plan else 'No Plan'}"
+
+    class Meta:
+        ordering = ['-start_date']
+
+
+
+class PlanHistory(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='plan_history')
+    plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True)
+    subscribed_at = models.DateTimeField()
+    expired_at = models.DateTimeField()
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_reference = models.CharField(max_length=255, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.plan.name if self.plan else 'Plan History'}"
+
+    class Meta:
+        ordering = ['-subscribed_at']
+

@@ -202,6 +202,11 @@ SIMPLE_JWT = {
 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
+
+USE_TZ = True  # Important for timezone-aware datetimes
+TIME_ZONE = 'Asia/Kolkata'
+
+
 # CELERY SET UP HERE 
 
 
@@ -211,8 +216,8 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CELERY_TIMEZONE = 'Asia/Kolkata'
-CELERY_BROKER_URL = 'redis://redis:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 
 
 
