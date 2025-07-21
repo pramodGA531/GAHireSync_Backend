@@ -18,6 +18,9 @@ from ..utils import *
 from django.http import JsonResponse
 from django.core.files.base import File
 from django.core.files.storage import default_storage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Recruiter Profile
@@ -659,10 +662,10 @@ class RecJobDetails(APIView):
                 summary = summarize_jd(job)
             except:
                 summary = ''
-            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count, "job_status": job.status}, status=status.HTTP_200_OK)
+            return Response({'jd':serializer.data,'summary':summary, 'count':resume_count, "job_status": job.status, "can_add_new": can_upload_new(org.id)}, status=status.HTTP_200_OK)
         except Exception as e:
-            print(str(e))
-            return Response({"detail": "Job not found"}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error(f" {str(e)}")
+            return Response({"detail": "Something went wrong"}, status=status.HTTP_400_BAD_REQUEST)
         
 class OrganizationApplications(APIView):
     permission_classes = [IsRecruiter]

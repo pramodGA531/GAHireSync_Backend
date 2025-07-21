@@ -28,6 +28,7 @@ from django.db.models import Q
 from celery.app.control import Control
 from decimal import Decimal, InvalidOperation
 from django.utils.encoding import force_bytes
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 
 
 
@@ -423,21 +424,19 @@ def calculate_invoice_amounts(selected_candidate, terms, client_gst, org_gst):
     
     return result
 
-def create_invoice_context(invoice):
-
+def create_invoice_context(invoice_id):
+    invoice= InvoiceGenerated.objects.get(id = invoice_id)
     organization=invoice.organization
-    job=invoice.application.job_id
-    client_details = ClientDetails.objects.get(user = invoice.client)
-    selected_candidate=SelectedCandidates.objects.get(application=invoice.application)
-    terms=JobPostTerms.objects.get(job_id=invoice.application.job_id)
-    result=calculate_invoice_amounts(selected_candidate,terms,client_details.gst_number,organization.gst_number)
+    job=invoice.selected_candidate.application.job_location.job_id
+    client_details = invoice.client
+    selected_candidate= invoice.selected_candidate
+    terms = invoice.terms_id
 
-    # Prepare invoice context
     context = {
-        "url":"backend.hirsync",# make this dynamic 
-        "invoice_id": f"{invoice.organization_id}/{invoice.client_id}/{invoice.id}/{invoice.created_at.date()}",  
+        "url":"backend.hirsync",
+        "invoice_id": invoice.invoice_code,  
         "date":invoice.created_at.date(),
-        "service_provider_name": job.organization.name,
+        "service_provider_name": organization.name,
         "candidate_name":selected_candidate.candidate.name,
         "client_name": job.username.username,
         "client_email": job.username.email,
@@ -454,17 +453,16 @@ def create_invoice_context(invoice):
         "date_of_joining":selected_candidate.joining_date,
         "ctc": selected_candidate.ctc, 
         "service_fee_percentage":terms.service_fee,
-        "service_fee":result["service_fee"],
-        "sub_total":result["sub_total"],
-        "cgst":result["cgst"],
-        "sgst":result["sgst"],
-        "igst":result["igst"],
-        # "date": now().date(), 
-        "total_amount":result["total_amount"],
-        # "payment_within": 32,
-        # "service_fee_percentage":terms.interest_percentage,
-        # "invoice_after": 12,
-        # "replacement_clause": 23,
+        "service_fee":invoice.terms_id.service_fee,
+        "sub_total":invoice.sub_total,
+        "cgst":invoice.cgst,
+        "sgst":invoice.sgst,
+        "igst":invoice.igst,
+        "total_amount":invoice.final_price,
+        "payment_within": terms.payment_within,
+        "service_fee_percentage":terms.service_fee,
+        "invoice_after": terms.invoice_after,
+        "replacement_clause": terms.replacement_clause,
         # "email": job.username.email
     }
     return context
@@ -707,7 +705,7 @@ def get_resume_storage_usage(manager_user):
     total_size_bytes = 0
 
     # Get all resumes under the manager's org
-    applications = JobApplication.objects.filter(
+    applications = JobApplication.all_objects.filter(
         job_location__job_id__organization__manager=manager_user
     ).select_related('resume')
 
@@ -883,3 +881,61 @@ def safe_decimal(val):
         return Decimal(str(val)) if val is not None else Decimal("0.0")
     except InvalidOperation:
         raise ValueError(f"Invalid decimal value: {val}")
+    
+
+
+
+def get_selected_plan_limit(organization_id, feature_code):
+    try:
+        organization = Organization.objects.get(id=organization_id) 
+        org_plan = OrganizationPlan.objects.get(organization=organization)
+        plan_feature = PlanFeature.objects.get(plan=org_plan.plan, feature__code=feature_code)
+        return plan_feature.limit
+    
+    except OrganizationPlan.DoesNotExist:
+        raise ValueError(f"No plan found for organization '{organization.name}'.")
+    except MultipleObjectsReturned:
+        raise ValueError(f"Multiple plans found for organization '{organization.name}', expected one.")
+    except Organization.DoesNotExist:
+        raise ValueError(f"Organization with ID {organization_id} does not exist.")
+    except PlanFeature.DoesNotExist:
+        raise ValueError(f"Feature '{feature_code}' is not available in the selected plan.")
+    except MultipleObjectsReturned:
+        raise ValueError(f"Multiple features found for code '{feature_code}' in the selected plan.")
+    except Exception as e:
+        raise ValueError(f"{str(e)}")
+    
+
+
+def can_upload_new(organization_id):
+    try:
+        organization = Organization.objects.get(id=organization_id)
+    except Organization.DoesNotExist:
+        raise ValueError(f"Organization with ID {organization_id} does not exist.")
+
+    try:
+        storage_used = get_resume_storage_usage(organization.manager)
+        mb_used = storage_used.get('total_size_mb', 0)
+        mb_limit = get_selected_plan_limit(organization_id, "storage")
+
+        if mb_limit is None:
+            raise ValueError("Storage limit not defined in the selected plan.")
+
+        return mb_used < mb_limit
+    except Exception as e:
+        raise ValueError(f"{e}")
+
+
+def can_add_recruiter(organization_id):
+    try:
+        organization = Organization.objects.get(id=organization_id)
+    except Organization.DoesNotExist:
+        raise ValueError(f"Organization with ID {organization_id} does not exist.")
+
+    try:
+        recruiters = organization.recruiters.all().count()
+        allowed_recruiters = get_selected_plan_limit(organization_id, "recruiters")
+
+        return recruiters < allowed_recruiters
+    except Exception as e:
+        raise ValueError(f"{e}")

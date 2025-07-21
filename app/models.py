@@ -775,15 +775,18 @@ class InvoiceGenerated(models.Model):
         (SENT, 'Sent'),
     ]
 
+    invoice_code= models.CharField(max_length=50, default="123", unique=True )
     selected_candidate = models.ForeignKey(SelectedCandidates, on_delete=models.CASCADE)
-    organization = models.ForeignKey('Organization', on_delete=models.CASCADE)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     client = models.ForeignKey(ClientDetails, on_delete=models.CASCADE)
     terms_id = models.ForeignKey(JobPostTerms, on_delete=models.CASCADE)
 
     invoice_calculated = models.DecimalField(default=0.0, null=True, max_digits=30, decimal_places=3)
+    sub_total = models.DecimalField(default=0.0, null=True, max_digits=30, decimal_places=3)
     final_price = models.DecimalField(default=0.0, null=True, max_digits=30, decimal_places=3)
     cgst = models.DecimalField(default=0.0, null=True, blank=True, max_digits=30, decimal_places=3)
     sgst = models.DecimalField(default=0.0, null=True, blank=True, max_digits=30, decimal_places=3)
+    igst = models.DecimalField(default=0.0, null=True, blank=True, max_digits=30, decimal_places=3)
 
     invoice_status = models.CharField(max_length=20, choices=INVOICE_STATUS_CHOICES, default=SCHEDULED)
     is_canceled = models.BooleanField(default=False)
@@ -807,7 +810,12 @@ class InvoiceGenerated(models.Model):
     def save(self, *args, **kwargs):
         from .tasks import notify_invoice_client_task 
         is_new = self.pk is None
-        super().save(*args, **kwargs)
+        super().save(*args, **kwargs) 
+
+        if is_new:
+            self.invoice_code = f"{self.organization.org_code}-{self.client.id}-{self.created_at.date()}"
+            super().save(update_fields=['invoice_code'])
+
         # if is_new or kwargs.get('force_reschedule', False):
         #     eta = self.scheduled_date
         #     if eta > now():

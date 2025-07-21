@@ -152,29 +152,35 @@ class ConnectedOrganizations(APIView):
         try:
             organization = Organization.objects.get(id=organization_id)
         except Organization.DoesNotExist:
+            print('orgiztion not exists')
             return False
 
         try:
             org_plan = OrganizationPlan.objects.get(organization=organization, is_active=True)
         except OrganizationPlan.DoesNotExist:
+            print('plan not e')
             return False
 
         plan = org_plan.plan
         if not plan:
+            print("exited here")
             return False
 
         try:
-            feature = Feature.objects.get(code='active_job_posts')
+            feature = Feature.objects.get(code='active_jobpost')
         except Feature.DoesNotExist:
+            print("feature not exist")
             return False
 
         try:
             plan_feature = PlanFeature.objects.get(plan=plan, feature=feature)
             job_limit = plan_feature.limit
         except PlanFeature.DoesNotExist:
+            print('plan doesnot exist')
             return False
 
-        current_jobs = JobPostings.objects.filter(organization=organization, is_active=True).count()
+        current_jobs = JobPostings.objects.filter(organization=organization).count()
+        print(current_jobs, job_limit, "enteted here")
 
         return current_jobs < job_limit if job_limit is not None else True
 
@@ -188,6 +194,7 @@ class ConnectedOrganizations(APIView):
                     "organization": connection.organization.name,
                     "manager": connection.organization.manager.username,
                     "manager_email": connection.organization.manager.email,
+                    "organization_id": connection.organization.id,
                     "id": connection.id,
                     "organization_code": connection.organization.org_code,
                     "approval_status": connection.approval_status,
@@ -970,7 +977,8 @@ class InterviewersView(APIView):
     def delete(self, request):
         try:
             data = request.data
-            print(data, "is the allotted data")
+            if len(data) ==0:
+                return Response({"error":"No Interviewer selected,"}, status=status.HTTP_400_BAD_REQUEST)
 
             interviewer_id = request.GET.get('interviewer_id')
             if not interviewer_id:
@@ -2310,9 +2318,11 @@ class ReplacementsView(APIView):
                 'replacement_with__selected_candidates'
             )
 
+            replacements_list = []
+
             for replacement in replacements:
                 job = replacement.replacement_with.job_location.job_id
-                replacements_list = [
+                replacements_list.append(
                     {
                         "job_title": job.job_title,
                         "organization_name": job.organization.name,
@@ -2322,7 +2332,7 @@ class ReplacementsView(APIView):
                         "joining_date": getattr(replacement.replacement_with.selected_candidates, 'joining_date', None),  # Direct access
                         "replacement_id": replacement.id,
                     }
-                ]
+                )
 
             return Response(replacements_list,status=status.HTTP_200_OK)
 

@@ -57,49 +57,21 @@ def invoice_validate(request=None):
             logger.warning(f"No terms found for job {job.id}")
 
     return JsonResponse({"status": "success"}, safe=False) if request else None
-
-def remainders():
-    print("fetch the all requests what are the img messages need to remaind")
-    
-    
-def calculate_send_invoice(job,application,method,invoice):
-
-    context=create_invoice_context(invoice)
-    if method=="generate":
-        subject=f"Invoice is generated here" 
-        clientemail="ameerpotuganti2@gmail.com"
-    else:
-         subject=f"Invoice Reminder" 
-         clientemail="ameerpotuganti2@gmail.com"
-
-    sendemailTemplate(
-                subject,
-                'invoice.html',
-                context,
-                [clientemail]
-            )
-
     
 
-def invoice_reminder(job, application, selected_candidate, invoice):
-    """Sends a reminder email if the invoice was created 7 days ago."""
-    
-    # reminder_date = invoice.created_at.date() + timedelta(days=7) => this is for production
-    reminder_date =  invoice.created_at.date() 
-    # yesterday=now().date()-timedelta(days=1)
-    today=now().date()
-    
-    print(f"Invoice created on: {invoice.created_at.date()}, Reminder Date: {reminder_date}, todays's Date: {today}")
+def process_invoice_remainder():
+    try:
+        invoices = InvoiceGenerated.objects.filter(scheduled_to = today, payment_status = 'pending', invoice_status = "scheduled")
+        for invoice in invoices:
+            invoice.invoice_status = 'sent'
+            invoice.save()
+            application = invoice.selected_candidate.application
+            subject = f"Invoice for the candidate {application.resume.candidate_name} - {application.job_location.job_id.job_title}"
+            context = create_invoice_context(invoice)
 
-    if reminder_date == today:
-        calculate_send_invoice(job, application, 'reminder', invoice)
-    else:
-        print("No reminder needed today.")
-
-    # print("Job:", job)
-    # print("Application:", application)
-    # print("Selected Candidate:", selected_candidate)
-    # print("Invoice:", invoice)
+            sendemailTemplate(subject=subject, template_name="invoice.html", context=context, recipient_list=[invoice.client.user.email])
+    except Exception as e:
+        logger.error("Error in processing invoice remainders:", str(e))
 
 
 def approve_job_post_manager():
@@ -139,13 +111,8 @@ GA Hiresync Team
 """
             recipients_list = [organization.manager.email]
 
-            email = EmailMessage(
-                subject=subject,
-                body=message,
-                to=recipients_list,
-                from_email=from_mail
-            )
-            email.send(fail_silently=False)
+            send_custom_mail(subject=subject, body=message, to_email=recipients_list)
+
 
     except Exception as e:
         logger.error("Error in activate_job_post:", str(e))
@@ -185,13 +152,8 @@ GA Hiresync Team
 '''
             recipients_list = [negotiation.organization.manager.email]
             
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                to=recipients_list,
-                from_email=from_mail
-            )
-            email.send(fail_silently=False)
+            
+            send_custom_mail(subject=subject, body=body, to_email=recipients_list)
             
     except Exception as e:
         logger.error("Error in activate_job_post:", str(e))
@@ -220,13 +182,8 @@ GA Hiresync Team
 
 '''
             recipients_list = [job.organization.manager.email]      
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                to=recipients_list,
-                from_email=from_mail
-            )
-            email.send(fail_silently=False)
+            
+            send_custom_mail(subject=subject, body=body, to_email=recipients_list)
             
         
     except Exception as e:
@@ -263,13 +220,7 @@ Best regards,
 {applications[0].sender.organization} Team
 '''         
             
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail, 
-                to=[client.email],
-            )
-            email.send(fail_silently=True)
+            send_custom_mail(subject=subject, body=body, to_email=[client.email])
 
     except Exception as e:
         logger.error("Error in activate_job_post:", str(e))
@@ -305,13 +256,8 @@ Thank you,
 GA HireSync Team
 
 """
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail, 
-                to=[attached_to.email],
-            )
-            email.send(fail_silently=True)
+            
+            send_custom_mail(subject=subject, body=body, to_email=[attached_to.email])
 
     except Exception as e:
         logger.error("Error in activate_job_post:", str(e))
@@ -352,13 +298,8 @@ Kind regards,
 GA HireSync Team
 
 """
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail, 
-                to=[interviewer.email],
-            )
-            email.send(fail_silently=True)
+            
+            send_custom_mail(subject=subject, body=body, to_email=[interview.email])
 
     except Exception as e:
         logger.error("Error in process interviews:", str(e))
@@ -393,13 +334,8 @@ Best regards,
 {application.sender.organization} Team
 '''         
             
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail, 
-                to=[client.email],
-            )
-            email.send(fail_silently=True)
+            
+            send_custom_mail(subject=subject, body=body, to_email=[client.email])
 
 
     except Exception as e:
@@ -423,13 +359,8 @@ Sincerely,
 {candidate.application.job_location.job_id.organization.manager.username} Team
 
 """
-            email = EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail, 
-                to=[candidate_details.email],
-            )
-            email.send(fail_silently=True)
+            
+            send_custom_mail(subject=subject, body=body, to_email=[candidate_details.email])
             
     except Exception as e:
         logger.error("Error in activate_job_post:", str(e))
@@ -461,13 +392,8 @@ Update your profile here: [YourProfileLink]
 Thank you,  
 [Your System Name] Team
 '''
-        email = EmailMessage(
-                subject = subject,
-                body=body,
-                from_email=from_mail,
-                to=[candidate.email]
-        )
-        email.send(fail_silently=False)
+        
+        send_custom_mail(subject=subject, body=body, to_email=[candidate.email])
 
     except Exception as e:
         logger.error("Error in update_profile_candidate: %s", str(e))
@@ -517,12 +443,7 @@ Thank you,
 GA Hiresync Team
 """
 
-            EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail,
-                to=[organization.manager.email]
-            ).send(fail_silently=True)
+            send_custom_mail(subject=subject, body=body, to_email=[organization.manager.email])
 
         # Notify Recruiters
         for recruiter, job_locations in grouped_recruiters.items():
@@ -545,12 +466,8 @@ Regards,
 GA Hiresync Team
 """
 
-            EmailMessage(
-                subject=subject,
-                body=body,
-                from_email=from_mail,
-                to=[recruiter.email]
-            ).send(fail_silently=True)
+            
+            send_custom_mail(subject=subject, body=body, to_email=[recruiter.email])
 
     except Exception as e:
         logger.error("Error in job_deadline: %s", str(e))
@@ -590,13 +507,7 @@ Sincerely,
 GA Hiresync Team
 
 '''
-            email = EmailMessage(
-                    subject=subject,
-                    body=body,
-                    from_email=from_mail,
-                    to = [client.email]
-                )
-            email.send(fail_silently=True)   
+            send_custom_mail(subject=subject, body=body, to_email=[client.email])
 
     except Exception as e:
         logger.error("Error in proccessing confirm joining: %s", str(e))

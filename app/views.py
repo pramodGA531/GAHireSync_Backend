@@ -49,27 +49,40 @@ class OrganizationTermsView(APIView):
         return f"{org_code}+{padded_count}"
 
     def get(self, request):
-        user = request.user
-        organization = Organization.objects.filter(manager=user).first()
+        try:
+            print("entered here")
+            user = request.user
+            organization = Organization.objects.filter(manager=user).first()
 
-        if not organization:
-            return Response({"error":"Organization doesnot found"},status=status.HTTP_400_BAD_REQUEST)
+            if not organization:
+                return Response({"error":"Organization doesnot found"},status=status.HTTP_400_BAD_REQUEST)
+            
+            connections = ClientOrganizations.objects.filter(organization = organization)
+            print("enterd here")
+            all_terms =[]
+            for connection in connections:
+                connection_terms = ClientOrganizationTerms.objects.filter(client_organization = connection)
+                terms_list = []
+                for terms in connection_terms:
+                    terms_list.append({
+                        "ctc_range": terms.ctc_range,
+                        "service_fee": terms.service_fee,
+                        "invoice_after": terms.invoice_after,
+                        "interest_percentage": terms.interest_percentage,
+                        "replacement_clause": terms.replacement_clause,
+                        "payment_within": terms.payment_within,
+                        "is_negotiated": terms.is_negotiated
+                    })
+                all_terms.append({
+                    "client": connection.client.name_of_organization,
+                    "client_name": connection.client.user.username,
+                    "created_at": connection.created_at,
+                    "terms": terms_list
+                })
 
-        organization_terms = OrganizationTerms.objects.filter(organization=organization)
-        terms_list = []
-        for terms in organization_terms:
-            terms_list.append({
-                    "service_fee": terms.service_fee,
-                    "invoice_after": terms.invoice_after,
-                    "payment_within": terms.payment_within,
-                    "replacement_clause": terms.replacement_clause,
-                    "interest_percentage": terms.interest_percentage,
-                    "ctc_range": terms.ctc_range,
-                    "unique_code": terms.unique_code ,
-                    "id":terms.id,
-            })
-
-        return Response({"data":terms_list}, status=status.HTTP_200_OK)
+            return Response({"data":all_terms}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"{e}")
     
     def post(self, request):
         try:
@@ -591,56 +604,66 @@ Interviewers are waiting to check your profile
 
 class Invoices(APIView):
     def get(self, request):
+        try:
+            invoices = []
+            html_list = []
 
-        invoices = []
-        html_list = []
-
-        if request.user.role == "client":
-            invoices = InvoiceGenerated.objects.filter(client=request.user)
-            for invoice in invoices:
-                context = create_invoice_context(invoice)
-                html = generate_invoice(context)
-                html_list.append({"invoice": invoice, "html": html})
-
-        elif request.user.role == "manager":
-            invoices = InvoiceGenerated.objects.filter(organization_email=request.user.email)
-            for invoice in invoices:
-                context = create_invoice_context(invoice)
-                html = generate_invoice(context)
-                html_list.append({"invoice": invoice, "html": html})
-
-            accountants = Accountants.objects.filter(organization__manager=request.user)
-            if not accountants.exists():
-                return Response({"message": "No accountants found for this organization"}, status=status.HTTP_404_NOT_FOUND)
-            serializer = AccountantsSerializer(accountants, many=True)
-
-            if invoices:
-                invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"],"payment_verification":invoice.payment_verification} 
-                            for invoice, html in zip(invoices, html_list)]
-            else:
-                invoice_data = []
-                
-            return Response({"invoices": invoice_data, "accountants": serializer.data}, status=status.HTTP_200_OK)
-
-
-        elif request.user.role == "accountant":
-            accountant=Accountants.objects.get(user=request.user)
-            if accountant:
-                invoices = InvoiceGenerated.objects.filter(organization=accountant.organization)
+            if request.user.role == "client":
+                invoices = InvoiceGenerated.objects.filter(client__user=request.user, 
+                                                        #    scheduled_date__lt = timezone.now()
+                                                           )
                 for invoice in invoices:
-                    context = create_invoice_context(invoice)
+                    invoice.invoice_status = 'sent'
+                    invoice.save()
+                    context = create_invoice_context(invoice.id)
                     html = generate_invoice(context)
                     html_list.append({"invoice": invoice, "html": html})
 
-        else:
-            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
+                invoice_data = [{"invoice_code": invoice.invoice_code, "payment_status": invoice.payment_status,"scheduled_at": invoice.scheduled_date, "org_email":invoice.organization.manager.email, "html": html["html"],"payment_verification":invoice.payment_verification} 
+                                for invoice, html in zip(invoices, html_list)]
+                return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
 
-        if invoices:
-            invoice_data = [{"id": invoice.id, "status": invoice.status, "client_email": invoice.client_email,"org_email":invoice.organization_email, "html": html["html"],"payment_verification":invoice.payment_verification} 
-                            for invoice, html in zip(invoices, html_list)]
-            return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
+            elif request.user.role == "manager":
+                invoices = InvoiceGenerated.objects.filter(organization__manager__email=request.user.email)
+                for invoice in invoices:
+                    context = create_invoice_context(invoice.id)
+                    html = generate_invoice(context)
+                    html_list.append({"invoice": invoice, "html": html})
+                accountants = Accountants.objects.filter(organization__manager=request.user)
+                if not accountants.exists():
+                    return Response({"message": "No accountants found for this organization"}, status=status.HTTP_404_NOT_FOUND)
+                serializer = AccountantsSerializer(accountants, many=True)
 
-        return Response({"error": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
+                if invoices:
+                    invoice_data = [{"invoice_code": invoice.invoice_code,"scheduled_date":invoice.scheduled_date.date(), "invoice_status":invoice.invoice_status,"payment_status": invoice.payment_status, "client_email": invoice.client.user.email,"org_email":invoice.organization.manager.email, "html": html["html"],"payment_verification":invoice.payment_verification} 
+                                for invoice, html in zip(invoices, html_list)]
+                else:
+                    invoice_data = []
+                    
+                return Response({"invoices": invoice_data, "accountants": serializer.data}, status=status.HTTP_200_OK)
+
+
+            elif request.user.role == "accountant":
+                accountant=Accountants.objects.get(user=request.user)
+                if accountant:
+                    invoices = InvoiceGenerated.objects.filter(organization=accountant.organization)
+                    for invoice in invoices:
+                        context = create_invoice_context(invoice)
+                        html = generate_invoice(context)
+                        html_list.append({"invoice": invoice, "html": html})
+
+            else:
+                return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
+
+            if invoices:
+                invoice_data = [{"invoice_code": invoice.invoice_code, "payment_status": invoice.payment_status,"scheduled_at": invoice.scheduled_date, "org_email":invoice.organization.manager.email, "html": html["html"],"payment_verification":invoice.payment_verification} 
+                                for invoice, html in zip(invoices, html_list)]
+                return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
+
+            return Response({"error": "No invoices found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        except Exception as e:
+            logger.error(f"{e}")
     
     def put(self, request):
         invoice_id = request.data.get('invoice_id')
@@ -1631,3 +1654,38 @@ class FetchPlans(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class UpgradeRequestMail(APIView):
+    def get(self, request):
+        try:
+            organization_id = request.GET.get('org_id')
+            if not organization_id:
+                return Response({"error": "Organization ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                organization = Organization.objects.get(id=organization_id)
+            except Organization.DoesNotExist:
+                return Response({"error": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            try:
+                client = ClientDetails.objects.get(user=request.user)
+            except ClientDetails.DoesNotExist:
+                return Response({"error": "Client details not found for the user."}, status=status.HTTP_404_NOT_FOUND)
+
+            subject = f"Client Request: Job Post Limit Reached"
+            body = f"""
+Dear {organization.manager.get_full_name() or organization.manager.username},
+
+Your client {client.user.get_full_name() or client.user.username} attempted to create a new job post, but your current plan has reached the job posting limit.
+
+Please consider upgrading the plan to allow further job postings.
+
+Thank you,
+HireSync Platform
+"""
+  
+            send_custom_mail(subject= subject , body=body, to_email=[organization.manager.email])
+            return Response({"messaeg":"Plan upgradation request sent successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

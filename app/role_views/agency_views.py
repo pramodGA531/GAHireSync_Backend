@@ -23,6 +23,9 @@ from django.db.models import Sum
 from decimal import Decimal, InvalidOperation
 
 
+logger = logging.getLogger(__name__)
+
+
 
 class AgencyJobApplications(APIView):
     permission_classes = [IsManager]
@@ -933,7 +936,7 @@ class AllRecruitersView(APIView):
                     "id": recruiter.id,
                 }
                 recruiters_list.append(recruiter_json)
-            return Response({"data":recruiters_list}, status= status.HTTP_200_OK)
+            return Response({"data":recruiters_list, "can_add_recruiter":can_add_recruiter(organization.id)}, status= status.HTTP_200_OK)
         
         except Organization.DoesNotExist:
             return Response({"error":"Organization with that id doesnot exists"}, status = status.HTTP_400_BAD_REQUEST)
@@ -1366,29 +1369,29 @@ class RecruiterJobsView(APIView):
         try:
             recruiter_id = request.GET.get('rec_id')
             recruiter = CustomUser.objects.get(id = recruiter_id)
-            recruiter_jobs = JobPostings.objects.filter(assigned_to = recruiter)
+            recruiter_jobs = AssignedJobs.objects.filter(assigned_to = recruiter)
             job_details_json = []
 
 
             if not recruiter_jobs.exists():
                 return Response({"data":None,"recruiters": None }, status=status.HTTP_200_OK)
 
-            organization = Organization.objects.filter(id = recruiter_jobs[0].organization.id)
+            organization = Organization.objects.get(manager = request.user)
 
-            recruiters_list = CustomUser.objects.filter(
+            organization_recruiters = CustomUser.objects.filter(
                 recruiting_organization__in=organization
             ).exclude(id=recruiter.id).distinct()
 
-            recruiters_json = []
-            for recruiter in recruiters_list:
-                recruiters_json.append({
+            recruiters_list = []
+            for recruiter in organization_recruiters:
+                recruiters_list.append({
                     "recruiter_name": recruiter.username,
                     "id": recruiter.id
                 })
 
-            for job in recruiter_jobs:
+            for job_location in recruiter_jobs:
 
-                assigned_recruiters = job.assigned_to.all()
+                assigned_recruiters = job_location.assigned_to.all()
                 assigned_list = []
                 for member in assigned_recruiters:
                     assigned_list.append({
@@ -1397,13 +1400,14 @@ class RecruiterJobsView(APIView):
                     })
 
                 job_details_json.append({
-                    "job_title": job.job_title,
-                    "job_id": job.id,
-                    "resumes_sent": JobApplication.objects.filter(job_id = job.id, sender = recruiter).count(),
+                    "job_title": job_location.job_id.job_title,
+                    "job_id": job_location.job_id.id,
+                    "job_locaiton": job_location.job_location,
+                    "resumes_sent": JobApplication.objects.filter(job_location__job_id = job_location.id, sender = recruiter).count(),
                     "assigned_list": assigned_list,
                 })
             
-            return Response({"data":job_details_json, "recruiters":recruiters_json}, status=status.HTTP_200_OK)
+            return Response({"data":job_details_json, "recruiters":recruiters_list}, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1849,7 +1853,7 @@ class ManagerResumeBankView(APIView):
     permission_classes = [IsManager]
     def get(self, request):
         try:
-            applications = JobApplication.objects.filter(
+            applications = JobApplication.all_objects.filter(
                 job_location__job_id__organization__manager=request.user
             ).select_related('resume', 'job_location__job_id')
 
@@ -1932,3 +1936,51 @@ class ConnectionRequests(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class DeleteResumes(APIView):
+    permission_classes = [IsManager]
+    def delete(self, request):
+        try:
+            organization = Organization.objects.get(manager = request.user)         
+            emails = request.data.get('candidate_emails')
+            for email in emails:
+                with transaction.atomic():
+                    applications = JobApplication.all_objects.filter(
+                        resume__candidate_email=email,
+                        job_location__job_id__organization=organization
+                    )
+
+                    resumes_to_check = [app.resume for app in applications if app.resume]
+
+                    applications.delete()
+
+                    for resume in resumes_to_check:
+                        if resume is None or not resume.resume:
+                            continue
+
+                        is_still_used = JobApplication.all_objects.filter(resume=resume).exists()
+
+                        if not is_still_used:
+                            try:
+                                file_path = os.path.join(settings.MEDIA_ROOT, resume.resume.name)
+                                if os.path.exists(file_path):
+                                    os.remove(file_path)
+                            except Exception as file_err:
+                                logger.error(f"Failed to delete resume file: {file_err}")
+
+                            resume.delete()
+
+                    remaining_apps = JobApplication.all_objects.filter(resume__candidate_email=email)
+                    if not remaining_apps.exists():
+                        try:
+                            user = CustomUser.objects.get(email=email)
+                            user.delete()
+                        except ObjectDoesNotExist:
+                            pass  
+
+            return Response({"message": "Candidates removed successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(str(e)) 
+            return Response({"error": "An error occurred while deleting candidates."},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

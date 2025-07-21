@@ -17,6 +17,7 @@ urlpatterns = [
     path('resetpassword/<uidb64>/<token>/',ResetPasswordAPIView.as_view(), name='resetpassword'),
     path('verify-email/<uidb64>/<token>/', VerifyEmailView.as_view(), name="verify-email"),
     path('send-verification-email/', VerifyEmailView.as_view(), name="send-verification-email"),
+    path('send-upgrade-mail/', UpgradeRequestMail.as_view(), name="send-upgrade-mail"),
     path('landing-page/fetchjobs/', FetchAllJobs.as_view(), name="send-verification-email"),
 
     path('changepassword/', changePassword.as_view(), name='changepassword'),
@@ -147,7 +148,7 @@ urlpatterns = [
     path('update_invoices/',Invoices.as_view()),
     path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
     
-    path('manager/clients-data/', ClientsData.as_view(), name='get-invoices'),
+    path('manager/clients-data/', ClientsData.as_view(), name='clients-data'),
     path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
     path('manager/all-alerts/', ManagerAllAlerts.as_view(), name='manager-all-alerts'),
     path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
@@ -171,6 +172,7 @@ urlpatterns = [
     path('manager/fetch-reumes/',ManagerResumeBankView.as_view(), name='manager-fetch-all-resumes'),
     path('manager/reject-approval-client/',RejectApprovalClient.as_view(), name='manager-reject-client-approval'),
     path('manager/accept-approval-client/',AcceptApprovalClient.as_view(), name='manager-accept-client-approval'),
+    path('manager/delete-resumes/',DeleteResumes.as_view(), name='manager-deletes-resumes'),
     
 
     
@@ -340,36 +342,6 @@ urlpatterns = [
     path('recruiter/accept-incoming-applications/', AcceptIncomingApplication.as_view(), name='get-interview-remarks'),
     path('recruiter/reject-incoming-applications/', RejectIncomingApplication.as_view(), name='get-interview-remarks'),
 
-    path('get_invoices/',Invoices.as_view()),
-    path('update_invoices/',Invoices.as_view()),
-    path('basic-application-details/<int:application_id>/',BasicApplicationDetails.as_view(), name='get-basic-applicaiton-details'),
-    
-    path('manager/clients-data/', ClientsData.as_view(), name='get-invoices'),
-    path('manager/get_invoices/', InvoicesAPIView.as_view(), name='get-invoices'),
-    
-    path('manager/all-alerts/', ManagerAllAlerts.as_view(), name='manager-all-alerts'),
-    path('manager/job-action/', AcceptJobPostView.as_view(), name='accept-job-post'),
-    path('manager/information/',OrganizationView.as_view(),name='org-info'),
-    path('manager/close-job/', CloseJobView.as_view(), name='close-job-by-manager'),
-    path('manager/dashboard/', AgencyDashboardAPI.as_view() , name='agency-dashboard' ),
-    path('manager/create_accountant/', AccountantsView.as_view() , name='create-acountant' ),
-    path('manager/accountants/', AccountantsView.as_view() , name='create-acountant' ),
-    path('manager/action-on-edit-job/', JobEditActionView.as_view(), name='handle-job-edit-request'),
-    path('manger/applications/',AgencyJobApplications.as_view()),
-    path('manager/job-edit-details/',JobEditStatusAPIView.as_view(),name='to-check-job-edit-status'),
-    path('manager/job-posts/',AgencyJobPosts.as_view(),name='agency-job-posts' ),
-    path('manager/all-recruiters/',AllRecruitersView.as_view(),name='agency-all-recruiters' ),
-    path('manager/selected-candidates/',ViewSelectedCandidates.as_view(),name='get-all-selected-candidates' ),
-    path('manager/recruiters-task-tracking/',RecruiterTaskTrackingView.as_view(), name='manager-tracking-recruiters'),
-    path('manager/recruiter/jobs/',RecruiterJobsView.as_view(), name='manager-tracking-recruiters'),
-    path('manager/remove-recruiter/',RemoveRecruiter.as_view(), name='manager-tracking-recruiters'),
-    path('manager/is_linkedin_verified/',IsManagerLinkedVerifiedView.as_view(), name='manager-tracking-recruiters'),
-    path('manager/job/post_on_linkedin/',PostOnLinkedIn.as_view(), name='manager-tracking-recruiters'),
-    path('manager/recruiter-summary/',RecSummaryMetrics.as_view(), name='manager-recruiter-summary'),
-    path('manager/fetch-reumes/',ManagerResumeBankView.as_view(), name='manager-fetch-all-resumes'),
-    
-
-    
     path('api/linkedin/callback/', LinkedINCallBackView.as_view(), name='linkedin callback view'),
  
     path('change-password/', ChangePassword.as_view(), name='change-password'),
