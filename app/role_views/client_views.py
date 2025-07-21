@@ -152,35 +152,29 @@ class ConnectedOrganizations(APIView):
         try:
             organization = Organization.objects.get(id=organization_id)
         except Organization.DoesNotExist:
-            print('orgiztion not exists')
             return False
 
         try:
             org_plan = OrganizationPlan.objects.get(organization=organization, is_active=True)
         except OrganizationPlan.DoesNotExist:
-            print('plan not e')
             return False
 
         plan = org_plan.plan
         if not plan:
-            print("exited here")
             return False
 
         try:
             feature = Feature.objects.get(code='active_jobpost')
         except Feature.DoesNotExist:
-            print("feature not exist")
             return False
 
         try:
             plan_feature = PlanFeature.objects.get(plan=plan, feature=feature)
             job_limit = plan_feature.limit
         except PlanFeature.DoesNotExist:
-            print('plan doesnot exist')
             return False
 
         current_jobs = JobPostings.objects.filter(organization=organization).count()
-        print(current_jobs, job_limit, "enteted here")
 
         return current_jobs < job_limit if job_limit is not None else True
 
