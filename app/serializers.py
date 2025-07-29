@@ -52,7 +52,7 @@ class ClientDetailsSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     
-
+    
 
 class OrganizationTermsSerializer(serializers.ModelSerializer):
     organization = OrganizationSerializer()

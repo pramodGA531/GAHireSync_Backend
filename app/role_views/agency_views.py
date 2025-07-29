@@ -180,6 +180,99 @@ class AgencyDashboardAPI(APIView):
 # Job Postings
 
 # Get all job postings of the particular organization
+
+class NotAssignedJobs(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            user = request.user
+            jobs = JobPostings.objects.filter(organization__manager = user)
+            jobs_list = []
+            for job in jobs:
+                job_locations = JobLocationsModel.objects.filter(job_id = job.id)
+                for location in job_locations:
+                    assigned = AssignedJobs.objects.filter(job_location = location.id)
+                    if assigned.count() == 0:
+                        jobs_list.append({
+                            "job_title": job.job_title,
+                            "client_name": job.username.username,
+                            "created_at": job.created_at,
+                            "location": location.location,
+                            "deadline": job.job_close_duration,
+                            "id": job.id,
+                            "location_id": location.id,
+                        })
+
+            return Response({"data":jobs_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class ClosedHoldJobs(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            user = request.user
+            jobs = JobPostings.objects.filter(organization__manager = user, status__in = ['closed','hold'])
+            jobs_list = []
+            for job in jobs:
+                jobs_list.append({
+                    "job_title": job.job_title,
+                    "client_name": job.username.username,
+                    "deadline": job.job_close_duration,
+                    "status": job.status,
+                    "created_at": job.created_at,
+                    "id": job.id,
+                })
+
+            return Response({"data":jobs_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def put(self, request):
+        try:
+            pass
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class NotApprovedJobs(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            user = request.user
+            jobs = JobPostings.objects.filter(organization__manager = user, approval_status = 'pending')
+            jobs_list = []
+            for job in jobs:
+                jobs_list.append({
+                    "job_title": job.job_title,
+                    "client_name": job.username.username,
+                    "deadline": job.job_close_duration,
+                    "status": job.status,
+                    "created_at": job.created_at,
+                    "id": job.id,
+                })
+
+            return Response({"data":jobs_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def put(self, request, action, job_id):
+        try:
+            job = JobPostings.objects.get(id = job_id)
+            print(action, job_id)
+            if action == 'APPROVE':
+                job.approval_status = "approved"
+            elif action == 'REJECT':
+                reject_reason = request.data.get('reason')
+                job.approval_status = 'rejected'
+                job.reason = reject_reason
+            job.save()
+            print("Entered here")
+
+            return Response({"message":f"Job post {action}D successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 class OrgJobPostings(APIView):
     def get(self, request,*args, **kwargs):
         try:
@@ -263,7 +356,6 @@ class JobEditStatusAPIView(APIView):
             
             job_edit_fields = JobPostEditFields.objects.filter(edit_id=job_edit_version)
 
-            print(job_edit_fields)
             if any(field.status == 'rejected' for field in job_edit_fields):
                 rejected_fields_json = [{
                     "field_name": field.field_name,
@@ -317,11 +409,24 @@ class OrgJobEdits(APIView):
                 serialized_edited_job = JobPostEditedSerializer(edited_job)
                 return Response(serialized_edited_job.data,status=status.HTTP_202_ACCEPTED)
             else:
-                edited_jobs = JobPostingsEditedVersion.objects.filter(edited_by = user)
-                if(edited_jobs == None):
-                    return Response({"message":"There are no edited job posts"}, status=status.HTTP_200_OK)
-                edited_jobs_serialized_data = JobPostEditedSerializerMinFields(edited_jobs,many = True)
-                return Response(edited_jobs_serialized_data.data, status=status.HTTP_200_OK)
+                edited_jobs = JobPostingsEditedVersion.objects.filter(job_id__organization__manager = request.user, version = 1)
+                jobs = []
+                for job in edited_jobs:
+
+                    jobs.append({
+                        "job_title": job.job_id.job_title,
+                        "edited_on": job.created_at,
+                        "status": job.status,
+                        "edit_id": job.id,
+                        "job_id": job.job_id.id,
+                        "client_name": job.job_id.username.username,
+                        "organization_name": job.job_id.username.organization,
+
+                    })
+                # if(edited_jobs == None):
+                #     return Response({"message":"There are no edited job posts"}, status=status.HTTP_200_OK)
+                # edited_jobs_serialized_data = JobPostEditedSerializerMinFields(edited_jobs,many = True)
+                return Response(jobs, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
@@ -576,6 +681,10 @@ class RecruitersView(APIView):
         try:
             user = request.user
             org = Organization.objects.get(manager=user)
+            if request.GET.get('names') == "true":
+                recruiters_list = [{"id":recruiter.id , "name": recruiter.username} for recruiter in org.recruiters.all()]
+                return Response(recruiters_list, status=status.HTTP_200_OK)    
+            
             serializer = OrganizationSerializer(org)
             return Response(serializer.data["recruiters"], status=status.HTTP_200_OK)
         except Exception as e:
@@ -704,6 +813,40 @@ HireSync Team
             return Response({"detail": "One or more recruiters not found"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class AssignRecruiterByLocationView(APIView):
+    permission_classes = [IsManager]
+
+    def put(self, request, location_id):
+        try:
+            location = JobLocationsModel.objects.get(id=location_id)
+            recruiter_ids = request.data.get('recruiters', [])
+
+            for user_id in recruiter_ids:
+                user = CustomUser.objects.get(id=user_id)
+                assigned_job = AssignedJobs.objects.create(
+                job_location=location,
+                job_id=location.job_id
+                )
+                assigned_job.assigned_to.set(recruiter_ids)
+
+            return Response(
+                {"message": "Recruiters assigned successfully"},
+                status=status.HTTP_200_OK
+            )
+
+        except JobLocationsModel.DoesNotExist:
+            return Response(
+                {"error": "Job location not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "One or more recruiters not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RecruitersList(APIView):
@@ -1082,6 +1225,7 @@ class ViewSelectedCandidates(APIView):
                     "client_name": job.username.username,
                     "job_title": job.job_title,
                     "location": candidate.application.job_location.location,
+                    "id":job.id,
                 }
                 selected_candidates_list.append(candidate_json)
             

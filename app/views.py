@@ -19,6 +19,7 @@ from django.http import HttpResponseRedirect
 import html2text
 from django.db.models import Count, Prefetch
 from django.db import IntegrityError
+from decimal import ROUND_HALF_UP
 
 
 
@@ -185,17 +186,43 @@ class NegotiateTermsView(APIView):
         except NegotiationRequests.DoesNotExist:
             pass
 
+
+        raw_interest = request.data.get('interest_percentage')
+        raw_service = request.data.get('service_fee')
+ 
+        try:
+            if raw_interest is not None:
+                interest_percentage = Decimal(str(raw_interest)).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP  
+                )
+                service_percentage = Decimal(str(raw_service)).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            else:
+                service_percentage = Decimal("0.00")
+                interest_percentage = Decimal("0.00")
+        except (InvalidOperation, TypeError):
+            
+            service_percentage = Decimal("0.00")
+            interest_percentage = Decimal("0.00")
+
+
+        print(interest_percentage, " ",service_percentage,  " is the interest percentage")
+        # model_instance.interest_percentage = interest_percentage
+        # model_instance.save()
+        # interest_percentage = data.get('interest_percentage')
+
         try:
             data = request.data
             negotiation_request = NegotiationRequests.objects.create(
                 client_organization = connection,
                 ctc_range= data.get('ctc_range'),
                 service_fee_type = data.get('service_fee_type'),
-                service_fee=data.get('service_fee'),
+                service_fee=service_percentage,
                 replacement_clause=data.get('replacement_clause'),
                 invoice_after=data.get('invoice_after'),
                 payment_within=data.get('payment_within'),
-                interest_percentage=data.get('interest_percentage')
+                interest_percentage=interest_percentage
             )
             negotiation_link = f"{frontend_url}/agency/negotiations/{negotiation_request.id}"
             manager_email_message = f"""

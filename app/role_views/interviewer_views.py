@@ -41,18 +41,16 @@ class InterviewerDashboardView(APIView):
             todays_interviews_list = []
             today_events = []
             for interview in todays_interviews:
-                # Today's Interview List
                 todays_interviews_list.append({
                     "candidate_name": interview.candidate.candidate_name,
                     "job_title": interview.job_location.job_id.job_title,
                     "round_num": interview.round_num,
-                    "from_time": interview.from_time.strftime("%I:%M %p"),  # Formatting time like '09:30 AM'
+                    "from_time": interview.from_time.strftime("%I:%M %p"),  
                     "to_time": interview.to_time.strftime("%I:%M %p"),
                     "interview_id": interview.id,
                     "status":interview.status,
                 })
 
-                # Events list for Calendar view
                 today_events.append({
                     "id": interview.id,
                     "title": f"Interview with {interview.candidate.candidate_name}",
@@ -60,7 +58,7 @@ class InterviewerDashboardView(APIView):
                     "endTime": interview.to_time.strftime("%I:%M %p"),
                     "type": "processing" if interview.status == 'pending' else 'success'
                 })
-            # Fetch missed interviews (pending status and scheduled before today)
+                
             missed_interviews = InterviewSchedule.objects.filter(
                 interviewer__in=interviewer_details,
                 scheduled_date__lt=today,

@@ -226,6 +226,8 @@ class AllScheduledInterviews(APIView):
                     "to_time": interview.to_time,
                     "id":interview.id,
                     "round_num": interview.round_num,
+                    "job_title": interview.job_location.job_id.job_title,
+                    "job_id": interview.job_location.job_id.id,
                 })
 
             return Response(interviews_list, status=status.HTTP_200_OK)
@@ -259,6 +261,7 @@ class ScheduleInterview(APIView):
                         "job_location": application.job_location.location,
                         "location_status": application.job_location.status,
                         "interviewer_name": interviewer,
+                        "job_id": application.job_location.job_id.id,
                     })
                 
                 return Response(pending_arr, status=status.HTTP_200_OK)
@@ -430,6 +433,32 @@ class ScheduleInterview(APIView):
             
             return Response({"message": "Next Interview Scheduled Successfully"}, status=status.HTTP_200_OK)
 
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+    def put(self, request):
+
+        try:
+            data = request.data
+            scheduled_id = data.get("interview_scheduled_id")
+            scheduled_date = data.get("scheduled_date")
+            from_time = data.get("from_time")
+            to_time = data.get("to_time")
+            meet_link = data.get("meet_link")
+
+            app = InterviewSchedule.objects.get(id=scheduled_id)
+
+            app.scheduled_date = scheduled_date
+            app.from_time = from_time
+            app.to_time = to_time
+            app.meet_link = meet_link
+            app.save()
+
+            return Response({"message": "Interview rescheduled successfully."}, status=status.HTTP_200_OK)
+
+        except InterviewSchedule.DoesNotExist:
+            return Response({"error": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -672,6 +701,7 @@ class OrganizationApplications(APIView):
     pagination_class = TenResultsPagination
     def get(self, request):
             try:
+                job_id = request.GET.get('job_id')
                 if request.GET.get('application_id'):
                     try:
                         application_id = request.GET.get('application_id')
@@ -705,10 +735,8 @@ class OrganizationApplications(APIView):
                 else:
                     recruiter_id = request.user.id
                     organization = Organization.objects.filter(recruiters__id = recruiter_id).first()
-                    # print(organization)
-                    job_postings = JobPostings.objects.filter(organization = organization )
-                    organization_applications = JobApplication.objects.filter(job_location__job_id__in = job_postings)
-                    # print(organization_applications.count())
+                    job_postings = JobPostings.objects.filter(organization = organization ).exclude(id = job_id)
+                    organization_applications = JobApplication.objects.filter(job_location__job_id__in = job_postings).exclude(status = 'selected')
 
                     application_list = []
                     paginator = self.pagination_class()
@@ -1005,5 +1033,42 @@ class ReopenApplication(APIView):
             application.is_closed = False
             application.save()
             return Response({'message':"Application Reopened successfully"}, status = status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   
+
+
+
+class ViewCompleteCandidate(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            application_id = request.GET.get('application_id')
+            application = JobApplication.objects.get(id = application_id)
+            candidate_applications = JobApplication.all_objects.filter(resume__candidate_email = application.resume.candidate_email)
+            applications_data = []
+            for candidate_application in candidate_applications:
+                applications_data.append({
+                    "job_title": candidate_application.job_location.job_id.job_title,
+                    "status": candidate_application.status,
+                    "round_number": candidate_application.round_num,
+                    "next_interview": candidate_application.next_interview.scheduled_date if candidate_application.next_interview else None,
+                    "created_at": candidate_application.created_at,
+                    "is_closed": candidate_application.is_closed,
+                })
+            candidate_data = {
+                "applications_data" : applications_data,
+                "candidate_resume": application.resume.resume.url,
+                "candidate_name": application.resume.candidate_name,
+                "contact": application.resume.contact_number,
+                "alternate_contact": application.resume.alternate_contact_number,
+                "candidate_email": application.resume.candidate_email,
+                "current_organization": application.resume.current_organisation,
+                "currect_ctc": application.resume.current_ctc,
+                "current_job_location": application.resume.current_job_location,
+                "expected_ctc": application.resume.expected_ctc,
+                "experience": application.resume.experience,
+                "date_of_birth": application.resume.date_of_birth
+            }
+            return Response({"data": candidate_data}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   

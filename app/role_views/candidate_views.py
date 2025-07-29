@@ -425,50 +425,7 @@ class CandidateApplicationsView(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
-
-# Candidate Upcoming Interviews 
-class CandidateUpcomingInterviews(APIView):
-    def get(self, request):
-        try:
-            if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if request.user.role != 'candidate':
-                return Response({"error": "You are not allowed to run this"}, status=status.HTTP_400_BAD_REQUEST)
-
-            user = request.user
-            
-            candidate_profile = CandidateProfile.objects.get(name=user)
-
-            applications = JobApplication.objects.filter(resume__candidate_name=candidate_profile)
-
-            applications_json = []
-
-            for application in applications:
-                if application.next_interview is not None:
-                    next_interview = application.next_interview
-                    try:
-                        application_json = {
-                            "round_num": application.round_num,
-                            "job_id": {
-                                "id": application.job_id.id,
-                                "job_title": application.job_id.job_title,
-                                "company_name": application.job_id.username.username
-                            },
-                            "interviewer_name": next_interview.interviewer.name.username,
-                            "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
-                        }
-                        applications_json.append(application_json)  
-                    except Exception as e:
-                        print(str(e))
-                        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-            return Response(applications_json, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+  
 
 class SelectedJobsCandidate(APIView):
     permission_classes = [IsCandidate]
@@ -699,6 +656,179 @@ class CandidateAllAlerts(APIView):
 
             return Response({"data":data}, status=status.HTTP_200_OK)
 
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CandidateDashboard(APIView):
+    permission_classes = [IsCandidate]
+
+    def get_percentage_filled(self, user):
+        try:
+            candidate = CandidateProfile.objects.get(name=user)
+        except CandidateProfile.DoesNotExist:
+            return 0
+
+        total_fields = 20
+        filled_fields = 0
+
+        fields_to_check = [
+            candidate.profile,
+            candidate.about,
+            candidate.first_name,
+            candidate.middle_name,
+            candidate.last_name,
+            candidate.communication_address,
+            candidate.current_salary,
+            candidate.expected_salary,
+            candidate.joining_details,
+            candidate.permanent_address,
+            candidate.phone_num,
+            candidate.date_of_birth,
+            candidate.designation,
+            candidate.linked_in,
+            candidate.instagram,
+            candidate.facebook,
+            candidate.blood_group,
+            candidate.experience_years,
+            candidate.skills,
+            candidate.current_company,
+        ]
+
+        for field in fields_to_check:
+            if field:  
+                filled_fields += 1
+
+        if candidate.resume:
+            filled_fields += 1
+            total_fields += 1
+
+        if candidate.candidate_documents.exists():
+            filled_fields += 1
+            total_fields += 1
+
+        if candidate.candidate_certificates.exists():
+            filled_fields += 1
+            total_fields += 1
+
+        if candidate.candidate_experience.exists():
+            filled_fields += 1
+            total_fields += 1
+
+        if candidate.candidate_education.exists():
+            filled_fields += 1
+            total_fields += 1
+
+        percentage = (filled_fields / total_fields) * 100
+        return round(percentage, 2)
+ 
+
+    def get(self, request):
+        try:
+            user = request.user
+            candidate_profile = CandidateProfile.objects.get(name = user)
+            compelted_percentage = self.get_percentage_filled(user)
+            recruiter_shared = JobApplication.all_objects.filter(resume__candidate_email = candidate_profile.name.email)
+            latest_job_title = None
+            if recruiter_shared.exists():
+                latest_application = recruiter_shared.first()
+                latest_job_title = latest_application.job_location.job_id.job_title
+
+            rejected =0
+            processing = 0
+            onhold = 0
+
+            for application in recruiter_shared:
+                if application.status == 'processing':
+                    processing+=1
+                elif application.status == 'rejected':
+                    rejected+=1
+                elif application.status == 'selected':
+                    selected_application = SelectedCandidates.objects.get(application = application)
+                    if selected_application.joining_status == 'pending':
+                        onhold +=1
+                
+
+            
+            candidate_data = {
+                "candidate_name": candidate_profile.name.username,
+                "last_updated": candidate_profile.updated_at.date(),
+                "percentage_filled": compelted_percentage,
+                "profile": candidate_profile.name.profile.url if candidate_profile.name.profile else None,
+                "latest_job": latest_job_title,
+                "recruiter_shared": recruiter_shared.count(),
+                "rejected": rejected,
+                "processing": processing,
+                "onhold": onhold
+            }
+            
+            upcoming_interviews = []
+            applications = recruiter_shared.filter(is_closed = False)
+            for application in applications:
+                if application.next_interview is not None:
+                    next_interview = application.next_interview
+                    try:
+                        application_json = {
+                            "round_num": application.round_num,
+                            "id": application.job_location.job_id.id,
+                            "job_title": application.job_location.job_id.job_title,
+                            "job_location": application.job_location.location,
+                            "company_name": application.job_location.job_id.username.username,
+                            "interviewer_name": next_interview.interviewer.name.username,
+                            "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
+                        }
+                        upcoming_interviews.append(application_json)  
+                    except Exception as e:
+                        print(str(e))
+                        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                    
+            return Response({"candidate_data": candidate_data, "upcoming_interviews": upcoming_interviews}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.log(e)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class CandidateUpcomingInterviews(APIView):
+    def get(self, request):
+        try:
+            if not request.user.is_authenticated:
+                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if request.user.role != 'candidate':
+                return Response({"error": "You are not allowed to run this"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+            
+            candidate_profile = CandidateProfile.objects.get(name=user)
+
+            applications = JobApplication.objects.filter(resume__candidate_name=candidate_profile)
+
+            applications_json = []
+
+            for application in applications:
+                if application.next_interview is not None:
+                    next_interview = application.next_interview
+                    try:
+                        application_json = {
+                            "round_num": application.round_num,
+                            "job_id": {
+                                "id": application.job_location.job_id.id,
+                                "job_title": application.job_location.job_id.job_title,
+                                "job_location": application.job_location.location,
+                                "company_name": application.job_location.job_id.username.username
+                            },
+                            "interviewer_name": next_interview.interviewer.name.username,
+                            "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
+                        }
+                        applications_json.append(application_json)  
+                    except Exception as e:
+                        print(str(e))
+                        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(applications_json, status=status.HTTP_200_OK)
+        
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
