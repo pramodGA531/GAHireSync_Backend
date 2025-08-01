@@ -2328,14 +2328,14 @@ class JobsExportCsv(APIView):
 class HoldJobView(APIView):
     permission_classes = [IsManager]
 
-    def get(self, request, job_id):
+    def put(self, request, job_id):
         try:
             job = JobPostings.objects.get(id=job_id)
 
             success = update_job_to_hold(job.id)
             if success:
                 return Response(
-                    {"detail": f"Job '{job.job_title}' and its locations have been put on hold successfully."},
+                    {"message": f"Job '{job.job_title}' and its locations have been put on hold successfully."},
                     status=status.HTTP_200_OK,
                 )
             else:

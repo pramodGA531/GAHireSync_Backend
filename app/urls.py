@@ -185,8 +185,8 @@ urlpatterns = [
     path('manager/delete-resumes/',DeleteResumes.as_view(), name='manager-deletes-resumes'),
     path('manager/update-deadline/<int:id>/',ExtendDeadlineView.as_view(), name='manager-deletes-resumes'),
     path('manager/jobs/export-csv/',JobsExportCsv.as_view(), name='manager-exports-jobs-data'),
-    path('manager/jobs/hold/',HoldJobView.as_view(), name='manager-hold-job'),
-    path('manager/jobs/remove-hold/',RemoveFromHold.as_view(), name='manager-remove-job-from-hold'),
+    path('manager/job/hold/<int:job_id>/',HoldJobView.as_view(), name='manager-hold-job'),
+    path('manager/job/remove-hold/<int:job_id>/',RemoveFromHold.as_view(), name='manager-remove-job-from-hold'),
     
 
     
