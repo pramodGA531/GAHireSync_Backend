@@ -573,7 +573,8 @@ class getClientJobposts(APIView):
                         "job_id": job.id,
                         "job_title": job.job_title,
                         "created_at": job.created_at,
-                        "job_code": job.jobcode
+                        "job_code": job.jobcode,
+                        "extended_deadline": job.extended_deadline,
                     }
                     jobs_list.append(job_json)
                 return Response(jobs_list, status=status.HTTP_200_OK)
@@ -613,6 +614,7 @@ class getClientJobposts(APIView):
                         "job_code": job.jobcode,
                         "job_title": job.job_title,
                         "total_candidates": applications_count,
+                        "extended_deadline": job.extended_deadline,
                         "company": job.organization.name,
                         "status": job.status,
                         "reason": job.reason,
@@ -3191,3 +3193,18 @@ class DeleteNegotiation(APIView):
             print("Error:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+class ApproveDeadline(APIView):
+    permission_classes = [IsClient]
+    def put(self, request, job_id):
+        try:
+            job = JobPostings.objects.get(id = job_id)
+            job.job_close_duration = job.extended_deadline
+            job.extended_deadline = None
+            job.save()
+
+            return Response({"message":"Deadline extended successfully"},status=status.HTTP_200_OK)
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -715,3 +715,19 @@ class JobsInterviews(APIView):
             data.append(interview_data)
 
         return Response(data, status=200)
+
+
+class CandidateNotJoined(APIView):
+    permission_classes = [IsInterviewer]
+    def put(self, request):
+        try:
+            resume_id = request.GET.get('id')
+            application = JobApplication.objects.get(resume = resume_id)
+            application.next_interview.status = "not_joined"
+            application.next_interview.save()
+
+            print(application.next_interview.status)
+            return Response({"message":"Updated successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)

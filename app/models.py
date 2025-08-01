@@ -212,6 +212,7 @@ class JobPostings(models.Model):
     differently_abled = models.CharField(max_length=40, blank=True)
     languages = models.CharField(max_length=100, blank=True)
     job_close_duration = models.DateField(null=True)
+    extended_deadline = models.DateField(null=True )
     approval_status = models.CharField(max_length=10,default="pending",)
     reason = models.TextField(default="" , null=True, blank=True)
     is_linkedin_posted = models.BooleanField(default=False)
@@ -438,7 +439,7 @@ class CandidateResume(models.Model):
     expected_ctc = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     notice_period = models.IntegerField(default=0)
     job_status = models.CharField(max_length=30, choices=JOB_STATUS)
-    highest_qualification = models.CharField(max_length=50,blank=True, default='B Tech')
+    highest_qualification = models.CharField(max_length=255,blank=True, default='B Tech')
     joining_days_required = models.IntegerField(default="7")
 
     def __str__(self):
@@ -480,6 +481,7 @@ class InterviewSchedule(models.Model):
     COMPLETED = 'completed'
     CANCELLED = 'cancelled'
     RESCHEDULE = 'reschedule'
+    NOT_JOINED = 'not_joined'
 
     STATUS_CHOICES = [
         (SCHEDULED, 'scheduled'),
@@ -487,6 +489,7 @@ class InterviewSchedule(models.Model):
         (COMPLETED, 'completed'),
         (CANCELLED ,'cancelled'),
         (RESCHEDULE, 'reschedule'),
+        (NOT_JOINED, 'not_joined')
     ]
     id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, blank=True, null= True)
@@ -531,7 +534,7 @@ class JobApplication(models.Model):
     ]
 
     id = models.AutoField(primary_key=True)
-    resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
+    resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
     job_location = models.ForeignKey(JobLocationsModel, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, choices= STATUS, default='applied')
     attached_to = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})

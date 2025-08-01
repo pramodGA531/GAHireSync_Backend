@@ -21,6 +21,8 @@ import requests
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Sum  
 from decimal import Decimal, InvalidOperation
+import csv
+from django.http import HttpResponse
 
 
 logger = logging.getLogger(__name__)
@@ -745,75 +747,136 @@ class RecruitersView(APIView):
 # Assign job post to the recruiter
 class AssignRecruiterView(APIView):
     permission_classes = [IsManager]
+
     def post(self, request):
         try:
             user = request.user
             org = Organization.objects.get(manager=user)
 
-            if org:
-                job_id = request.data.get('job_id')
-                recruiter_map = request.data.get('recruiter_ids', {})  
+            job_id = request.data.get('job_id')
+            recruiter_map = request.data.get('recruiter_ids', {})  
 
+            try:
+                job = JobPostings.objects.get(id=job_id, organization=org)
+            except JobPostings.DoesNotExist:
+                return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            for location_id_str, recruiter_ids in recruiter_map.items():
                 try:
-                    job = JobPostings.objects.get(id=job_id, organization=org)
-                except JobPostings.DoesNotExist:
-                    return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+                    location_id = int(location_id_str)
+                    job_location = JobLocationsModel.objects.get(id=location_id, job_id=job)
 
-                for location_id_str, recruiter_ids in recruiter_map.items():
-                    try:
-                        location_id = int(location_id_str)
-                        job_location = JobLocationsModel.objects.get(id=location_id, job_id=job)
+                    old_list = list(
+                        AssignedJobs.objects.filter(job_location=job_location)
+                        .values_list('assigned_to', flat=True)
+                    )
+                    incoming_list = recruiter_ids
 
-                        assigned_job = AssignedJobs.objects.create(job_location=job_location, job_id = job)
-                        recruiters = CustomUser.objects.filter(id__in=recruiter_ids, role='recruiter')
-                        assigned_job.assigned_to.set(recruiters)
+                    assigned_job, created = AssignedJobs.objects.get_or_create(
+                        job_location=job_location,
+                        job_id=job
+                    )
 
-                        for recruiter in recruiters:
+                    to_add = set(incoming_list) - set(old_list)
+                    to_remove = set(old_list) - set(incoming_list)
+
+                    if to_add:
+                        recruiters_to_add = CustomUser.objects.filter(
+                            id__in=to_add, role='recruiter'
+                        )
+                        assigned_job.assigned_to.add(*recruiters_to_add)
+
+                        for recruiter in recruiters_to_add:
                             link = f"{frontend_url}/recruiter/postings/{job_id}"
-
                             message = f"""
+You have been assigned a new job posting.
 
-A new job post {job.job_title} has been assigned to you. Please review the details and start the recruitment process.
-🔗 {link}
+📌 **Job Title:** {job.job_title}  
+🏢 **Client:** {job.username}  
+📍 **Location:** {job_location.location}  
 
-Best,
+Please review the job details and start sourcing profiles for this position.
+
+🔗 [View Job Posting]({link})
+
+Best Regards,  
 HireSync Team
 """
-                            send_custom_mail(f"New Job Assigned – {job.job_title}", message, {recruiter.email})
-                            
-                            notification = Notifications.objects.create(
-                            sender=request.user,
-                            receiver=recruiter,
-                            category = Notifications.CategoryChoices.ASSIGN_JOB,
-                            subject=f"New Job Assigned by Manager",
-                            message=(
-        f"📢 New Job Assignment\n\n"
-        f"You have been assigned a new job post to source profiles for.\n\n"
-        f"Position: **{job.job_title}**\n"
-        f"Client: {job.username}\n\n"
-        f"Please begin reviewing profiles and shortlisting suitable candidates for this role.\n\n"
-        f"id::{job.id}"  
-        f"link::'recruiter/postings/"
-    )
-                )
-                            notification.category = Notifications.CategoryChoices.ASSIGN_JOB
-                            notification.save()
-                    
-                    
-                    except JobLocationsModel.DoesNotExist:
-                        return Response({"error":"JOb location doesnot exist"}, status=status.HTTP_200_OK)
-                   
+                            send_custom_mail(
+                                f"New Job Assigned – {job.job_title}",
+                                message,
+                                {recruiter.email}
+                            )
 
-                return Response({"detail": "Recruiters Assigned Successfully"}, status=status.HTTP_200_OK)
+                            Notifications.objects.create(
+                                sender=request.user,
+                                receiver=recruiter,
+                                category=Notifications.CategoryChoices.ASSIGN_JOB,
+                                subject="New Job Assigned",
+                                message=(
+                                    f"📢 New Job Assignment\n\n"
+                                    f"You have been assigned a new job:\n\n"
+                                    f"Position: {job.job_title}\n"
+                                    f"Client: {job.username}\n"
+                                    f"Location: {job_location.location}\n\n"
+                                    f"Please review and start sourcing candidates.\n\n"
+                                    f"id::{job.id} link::recruiter/postings/"
+                                ),
+                            )
+
+                    # Remove recruiters
+                    if to_remove:
+                        recruiters_to_remove = CustomUser.objects.filter(
+                            id__in=to_remove, role='recruiter'
+                        )
+                        assigned_job.assigned_to.remove(*recruiters_to_remove)
+
+                        for recruiter in recruiters_to_remove:
+                            message = f"""
+You have been unassigned from a job posting.
+
+📌 **Job Title:** {job.job_title}  
+🏢 **Client:** {job.username}  
+📍 **Location:** {job_location.location}  
+
+This change was made by your manager.  
+No further action is required from your side for this posting.
+
+Best Regards,  
+HireSync Team
+"""
+                            send_custom_mail(
+                                f"Job Unassignment – {job.job_title}",
+                                message,
+                                {recruiter.email}
+                            )
+
+                            Notifications.objects.create(
+                                sender=request.user,
+                                receiver=recruiter,
+                                category=Notifications.CategoryChoices.ASSIGN_JOB,
+                                subject="Job Unassigned",
+                                message=(
+                                    f"🔄 Job Unassignment\n\n"
+                                    f"You have been removed from a job posting:\n\n"
+                                    f"Position: {job.job_title}\n"
+                                    f"Client: {job.username}\n"
+                                    f"Location: {job_location.location}\n\n"
+                                    f"No further action required.\n\n"
+                                    f"id::{job.id} link::recruiter/postings/"
+                                ),
+                            )
+
+                except JobLocationsModel.DoesNotExist:
+                    return Response({"error": "Job location does not exist"}, status=status.HTTP_200_OK)
+
+            return Response({"detail": "Recruiter assignments updated successfully"}, status=status.HTTP_200_OK)
+
         except Organization.DoesNotExist:
             return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
-        except JobPostings.DoesNotExist:
-            return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
-        except CustomUser.DoesNotExist:
-            return Response({"detail": "One or more recruiters not found"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+
 class AssignRecruiterByLocationView(APIView):
     permission_classes = [IsManager]
 
@@ -960,7 +1023,7 @@ class AgencyJobPosts(APIView):
         user = request.user
 
         try:
-            all_jobs = JobPostings.objects.filter(organization__manager=user).select_related('username')
+            all_jobs = JobPostings.objects.filter(organization__manager=user,approval_status = "accepted").select_related('username')
 
             total_postings = 0
             num_of_open_jobs = 0
@@ -1004,26 +1067,39 @@ class AgencyJobPosts(APIView):
                                      {"Rejected" : rejected}
                                     ])
                 
-                locations_assigned_to = AssignedJobs.objects.filter(job_id = job)
+                locations_assigned_to = AssignedJobs.objects.filter(job_id=job)
                 assigned_to = {}
-                for location in locations:
-                    recruiters = list(locations_assigned_to.filter(job_location = location).values_list('assigned_to__username', flat= True))
-                    assigned_to[location.location] = recruiters
-                
-              
-                # print(assigned_to)
 
-                job_details = {
-                    "job_title": job.job_title,
-                    "assigned_to": assigned_to,
-                    "client_name": job.username.username if job.username else "Unknown",
-                    "deadline": job.job_close_duration,
-                    "status": job.status,
-                    "approval_status": job.approval_status,
-                    "id": job.id,
-                    "rounds_details": rounds_details,
-                    "is_posted_on_linkedin" : job.is_linkedin_posted,
-                }
+                for location in locations:
+                    recruiters = locations_assigned_to.filter(job_location=location)
+                    recruiter_list = []
+
+                    for recruiter in recruiters:
+                        for user in recruiter.assigned_to.all():  # Iterate over M2M recruiters
+                            print(user, " is the usr")
+                            applications_count = JobApplication.objects.filter(
+                                attached_to=user, job_location=location
+                            ).count()
+                            recruiter_list.append([user.username, applications_count])
+
+                    assigned_to[location.location] = recruiter_list
+
+                    client = ClientDetails.objects.get(user = job.username)
+
+                    job_details = {
+                        "job_title": job.job_title,
+                        "assigned_to": assigned_to,
+                        "client_name": job.username.username if job.username else "Unknown",
+                        "organization_name": client.name_of_organization,
+                        "deadline": job.job_close_duration,
+                        "status": job.status,
+                        "approval_status": job.approval_status,
+                        "location": location.location,
+                        "id": job.id,
+                        "rounds_details": rounds_details,
+                        "created_at": job.created_at,
+                        "is_posted_on_linkedin" : job.is_linkedin_posted,
+                    }
 
                 jobs_list.append(job_details)
                 total_postings += num_of_positions
@@ -1381,7 +1457,8 @@ class ClientsData(APIView):
                         'website_url': client.website_url,
                         'gst_number': client.gst_number,
                         'company_address': client.company_address,
-                        'associated_at': associated_at.created_at
+                        'associated_at': associated_at.created_at,
+
                     }
 
                     jobs_data = []
@@ -1425,20 +1502,46 @@ class ClientsData(APIView):
                 added_clients = set()  
                 for job_item in jobs:
                     client = ClientDetails.objects.filter(user=job_item.username).first()
-                    if client and client.username not in added_clients:
-                        data.append({
-                            "client_id": client.id,
-                            'client_username': client.username,
-                            'organization_name': client.name_of_organization,
-                            'contact_number': client.contact_number,
-                            'website_url': client.website_url,
-                            'gst_number': client.gst_number,
-                            'company_address': client.company_address,
-                            "associated_at": job_item.created_at,
-                        })
-                        added_clients.add(client.username)  
 
-                return Response({"data":data, "connection_requests":requests_list}, status=200)
+                    if client and client.username not in added_clients:
+                         
+                        client_data = {
+                            "client_id": client.id,
+                            "client_username": client.username,
+                            "organization_name": client.name_of_organization,
+                            "contact_number": client.contact_number,
+                            "website_url": client.website_url,
+                            "gst_number": client.gst_number,
+                            "company_address": client.company_address,
+                            "associated_at": job_item.created_at,
+                            "negotiation_requested_on": None,
+                            "negotiation_accepted_on": None,
+                            "negotiations_request": None
+                        }
+
+                        negotiation = NegotiationRequests.objects.filter(
+                            client_organization__client=client
+                        ).first()
+
+                        if negotiation:
+                            client_data.update({
+                                "negotiation_requested_on": negotiation.requested_date,
+                                "negotiation_accepted_on": negotiation.accepted_date,
+                                "negotiations_request": {
+                                    "ctc_range": negotiation.ctc_range,
+                                    "service_fee": negotiation.service_fee,
+                                    "replacement_clause": negotiation.replacement_clause,
+                                    "interest_percentage": negotiation.interest_percentage,
+                                    "invoice_after": negotiation.invoice_after,
+                                    "payment_within": negotiation.payment_within,
+                                    "status": negotiation.status
+                                }
+                            })
+
+                        data.append(client_data)
+                        added_clients.add(client.username)
+
+                return Response({"data": data, "connection_requests": requests_list}, status=200)
 
 
         except Exception as e:
@@ -2128,3 +2231,97 @@ class DeleteResumes(APIView):
             logger.error(str(e)) 
             return Response({"error": "An error occurred while deleting candidates."},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class ExtendDeadlineView(APIView):
+    permission_classes = [IsManager]
+
+    def put(self, request, id): 
+        try:
+            job = JobPostings.objects.get(id=id)
+
+            if job.organization.manager != request.user:
+                return Response(
+                    {"error": "You are not eligible to change the deadline"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            extended_time = request.data.get('new_deadline')
+            if not extended_time:
+                return Response(
+                    {"error": "Deadline is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                formatted_date = datetime.strptime(extended_time, "%Y-%m-%d").date()
+            except ValueError:
+                formatted_date = datetime.fromisoformat(extended_time).date()
+
+            job.extended_deadline = formatted_date
+            job.save()
+
+            return Response(
+                {"message": "Request sent to client successfully"},
+                status=status.HTTP_200_OK,
+            )
+        except JobPostings.DoesNotExist:
+            return Response(
+                {"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(str(e))
+            return Response(
+                {"error": "An error occurred while updating deadline."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class JobsExportCsv(APIView):
+    def get(self, request):
+        try:
+            organization = Organization.objects.get(manager=request.user)
+            job_posts = JobPostings.objects.filter(organization=organization)
+
+            client_usernames = job_posts.values_list('username__username', flat=True).distinct()
+            clients = ClientDetails.objects.filter(user__username__in=client_usernames)
+
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="jobs_export.csv"'
+
+            writer = csv.writer(response)
+            writer.writerow([
+                "Organization Name",
+                "Client Name",
+                "Client Contact",
+                "Client Email",
+                "Number of Jobs",
+                "Last Job",
+                "Last Collaborated On"
+            ])
+
+
+            for client in clients:
+                jobs = job_posts.filter(username=client.user)
+                latest_job = jobs.order_by('-created_at').first()
+                jobs_count = jobs.count()
+                writer.writerow([
+                    client.name_of_organization,
+                    client.user.username,
+                    client.contact_number,
+                    client.user.email,
+                    jobs_count,
+                    latest_job.job_title if latest_job else "",
+                    latest_job.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_job else ""
+                ])
+
+
+            
+
+            return response
+
+        except Exception as e:
+            logger.error(str(e))
+            return Response(
+                {"error": "An error occurred while exporting CSV."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

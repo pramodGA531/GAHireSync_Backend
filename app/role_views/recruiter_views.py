@@ -453,6 +453,7 @@ class ScheduleInterview(APIView):
             app.from_time = from_time
             app.to_time = to_time
             app.meet_link = meet_link
+            app.status = "scheduled"
             app.save()
 
             return Response({"message": "Interview rescheduled successfully."}, status=status.HTTP_200_OK)

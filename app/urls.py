@@ -50,6 +50,7 @@ urlpatterns = [
     path('client/connected-organizations/',ConnectedOrganizations.as_view(), name='client-connected-organizations'),
     path('client/add-organization/',AddOrganization.as_view(), name='client-add-organization'),
     path('client/job-postings/', getClientJobposts.as_view(), name='client-job-posting'),
+    path('client/approve-deadline/<int:job_id>/', ApproveDeadline.as_view(), name='client-approve-deadline'),
     path('client/edit-job-count/', EditJobsCountView.as_view(), name='count-of-number-of-edit-requests'),
     path('client/not-approval-jobs/', JobEditRequestsView.as_view(),name='get-edited-job-posts'),
     path('client/get-resumes/',GetResumeView.as_view(),name = 'get-resumes'),
@@ -103,6 +104,7 @@ urlpatterns = [
     path('interviewer/missed-interviews/',MissedInterviewsView.as_view(), name='missed-interviews'),
     path('interviewer/promote-candidate/', PromoteCandidateView.as_view(), name="promote-candidate"),
     path('interviewer/select-candidate/', SelectCandidate.as_view(), name= 'shortlist-candidate'),
+    path('interviewer/candidate-not-joined/', CandidateNotJoined.as_view(), name= 'candidate-not-joined'),
     path('interviewer/reject-candidate/', RejectCandidate.as_view(), name= 'reject-candidate'),
     path('interviewer/jobs-interviews/', JobsInterviews.as_view(), name= 'reject-candidate'),
 
@@ -181,6 +183,8 @@ urlpatterns = [
     path('manager/reject-approval-client/',RejectApprovalClient.as_view(), name='manager-reject-client-approval'),
     path('manager/accept-approval-client/',AcceptApprovalClient.as_view(), name='manager-accept-client-approval'),
     path('manager/delete-resumes/',DeleteResumes.as_view(), name='manager-deletes-resumes'),
+    path('manager/update-deadline/<int:id>/',ExtendDeadlineView.as_view(), name='manager-deletes-resumes'),
+    path('manager/jobs/export-csv/',JobsExportCsv.as_view(), name='manager-deletes-resumes'),
     
 
     

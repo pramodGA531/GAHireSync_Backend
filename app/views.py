@@ -335,9 +335,12 @@ class JobDetailsAPIView(APIView):
             job_id = request.GET.get('job_id')
             job_posting = JobPostings.objects.get(id=job_id)
             serializer = JobPostingsSerializer(job_posting)
+            data = serializer.data
+            client = ClientDetails.objects.get(user = job_posting.username)
             assigned_recruiters = AssignedJobs.objects.filter(job_location__job_id=job_id).prefetch_related('assigned_to', 'job_location')
             
             assigned_recruiters_map = {}
+            data["client_website"] = client.website_url
 
             for assignment in assigned_recruiters:
                 location_id = str(assignment.job_location.id)
@@ -351,7 +354,7 @@ class JobDetailsAPIView(APIView):
                     assigned_recruiters_map[location_id] = recruiter_ids    
 
             return Response({
-                "job": serializer.data,
+                "job": data,
                 "assigned_recruiters": assigned_recruiters_map
             }, status=status.HTTP_200_OK)
 
@@ -1203,9 +1206,15 @@ class AllApplicationsForJob(APIView):
     def get(self, request):
         try:
             job_id = request.GET.get('job_id')
+            recruiter_id = request.GET.get('recruiter_id')
             job = JobPostings.objects.get(id=job_id)
 
-            applications = JobApplication.objects.filter(job_location__job_id=job.id)
+            if recruiter_id:
+                recruiter = CustomUser.objects.get(id = recruiter_id)
+                applications = JobApplication.objects.filter(job_location__job_id=job.id, attached_to = recruiter)
+            else:
+                applications = JobApplication.objects.filter(job_location__job_id=job.id)
+
             applications_list = []
             for application in applications:
                 applications_list.append({
