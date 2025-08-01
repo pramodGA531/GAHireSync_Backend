@@ -29,6 +29,7 @@ from celery.app.control import Control
 from decimal import Decimal, InvalidOperation
 from django.utils.encoding import force_bytes
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
+from django.db import transaction
 
 
 
@@ -801,10 +802,57 @@ def get_invoice_terms(selected_application_id):
                     "final_price":final_price,
                 }
         except Exception as e:
-            continue  # Skip invalid range terms
+            continue  
 
-    # Step 3: No matching terms found
     return {"error": "No applicable service fee terms for the selected CTC"}
+
+
+def update_location_to_hold(location_id):
+    try:
+        location = JobLocationsModel.objects.get(id=location_id)
+        location.status = "hold"
+
+        applications = JobApplication.objects.filter(
+            Q(job_location=location.id),
+            ~Q(status__in=['rejected', 'selected'])
+        )
+
+        for application in applications:
+            application.next_interview = None
+            application.is_closed = True
+            application.save(update_fields=["next_interview", "is_closed"])
+
+        location.save(update_fields=["status"])
+        return True
+
+    except ObjectDoesNotExist:
+        return False
+    except Exception as e:
+        print(f"Error updating location {location_id} to hold: {e}")
+        return False
+
+
+def update_job_to_hold(job_id):
+    try:
+        job = JobPostings.objects.get(id=job_id)
+        
+        with transaction.atomic():
+            locations = JobLocationsModel.objects.filter(job_id=job)
+
+            for location in locations:
+                if not update_location_to_hold(location.id):
+                    raise Exception(f"Failed to update location {location.id}")
+
+            job.status = "hold"
+            job.save(update_fields=["status"])
+            return True
+
+    except ObjectDoesNotExist:
+        print(f"Job with ID {job_id} not found.")
+        return False
+    except Exception as e:
+        print(f"Error updating job {job_id} to hold: {e}")
+        return False
 
 
 
@@ -841,6 +889,7 @@ def update_location_status(location_id):
     except Exception as e:
         print(f"Error verifying job status: {str(e)}")
         return False  
+    
 
 
 def reopen_joblocation(location_id):
@@ -939,3 +988,5 @@ def can_add_recruiter(organization_id):
         return recruiters < allowed_recruiters
     except Exception as e:
         raise ValueError(f"{e}")
+    
+

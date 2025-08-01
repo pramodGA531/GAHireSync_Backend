@@ -2325,3 +2325,58 @@ class JobsExportCsv(APIView):
                 {"error": "An error occurred while exporting CSV."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+class HoldJobView(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request, job_id):
+        try:
+            job = JobPostings.objects.get(id=job_id)
+
+            success = update_job_to_hold(job.id)
+            if success:
+                return Response(
+                    {"detail": f"Job '{job.job_title}' and its locations have been put on hold successfully."},
+                    status=status.HTTP_200_OK,
+                )
+            else:
+                return Response(
+                    {"error": "Failed to update one or more locations for this job."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        except ObjectDoesNotExist:
+            logger.error(f"Job with ID {job_id} not found.")
+            return Response(
+                {"error": "Job not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            logger.exception(f"Error while putting job {job_id} on hold: {e}")
+            return Response(
+                {"error": "An unexpected error occurred while updating the job."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+
+
+class RemoveFromHold(APIView):
+    permission_classes = [IsManager]
+    def put(self, request, job_id):
+        try:
+            job = JobPostings.objects.get(id = job_id)
+            job.status = "opened"
+            job.save()
+            return Response({"message":"Job removed from hold successfully"}, status= status.HTTP_200_OK)
+        except ObjectDoesNotExist:
+            logger.error(f"Job with ID {job_id} not found.")
+            return Response(
+                {"error": "Job not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            logger.exception(f"Error while putting job {job_id} on hold: {e}")
+            return Response(
+                {"error": "An unexpected error occurred while updating the job."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

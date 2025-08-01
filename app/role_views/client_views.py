@@ -1901,7 +1901,7 @@ class UpdateJoiningStatus(APIView):
         except json.JSONDecodeError:
             return Response({'error': 'Invalid JSON format'}, status=status.HTTP_400_BAD_REQUEST)        
 
-def closeJob(self, id):
+# def closeJob(self, id):
         try:
             job = JobPostings.objects.get(id = id)
             job.status = 'closed'
@@ -1919,44 +1919,6 @@ def closeJob(self, id):
             print(str(e))
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-class AllSelectedCandidates(APIView):
-    permission_classes = [IsClient]
-    def get(self, request):
-        try:
-            applications = JobApplication.objects.filter(job_id__username=request.user).prefetch_related("selected_candidates")
-
-            candidates_list = []
-            for application in applications:
-
-                candidates = application.selected_candidates.all()
-
-                job_candidates = [
-                    {
-                        "candidate_name": candidate.candidate.name.username,
-                        "joining_status": candidate.joining_status,
-                        "candidate_id": candidate.id,
-                    }
-                    for candidate in candidates
-                ]
-
-                job_details_json = {
-                    "job_title": application.job_id.job_title,
-                    "created_at": application.job_id.created_at,
-                    "candidates": job_candidates,
-                }
-                candidates_list.append(job_details_json)
-
-            return Response(candidates_list, status=status.HTTP_200_OK)
-
-        except JobApplication.DoesNotExist:
-            return Response({"error": "No job applications found"}, status=status.HTTP_404_NOT_FOUND)
-
-        except SelectedCandidates.DoesNotExist:
-            return Response({"error": "No selected candidates found"}, status=status.HTTP_404_NOT_FOUND)
-
-        except Exception as e:
-            return Response({"error": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-        
 class CandidateLeftView(APIView):
     def post(self, request):
         try:
