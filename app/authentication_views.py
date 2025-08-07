@@ -139,6 +139,7 @@ class ClientInfo(APIView):
             return Response({"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
     def put(self, request, *args, **kwargs):
         combined_values = request.data
         requestUser=request.user
@@ -180,7 +181,8 @@ class ClientInfo(APIView):
                     'website_url': combined_values.get('website_url', client_details.website_url),
                     'gst_number': combined_values.get('gst', client_details.gst_number),
                     'company_pan': combined_values.get('company_pan', client_details.company_pan),
-                    'company_address': combined_values.get('company_address', client_details.company_address)
+                    'company_address': combined_values.get('company_address', client_details.company_address),
+                    "about": combined_values.get('about', client_details.about),
                 }
 
                 client_serializer = ClientDetailsSerializer(
@@ -496,3 +498,29 @@ class changePassword(APIView):
                 return Response({'success': False, 'message': 'New passwords do not match.'})
         else:
             return Response({'success': False, 'message': 'Invalid current password.'})
+
+
+
+ 
+
+# This is to change the password for the users after logged in
+class ChangePassword(APIView):
+    permission_classes=[IsAuthenticated]
+    def post(self, request,):
+            user = request.user
+            old_password = request.data.get('old_password')
+            new_password = request.data.get('new_password')
+            confirm_password = request.data.get('confirm_password')
+            if old_password and new_password and confirm_password:
+                if new_password != confirm_password:
+                    return Response({"error": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
+                if user.check_password(old_password):
+                    user.set_password(new_password)
+                    user.save()
+                    return Response({"message": "Password changed successfully"}, status=status.HTTP_200_OK)
+                else:
+                    return Response({"error": "Old password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+               
+            else:
+                return Response({"error": " Old password,New password and confirm password are required"}, status=status.HTTP_400)
+                                    

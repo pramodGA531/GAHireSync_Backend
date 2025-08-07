@@ -543,3 +543,9 @@ class FullJobDraftSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         # Optional: write update logic if needed
         return super().update(instance, validated_data)
+
+
+class BlogImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BlogImage
+        fields = ['id', 'image', 'image_url', 'uploaded_at']

@@ -84,6 +84,8 @@ class CandidateResumeView(APIView):
                 return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
             
             primary_skills = json.loads(data.get('primary_skills', '[]'))
+
+            job_primary = SkillMetricsModel.objects.filter(job_id = job_id, is_primary = True)
  
             secondary_skills = json.loads(data.get('secondary_skills', '[]'))
 
@@ -91,7 +93,7 @@ class CandidateResumeView(APIView):
             if current_ctc == "null":
                 current_ctc = 0.0
 
-            if not primary_skills:
+            if job_primary and  not primary_skills:
                 return Response({"error": "Primary skills are required"}, status=status.HTTP_400_BAD_REQUEST)
             
             try:

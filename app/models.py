@@ -4,6 +4,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 import uuid
+import os
 from django.utils.timezone import now
 # Custom User Manager
 class CustomUserManager(BaseUserManager):
@@ -130,6 +131,7 @@ class ClientDetails(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     name_of_organization = models.CharField(max_length=200)
     designation = models.TextField()
+    about = models.TextField(blank=True, default="")
     contact_number = models.BigIntegerField()
     website_url = models.CharField(max_length=255, blank=True, default="")
     gst_number = models.CharField(max_length=100, blank=True, default="N/A")
@@ -534,7 +536,7 @@ class JobApplication(models.Model):
     ]
 
     id = models.AutoField(primary_key=True)
-    resume = models.ForeignKey(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
+    resume = models.OneToOneField(CandidateResume, on_delete=models.CASCADE, related_name="job_application")
     job_location = models.ForeignKey(JobLocationsModel, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, choices= STATUS, default='applied')
     attached_to = models.ForeignKey(CustomUser, related_name="sent_resumes", on_delete=models.CASCADE, null=True, limit_choices_to={"role": "recruiter"})
@@ -899,6 +901,29 @@ class Messages(models.Model):
     
 class Tag(models.Model):
     name = models.CharField(max_length=50, unique=True)
+
+def blog_image_upload_path(instance, filename):
+    ext = filename.split('.')[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    return os.path.join("blog_images", filename)
+
+
+class BlogImage(models.Model):
+    image = models.ImageField(upload_to=blog_image_upload_path)
+    uploaded_by = models.ForeignKey(
+        CustomUser, 
+        on_delete=models.CASCADE,
+        related_name="blog_images"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Image {self.id} uploaded by {self.uploaded_by}"
+
+    @property
+    def image_url(self):
+        return self.image.url
+
     
 class BlogPost(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
