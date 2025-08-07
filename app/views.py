@@ -26,6 +26,8 @@ from decimal import ROUND_HALF_UP
 
 frontend_url = os.environ['FRONTENDURL']
 
+
+# fetching the user details and sending to the frontend
 class GetUserDetails(APIView):
     def get(self,request):
         try:
@@ -41,6 +43,9 @@ class GetUserDetails(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+# 
 class OrganizationTermsView(APIView):
     
     permission_classes = [IsAuthenticated]  
@@ -51,7 +56,6 @@ class OrganizationTermsView(APIView):
 
     def get(self, request):
         try:
-            print("entered here")
             user = request.user
             organization = Organization.objects.filter(manager=user).first()
 
@@ -59,7 +63,6 @@ class OrganizationTermsView(APIView):
                 return Response({"error":"Organization doesnot found"},status=status.HTTP_400_BAD_REQUEST)
             
             connections = ClientOrganizations.objects.filter(organization = organization)
-            print("enterd here")
             all_terms =[]
             for connection in connections:
                 connection_terms = ClientOrganizationTerms.objects.filter(client_organization = connection)
@@ -96,7 +99,6 @@ class OrganizationTermsView(APIView):
             organization_total_terms = OrganizationTerms.objects.filter(organization = organization).count()
 
             unique_code = data.get('unique_code')
-            print(unique_code, " is the unique code")
             if unique_code == "" or unique_code == None:
                 unique_code = self.generate_unique_code(organization.org_code, organization_total_terms)
 
@@ -146,9 +148,11 @@ class OrganizationTermsView(APIView):
             print(str(e))
             return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
+# This gives all the negotiated terms for job posting, can be called by Agency Manager and Client
 class NegotiateTermsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # This gets the negotiatied terms for the manager and client, used serializer for this view to get the JSON data.
     def get(self, request, *args, **kwargs):
         user = request.user
         if user.role == "manager":
@@ -165,7 +169,8 @@ class NegotiateTermsView(APIView):
         serializer = NegotiationSerializer(negotiationrequests, many=True)
         return Response(serializer.data)
     
-
+    # This creates a new negotiation request, raised by the client. every new negotiation request includes
+    # service_fee, ctc_range, interest_percentage, replacement_clause, payment_within, client_organization connection.
     def post(self, request, *args, **kwargs):
         user = request.user
 
@@ -206,12 +211,6 @@ class NegotiateTermsView(APIView):
             service_percentage = Decimal("0.00")
             interest_percentage = Decimal("0.00")
 
-
-        print(interest_percentage, " ",service_percentage,  " is the interest percentage")
-        # model_instance.interest_percentage = interest_percentage
-        # model_instance.save()
-        # interest_percentage = data.get('interest_percentage')
-
         try:
             data = request.data
             negotiation_request = NegotiationRequests.objects.create(
@@ -250,6 +249,8 @@ HireSync Team
 
         except Exception as e:
             return Response({"detail": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    # Here manager can accept or reject the negotiation request. 
 
     def put(self, request):
         data = request.data
@@ -266,17 +267,6 @@ HireSync Team
                 negotiation_request.status = "accepted"
                 negotiation_request.expiry_date = datetime.today().date() + timedelta(days=365)
                 negotiation_request.save()
-
-                
-                # ClientOrganizationTerms.objects.create(
-                #     client_organization = negotiation_request.client_organization,
-                #     service_fee=negotiation_request.service_fee,
-                #     replacement_clause=negotiation_request.replacement_clause,
-                #     invoice_after=negotiation_request.invoice_after,
-                #     payment_within=negotiation_request.payment_within,
-                #     interest_percentage=negotiation_request.interest_percentage,
-                #     is_negotiated = True
-                # )
 
                 link = f"{frontend_url}/client/postjob"    
                 client_email_message = f"""
@@ -313,9 +303,6 @@ HireSync Team
 
 """
                 send_custom_mail( subject="Job Terms & Conditions – Update",body=client_email_message,to_email=[negotiation_request.client_organization.client.user.email])
-                
-                #  accept notification  here i need to send the notification to the agency to the client find the emails of the client and the agency 
-                
 
             else:
                 return Response({"detail": "Invalid status provided. Please use 'accepted' or 'rejected'."}, status=status.HTTP_400_BAD_REQUEST)
@@ -329,6 +316,7 @@ HireSync Team
             return Response({"detail": f"An error occurred: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# This view is to send the complete job description of the job post
 class JobDetailsAPIView(APIView):
     def get(self, request, *args, **kwargs):
         try:
@@ -362,6 +350,8 @@ class JobDetailsAPIView(APIView):
             return Response({"detail": "Job posting not found"}, status=status.HTTP_404_NOT_FOUND)
         
 
+# This sends the complete details of the candidate, here based on the job_id, it fetches the application and send the
+#  interviews feedback for every round.
 class CandidateJobDetailsAPIView(APIView):
     permission_classes = [IsCandidate]
     def get(self, request):
@@ -370,20 +360,6 @@ class CandidateJobDetailsAPIView(APIView):
             job_posting = JobPostings.objects.get(id=job_id)
             serializer = CandidateJobpostSerializer(job_posting)
 
-            # assigned_recruiters = AssignedJobs.objects.filter(job_location__job_id=job_id).prefetch_related('assigned_to', 'job_location')
-            
-            # assigned_recruiters_map = {}
-
-            # for assignment in assigned_recruiters:
-            #     location_id = str(assignment.job_location.id)
-            #     recruiter_ids = list(assignment.assigned_to.values_list('id', flat=True))
-
-            #     if location_id in assigned_recruiters_map:
-            #         assigned_recruiters_map[location_id] = list(
-            #             set(assigned_recruiters_map[location_id] + recruiter_ids)
-            #         )
-            #     else:
-            #         assigned_recruiters_map[location_id] = recruiter_ids    
 
             return Response({
                 "job": serializer.data,
@@ -444,7 +420,7 @@ class GetResumeByApplicationId(APIView):
             return Response({"detail": "Job application not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
-# Agency and Recruiter can see this candidate Profile
+# Agency and Recruiter can see this candidate Profile consists of experience, education remaining all the data.
 class ViewCandidateProfileAPI(APIView):
     def get(self, request):
         try:
@@ -596,6 +572,8 @@ class CandidateStatusForJobView(APIView):
         except Exception as e:
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# manager/client can send the email notification to the candidate to update his profile 
 class NotificationToUpdateProfileView(APIView):
     def post(self, request):
         try:
@@ -631,7 +609,7 @@ Interviewers are waiting to check your profile
             return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
-
+# list of invoices that are generated are placed here
 class Invoices(APIView):
     def get(self, request):
         try:
@@ -734,6 +712,8 @@ class Invoices(APIView):
         else:
             return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
         
+
+# These are the basic application details, sent by the recruiter
 class BasicApplicationDetails(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, application_id):
@@ -766,6 +746,7 @@ class BasicApplicationDetails(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# View to upload the profile picture
 class AddProfileView(APIView):
     def post(self, request):
         try:
@@ -787,6 +768,9 @@ class AddProfileView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
+# In the ticket module, everybody can raise the ticker to the admin. Admin will address that ticket
+
+# This view is to raise the new tickets, get the raised tickets, if the query has specific ticket id then complete ticket details along with replies have been sent.
 class RaiseTicketView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -880,7 +864,7 @@ class RaiseTicketView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-
+# This is to update the status of the ticketk by the user who created.
 class UpdateStatus(APIView):
     def put(self, request):
         try:
@@ -896,6 +880,7 @@ class UpdateStatus(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# createing a reply for the ticket and stored in the messages model
 class HandleReplies(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request):
@@ -986,6 +971,7 @@ class HandleTicketView(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+# this view is to create / get the blog.
 class BlogPostView(APIView):
     def get(self, request):
         blog_id = request.GET.get('blog_id')
@@ -1047,6 +1033,7 @@ class BlogPostView(APIView):
     
         return Response({'message': 'Blog post created successfully'}, status=status.HTTP_201_CREATED)
 
+# Here all blogs can  be accessed by the admin
 class AdminGetBlogs(APIView):
     def get(self, request):
         try:
@@ -1070,6 +1057,7 @@ class AdminGetBlogs(APIView):
         except Exception as e:
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+# Get the list of blogs created by the user
 class MyBlogs(APIView):
     def get(self, request):
         try:
@@ -1086,6 +1074,7 @@ class MyBlogs(APIView):
         except Exception as e:
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+# This view is to approve the blog by the admin.
 class ApproveBlogPost(APIView):
     def get(self, request):
         try:
@@ -1125,7 +1114,7 @@ class ApproveBlogPost(APIView):
         except Exception as e:
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-
+# get the accepted terms for the job post, based on the ctc_range while creatin the job post ,only that details will be fetched.
 class GetJobPostTerms(APIView):
     permission_classes = [IsClient]
 
@@ -1165,6 +1154,7 @@ class GetJobPostTerms(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+# get all the notification for the user, notification panel, and update the status after viewing the notification
 class GetNotifications(APIView):
     def get(self, request):
         try:
@@ -1200,6 +1190,8 @@ class GetNotifications(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+# this view sends alll the application for the given job, categorizing based on the status of the application.
 class AllApplicationsForJob(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1287,33 +1279,17 @@ class AllApplicationsForJob(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# this view is to see is there any pending notifications for the side nav panel for every user
 def check_notifications(request):
     try:
         count = Notifications.objects.count()
         return JsonResponse({'status': 'ok', 'count': count})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
-        
-class ChangePassword(APIView):
-    permission_classes=[IsAuthenticated]
-    def post(self, request,):
-            user = request.user
-            old_password = request.data.get('old_password')
-            new_password = request.data.get('new_password')
-            confirm_password = request.data.get('confirm_password')
-            if old_password and new_password and confirm_password:
-                if new_password != confirm_password:
-                    return Response({"error": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
-                if user.check_password(old_password):
-                    user.set_password(new_password)
-                    user.save()
-                    return Response({"message": "Password changed successfully"}, status=status.HTTP_200_OK)
-                else:
-                    return Response({"error": "Old password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
-               
-            else:
-                return Response({"error": " Old password,New password and confirm password are required"}, status=status.HTTP_400)
-                                    
+       
+
+# status of the notification will change from unseen to seen 
+# (here category means, whenever the user navigates from the sidenav then this function calls every time to change the notification)
 class NotificationStatusChange(APIView):
     def put(self, request):
         try:
@@ -1335,6 +1311,8 @@ class NotificationStatusChange(APIView):
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 
+
+# complete application details along with the resume data, skill sets, evaluation data, upcoming interviews. no serializer
 class CompleteApplicationDetailsView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1431,6 +1409,9 @@ class CompleteApplicationDetailsView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+# This view is to store the GahIRESYNC linked in credentials.
+# There are 2 types of models to store the linkedin credentials, one is to store the agencies and another is to store the gahiresync 
+# We will post the job post into both the agency's linkedin and GA Hiresyn linkedin account
 class LinkedInRedirectView(APIView):
     def get(self, request):
         try:
@@ -1521,7 +1502,7 @@ class LinkedInRedirectView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
+# This is the generate the tokens for the linkedin login, and automatically redirects to the gives auth_url in the frontend
 class GenerateLinkedInTokens(APIView):
     def get(self, request):
         try:
@@ -1542,6 +1523,8 @@ class GenerateLinkedInTokens(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
+# Fetching all the jobs that are required to display in the job board page (website)
 class FetchAllJobs(APIView):
     def get(self, request):
         try:
@@ -1567,7 +1550,8 @@ class FetchAllJobs(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-
+        
+# This view is regarding job board module, application sent by the candidate in the job board then it stored in teh job application.
 class SendApplicationDetailsView(APIView):
     def post(self, request):
         try:
@@ -1622,7 +1606,7 @@ class SendApplicationDetailsView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-        
+# joining date is updated to the new date, sent by the client        
 class UpdateJoiningDate(APIView):
     permission_classes = [IsClient]
     def put(self, request):
@@ -1638,6 +1622,7 @@ class UpdateJoiningDate(APIView):
             print("Error:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+# this view is to update the status of the candidate when not joined in the company after selected and accepted the ctc. raised by the client.
 class UpdateCandidateLeft(APIView):
     permission_classes = [IsClient]
 
@@ -1673,7 +1658,8 @@ class UpdateCandidateLeft(APIView):
             print("Error:", str(e))
             return Response({"error": "Internal server error: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
+# All the plans that are created are listed here. This view is called, while signup - at present there is no view for creating the plan, you need to create
+# in the admin panel. 
 class FetchPlans(APIView):
     def get(self, request):
         try:
@@ -1692,6 +1678,7 @@ class FetchPlans(APIView):
             return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 
+# This view is called whenever the limit is crossed while creating a job post by the client. Its an automatic alert generated and sent to the agency manager
 class UpgradeRequestMail(APIView):
     def get(self, request):
         try:
@@ -1725,3 +1712,24 @@ HireSync Platform
             return Response({"messaeg":"Plan upgradation request sent successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+class BlogImageUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        files = request.FILES.getlist('images')
+        if not files:
+            return Response({"error": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        image_instances = []
+        for file in files:
+            image_obj = BlogImage.objects.create(
+                image=file,
+                uploaded_by=request.user
+            )
+            image_instances.append(image_obj)
+
+        serializer = BlogImageSerializer(image_instances, many=True)
+        urls = [img.image_url for img in image_instances]
+        return Response({"urls": urls, "images": serializer.data}, status=status.HTTP_201_CREATED)

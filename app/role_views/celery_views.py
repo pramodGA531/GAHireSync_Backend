@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 from_mail = settings.DEFAULT_FROM_EMAIL
 today = date.today()
 
-
+# Sending invoices to clients after a candidate joins (delayed display based on service terms)
 def invoice_validate(request=None):
     """Validates and generates invoices for joined candidates."""
     
@@ -31,7 +31,7 @@ def invoice_validate(request=None):
             invoice_exists = InvoiceGenerated.objects.filter(application=application).first()
             if invoice_exists:
                 logger.info(f"Invoice already exists for application {application.id}, sending reminder...")
-                invoice_reminder(job, application, joined_candidate, invoice_exists)  
+                process_invoice_remainder(job, application, joined_candidate, invoice_exists)  
             else:
                 # if invoice_date == yesterday:  
                 if 1==1:
@@ -59,6 +59,8 @@ def invoice_validate(request=None):
     return JsonResponse({"status": "success"}, safe=False) if request else None
     
 
+# send the remainders to the client to pay the invoice if not paid
+
 def process_invoice_remainder():
     try:
         invoices = InvoiceGenerated.objects.filter(scheduled_to = today, payment_status = 'pending', invoice_status = "scheduled")
@@ -74,6 +76,7 @@ def process_invoice_remainder():
         logger.error("Error in processing invoice remainders:", str(e))
 
 
+# Approval reminders for job posts to managers
 def approve_job_post_manager():
     try:
         job_postings = JobPostings.objects.filter(
@@ -117,6 +120,7 @@ GA Hiresync Team
     except Exception as e:
         logger.error("Error in activate_job_post:", str(e))
 
+# Approval reminders for job posts and negotiation requests to managers
 
 def process_approve_negotation_request():
     try:
@@ -159,6 +163,8 @@ GA Hiresync Team
         logger.error("Error in activate_job_post:", str(e))
 
 
+
+# Recruiter job assignment reminders
 def process_assign_job_post():
     try:
         job_postings = JobPostings.objects.filter(created_at__date__lt = today, approval_status = "approved", status = 'opened')
@@ -190,6 +196,7 @@ GA Hiresync Team
         logger.error("Error in activate_job_post:", str(e))
 
 
+# candidate shortlist action reminders to clients
 def process_shortlist_application_client():
     try:
         applications = JobApplication.objects.filter(status='pending', created_at__date__lt = today , job_location__status = 'opened')
@@ -226,6 +233,8 @@ Best regards,
         logger.error("Error in activate_job_post:", str(e))
 
 
+
+# Interview scheduling reminders to recruiters
 def process_schedule_interview():
     try:
         applications = JobApplication.objects.filter(status = 'processing', next_interview = None, job_location__status = 'opened')
@@ -264,7 +273,7 @@ GA HireSync Team
         
 
     
-
+# Post-interview feedback reminders to interviewers
 def process_interview_remarks():
     try:
         scheduled_interviews = InterviewSchedule.objects.filter(scheduled_date__lt = today,status = 'scheduled')
@@ -305,6 +314,7 @@ GA HireSync Team
         logger.error("Error in process interviews:", str(e))
 
 
+# Candidate selection reminders to clients
 def process_select_candidate_client():
     try:
         subject = "Update the status of the candidate"
@@ -342,6 +352,7 @@ Best regards,
         logger.error("Error in activate_job_post:", str(e))
 
 
+# Job post acceptance reminders to candidates
 def process_job_offer_candidate():
     try:
         subject = "Accept the job post"
@@ -366,6 +377,7 @@ Sincerely,
         logger.error("Error in activate_job_post:", str(e))
 
 
+# Profile update reminders to candidates
 def process_update_profile_candidate():
     try:
         threshold_date = now() - timedelta(days=5)
@@ -397,6 +409,8 @@ Thank you,
 
     except Exception as e:
         logger.error("Error in update_profile_candidate: %s", str(e))
+
+# Deadline reminders to organization managers and assigned recruiters
 
 def process_job_deadline():
     try:
@@ -472,6 +486,8 @@ GA Hiresync Team
     except Exception as e:
         logger.error("Error in job_deadline: %s", str(e))
 
+
+# Joining status update reminders to clients
 def process_confirm_joining_client():
     try:
         selected_candidates = SelectedCandidates.objects.filter(joining_status='pending',joining_date__lt = today )

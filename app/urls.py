@@ -209,6 +209,8 @@ urlpatterns = [
     
 
     path('user/blogs/', BlogPostView.as_view(), name='view-and-create-blogs'),
+    path('admin-site/blogs/upload-images/', BlogImageUploadView.as_view(), name='blog-image-upload'),
+
     path('superadmin/approve-blogs/', ApproveBlogPost.as_view(), name='admin-handling-blogs'),
     path('myblogs/', MyBlogs.as_view(), name='his-blogs'),
     
