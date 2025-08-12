@@ -275,7 +275,7 @@ class JobPostingsEditedVersion(models.Model):
     REJECTED = 'rejected'
     PENDING = 'pending'
 
-    STATUS_CHOICES = [
+    STATUS_CHOICES = [ 
         (ACCEPTED,'accepted'),
         (REJECTED,'rejected'),
         (PENDING,'pending'),
@@ -812,13 +812,14 @@ class InvoiceGenerated(models.Model):
     def __str__(self):
         return f"Invoice #{self.id} for Application {self.selected_candidate.application} - {self.client.user.email} ({self.invoice_status})"
 
+
     def save(self, *args, **kwargs):
-        from .tasks import notify_invoice_client_task 
         is_new = self.pk is None
-        super().save(*args, **kwargs) 
+        super().save(*args, **kwargs)
 
         if is_new:
-            self.invoice_code = f"{self.organization.org_code}-{self.client.id}-{self.created_at.date()}"
+            unique_suffix = str(uuid.uuid4().int)[:5]  
+            self.invoice_code = f"{self.organization.org_code}-{self.client.id}-{unique_suffix}"
             super().save(update_fields=['invoice_code'])
 
         # if is_new or kwargs.get('force_reschedule', False):

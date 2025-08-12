@@ -78,10 +78,16 @@ class CandidateResumeView(APIView):
 
             date_string = data.get('date_of_birth', '')
 
-            try:
-                date_of_birth = datetime.strptime(date_string, "%Y-%m-%d").date()
-            except ValueError:
-                return Response({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+            if date_string in ['', None, 'null']:
+                date_of_birth = None
+            else:
+                try:
+                    date_of_birth = datetime.strptime(date_string, "%Y-%m-%d").date()
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Please use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
             
             primary_skills = json.loads(data.get('primary_skills', '[]'))
 
@@ -128,8 +134,7 @@ class CandidateResumeView(APIView):
                     joining_days_required = data.get('joining_days_required',''),
                     highest_qualification = data.get('highest_qualification'),
                 )
-
-                print('candidate resume created')            
+          
 
                 for skill in primary_skills:
                     skill_metric = CandidateSkillSet.objects.create(
@@ -667,7 +672,8 @@ class RecAssignedJobsView(APIView):
                     "selected": selected,   
                     "incoming": incoming_applications,
                     "deadline": job.job_close_duration,
-                    "job_id": job_assigned.id,
+                    "assigned_id": job_assigned.id,
+                    "job_id": job_assigned.job_id.id,
                     "location": job_assigned.job_location.location,
                 })
 
@@ -677,7 +683,19 @@ class RecAssignedJobsView(APIView):
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        
+
+class RecCompleteJob(APIView):
+    permission_classes= [IsRecruiter]
+    def get(self, request, job_id):
+        try:
+            job = JobPostings.objects.get(id = job_id)
+            serializer = JobPostingsSerializer(job)
+
+            return Response({"jd":serializer.data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f" {str(e)}")
+            return Response({"detail": "Something went wrong"}, status=status.HTTP_400_BAD_REQUEST)
 
 class RecJobDetails(APIView):
     permission_classes = [IsRecruiter]
@@ -713,7 +731,7 @@ class OrganizationApplications(APIView):
                         application_json = {
                             "candidate_name": resume.candidate_name,
                             "candidate_email": resume.candidate_email,
-                            "date_of_birth": str(resume.date_of_birth),  # Convert date to string
+                            "date_of_birth": str(resume.date_of_birth),  
                             "contact_number": resume.contact_number,
                             "alternate_contact_number": resume.alternate_contact_number,
                             "job_status": resume.job_status,

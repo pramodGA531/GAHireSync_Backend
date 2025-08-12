@@ -91,6 +91,8 @@ urlpatterns = [
     path('client/save-job-draft/', JobDraftView.as_view(), name='save-location-draft'),
     path('client/save-interview-draft/', InterviewersDraftView.as_view(), name='save-location-draft'),
     path('client/delete-negotiation/', DeleteNegotiation.as_view(), name='delete-negotiation'),
+    path('client/jobpost/terms/',GetJobPostTerms.as_view(),name='job-terms'),
+    path('client/negotiations/',ClientNegotiations.as_view(),name='job-terms'),
 
 
 
@@ -133,6 +135,8 @@ urlpatterns = [
     path('recruiter/get-profile/', RecruiterProfileView.as_view(), name="recruiter-profile"),
     path('recruiter/all-alerts/', RecruiterAllAlerts.as_view(), name='recruiter-all-alerts'),
     path('recruiter/assigned-jobs/', RecAssignedJobsView.as_view(), name='recruiter-assigned-jobs'),
+    path('recruiter/job-details/<int:job_id>/', RecJobDetails.as_view(), name='rec-job-details'),
+    path('recruiter/complete-job/<int:job_id>/', RecCompleteJob.as_view(), name='rec-complete-job'),
     path('recruiter/schedule_interview/pending_application/', ScheduleInterview.as_view(), name='schedule-interviews'),
     path('recruiter/reschedule_interview/', ScheduleInterview.as_view(), name='schedule-interviews'),
     path('recruiter/candidate-selected-jobs/', ReConfirmResumes.as_view(), name = 'list-of-cadidate-selected-jobs'),
@@ -187,6 +191,7 @@ urlpatterns = [
     path('manager/jobs/export-csv/',JobsExportCsv.as_view(), name='manager-exports-jobs-data'),
     path('manager/job/hold/<int:job_id>/',HoldJobView.as_view(), name='manager-hold-job'),
     path('manager/job/remove-hold/<int:job_id>/',RemoveFromHold.as_view(), name='manager-remove-job-from-hold'),
+    path('manager/old-client-terms/',OldClientTerms.as_view(), name='get-old-client-terms'),
     
 
     
@@ -214,7 +219,6 @@ urlpatterns = [
     path('superadmin/approve-blogs/', ApproveBlogPost.as_view(), name='admin-handling-blogs'),
     path('myblogs/', MyBlogs.as_view(), name='his-blogs'),
     
-    path('jobpost/terms/',GetJobPostTerms.as_view(),name='job-terms'),
     
     path('notifications/',GetNotifications.as_view(),name='all-notifications'),
     path('check-notifications/', check_notifications, name='check-notifications'),
@@ -248,7 +252,6 @@ urlpatterns = [
     path('org/get-recruiters/', RecruitersList.as_view(), name='get-recruiters-to-allot'),
     path('org-edit-jobpost/', OrgJobEdits.as_view(), name='org-job-edits'),
     path('job-postings/<int:job_id>/', JobPostingView.as_view(), name='edit-job-posting'),
-    path('job-details/recruiter/<int:job_id>/', RecJobDetails.as_view(), name='rec-job-details'),
     path('accept-job-post/',AcceptJobEditRequestView.as_view(),name = 'accept-job-post'),
     path('reject-job-post/',RejectJobEditRequestView.as_view(),name='reject-job-post'),
 

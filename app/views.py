@@ -1122,37 +1122,38 @@ class GetJobPostTerms(APIView):
         try:
             client = request.user
 
-            # Fetch all jobs created by this client
-            jobs = JobPostings.objects.filter(username=client)
+            jobs = JobPostings.objects.filter(username=client).select_related("organization")
 
             job_terms_list = []
-
             for job in jobs:
-                try:
-                    # Get the single term for each job
-                    job_post_terms = JobPostTerms.objects.filter(job_id=job)
-                    job_terms_list.append({
-                        'job_id':job.id,
-                        'status':job.status,
-                        'organization':job.organization.name,
-                        'job_title': job.job_title,
-                        'term_id': term.id,
-                        'term_description': term.description,
-                        'service_fee': term.service_fee,
-                        'invoice_after': term.invoice_after,
-                        'payment_within': term.payment_within,
-                        'interest_percentage': term.interest_percentage,
-                        'created_at': term.created_at,
-                    } for term in job_post_terms)
+                terms = JobPostTerms.objects.filter(job_id=job)
 
-                except JobPostTerms.DoesNotExist:
-                    # Skip if a job doesn't have associated terms
-                    continue
+                job_terms_list.append({
+                    "job_id": job.id,
+                    "job_title": job.job_title,
+                    "organization": job.organization.name if job.organization else None,
+                    "status": job.status,
+                    "terms": [
+                        {
+                            "terms_id": term.id,
+                            "is_negotiated": term.is_negotiated,
+                            "term_description": term.description,
+                            "service_fee": term.service_fee,
+                            "invoice_after": term.invoice_after,
+                            "payment_within": term.payment_within,  
+                            "interest_percentage": term.interest_percentage,
+                            "created_at": term.created_at,
+                        }
+                        for term in terms
+                    ]
+                })
 
-            return Response({'data': job_terms_list}, status=status.HTTP_200_OK)
+            return Response({"data": job_terms_list}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
         
 # get all the notification for the user, notification panel, and update the status after viewing the notification
 class GetNotifications(APIView):

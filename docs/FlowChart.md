@@ -23,7 +23,7 @@ flowchart TB
 
 
 
-### Flow of JobPost
+#### Flow of JobPost
 
 - Intially Client connects to the organization to create a job opening.
 - Organization while accepting the client, it needs to fill the terms and conditions for the ctc_range upto 1-100 LPA and sends notification to the client.
