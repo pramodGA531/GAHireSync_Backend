@@ -989,4 +989,13 @@ def can_add_recruiter(organization_id):
     except Exception as e:
         raise ValueError(f"{e}")
     
+    
+def job_post_log(id,message):
+    # here create the JobPostLog record 
+    job_post_log = JobPostLog.objects.create(job_post_id=id, message=message)
+    print("job log",job_post_log.message)
+       
+        
+        
+    
 
