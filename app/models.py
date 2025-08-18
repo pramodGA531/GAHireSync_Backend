@@ -147,12 +147,15 @@ class ClientOrganizations(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     approval_status = models.CharField(default='pending',max_length=20)
     created_at = models.DateField(auto_now_add=True)
+    is_seen = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('client','organization')
 
     def __str__(self):
         return f"{self.client.user.username} - {self.organization.manager.username}"
+    
+
     
 class ClientOrganizationTerms(models.Model):
     PERCENTAGE = 'percentage'
@@ -218,6 +221,7 @@ class JobPostings(models.Model):
     approval_status = models.CharField(max_length=10,default="pending",)
     reason = models.TextField(default="" , null=True, blank=True)
     is_linkedin_posted = models.BooleanField(default=False)
+    is_seen=models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('username', 'jobcode') 
@@ -971,6 +975,8 @@ class Notifications(models.Model):
         CANDIDATE_REJECTED = 'candidate_rejected', 'CandidateRejected'          #client, recruiter
         CANDIDATE_LEFT = 'candidate_left', 'CandidateLeft'                      #recruiter, manager  
         CANDIDATE_JOINED = 'candidate_joined', 'CandidateJoined'                #recruiter, manager
+        SENT_CONNECTION ='sent_connection',"SentConnection"                     #client, agency 
+        
 
  
     sender = models.ForeignKey(CustomUser, related_name='sent_notifications', on_delete=models.CASCADE, default=1)

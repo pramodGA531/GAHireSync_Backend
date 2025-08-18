@@ -250,7 +250,7 @@ class ConnectedOrganizations(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class AddOrganization(APIView):
+class AddOrganization(APIView):  # Here first notifciation is sent
     def post(self, request):
         try:
             code = request.data.get("code")
@@ -261,6 +261,7 @@ class AddOrganization(APIView):
                     clientorganization = ClientOrganizations.objects.get(
                         client=client, organization=organization
                     )
+                    
                     return Response(
                         {"error": "Both are already connected!"},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -270,6 +271,24 @@ class AddOrganization(APIView):
                         organization=organization,
                         client=client,
                     )
+                    
+                    # here clientorg  is connecting 
+                    Notifications.objects.create(
+                    sender=request.user,
+                    receiver=organization.manager,
+                    category=Notifications.CategoryChoices.SENT_CONNECTION,
+                    subject=f"New Connection Request by {request.user.username}",
+                    message=(
+                        f"New Connection Request\n\n"
+                        f"Client: {request.user.username}\n"
+                        # f"Position: {job_posting.job_title}\n\n"
+                        f"{request.user.username} has sent a new connection request to your organization"
+                        # f"{job_posting.job_title}.\n\n"
+                        # f"id::{job_posting.id}"  # This will be parsed in frontend
+                        # f"link::'agency/postings/'"
+                    ),
+                )
+                    
                 return Response(
                     {"message": "Connected with organization successfully"},
                     status=status.HTTP_200_OK,

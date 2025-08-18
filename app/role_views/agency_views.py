@@ -1504,6 +1504,7 @@ class ClientsData(APIView):
                 jobs = JobPostings.objects.filter(organization__manager=user).order_by('created_at')
                 data = []
                 requests = ClientOrganizations.objects.filter(organization__manager = request.user, approval_status = 'pending')
+                print("reqeustss",requests.count())
                 requests_list= []
                 for connection_request in requests:
                     requests_list.append(
@@ -2396,3 +2397,50 @@ class RemoveFromHold(APIView):
                 {"error": "An unexpected error occurred while updating the job."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+            
+class ClientOrganizationsSeenView(APIView):
+
+    def get(self, request):
+        """
+        GET -> Return count of unseen ClientOrganizations
+        """
+        count = ClientOrganizations.objects.filter(
+            is_seen=False,                          # Only unseen records
+            organization__manager=request.user,
+            approval_status="pending"
+        ).count()
+        print("count",count)
+
+        return Response({"unseen_count": count}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """
+        POST -> Mark all unseen ClientOrganizations as seen
+        """
+        updated = ClientOrganizations.objects.filter(is_seen=False).update(is_seen=True)
+        return Response({"updated_records": updated}, status=status.HTTP_200_OK)
+    
+    
+    
+class AgencyNavBaarCounts(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        """
+        GET -> Return count of unseen nav itemss count 
+        """
+        
+        # here i need count for the ClientOrganizations as shown below and also and pending job posts from the 
+        all_jobs = JobPostings.objects.filter(organization__manager=user,approval_status = "pending")
+        
+        count = ClientOrganizations.objects.filter(
+            is_seen=False,                        
+            organization__manager=request.user,
+            approval_status="pending"
+        ).count()
+        print("count",count)
+
+        return Response({"unseen_count": count}, status=status.HTTP_200_OK)
+    
+    
+    

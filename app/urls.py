@@ -301,4 +301,6 @@ urlpatterns = [
     path('hiresync/generate-linkedincode/',GenerateLinkedInTokens.as_view(), name='generate linkedin token for hiresync' ),
     path('hiresync/generate-linkedincode/callback/',LinkedInRedirectView.as_view(), name='callback for linkedin token for hiresync' ),
     path('convert-pdf-to-images/', convert_pdf_to_images, name='convert pdf to images'),
+    path('agency-connection/count/',ClientOrganizationsSeenView.as_view(),),
+    
 ]
