@@ -909,9 +909,9 @@ class AssignRecruiterByLocationView(APIView):
                 job_location=location,
                 job_id=location.job_id
                 )
-                assigned_job.assigned_to.set(recruiter_ids)
+            assigned_job.assigned_to.set(recruiter_ids)
                 
-                job_post_log(location.job_id.id,f"Recruiter {user.username} has been assigned by manager for a job posting {location.job_id.job_title} joblocation:{location}")
+            job_post_log(location.job_id.id,f"Recruiter {assigned_job.assigned_to.username} has been assigned by manager for a job posting {location.job_id.job_title} joblocation:{location}")
 
             return Response(
                 {"message": "Recruiters assigned successfully"},
@@ -2500,7 +2500,7 @@ class AgencyNavBaarCounts(APIView):
         """
         
         # here i need count for the ClientOrganizations as shown below and also and pending job posts from the 
-        all_jobs = JobPostings.objects.filter(organization__manager=user,approval_status = "pending")
+        all_jobs = JobPostings.objects.filter(organization__manager=request.user,approval_status = "pending")
         
         count = ClientOrganizations.objects.filter(
             is_seen=False,                        
