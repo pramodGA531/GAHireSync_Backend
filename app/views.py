@@ -1601,6 +1601,15 @@ class SendApplicationDetailsView(APIView):
                     is_incoming = True
                 )
 
+                #profile log
+                job_profile_log(
+                    job_application.id, 
+                    f"New application submitted by {candidate_resume.candidate_name} "
+                    f"({candidate_resume.candidate_email}) for job '{location_instance.job_id.job_title}' "
+                    f"at location '{location_instance.location}'."
+                )
+
+
             return Response({"message":"Application sent successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -1616,6 +1625,11 @@ class UpdateJoiningDate(APIView):
             joining_date = request.data.get('updated_date')
             selected_candidate.joining_date = joining_date
             selected_candidate.save()
+
+            job_profile_log(
+                selected_candidate.id,
+                f"Joining date updated to {joining_date} for candidate {selected_candidate.candidate_name}"
+            )
             # send maiil to recruiter and candidate that the joining date is updates
             return Response({"message":"Joining date updated successfully"}, status=status.HTTP_200_OK)
         except Exception as e:

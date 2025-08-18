@@ -743,6 +743,7 @@ def get_invoice_terms(selected_application_id):
 
     def parse_ctc_range(ctc_range_str):
         try:# get the range from terms 
+            print(ctc_range_str, " is the ctc range")
             clean_range = ctc_range_str.replace("LPA", "").replace(" ", "")
             min_str, max_str = clean_range.split("-")
             return float(min_str), float(max_str)

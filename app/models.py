@@ -1215,3 +1215,11 @@ class JobProfileLog(models.Model):
 
     def __str__(self):
         return f"Log for Job Profile #{self.job_profile.id}: {self.message}"
+
+class InterviewLog(models.Model):
+    interview = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE, related_name="logs")
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Log for Interview #{self.interview.id}: {self.message}"

@@ -160,7 +160,7 @@ class CandidateResumeView(APIView):
                     
                     skill_metric.save()
 
-                JobApplication.objects.create(
+                job_application = JobApplication.objects.create(
                     resume=candidate_resume,
                     job_location = job_assigned.job_location,
                     status='pending',
@@ -181,8 +181,12 @@ Best,
 HireSync Team
 """ 
                 send_custom_mail(f"New Candidate Submitted – {job.job_title}",message, {job.username.email})
-                job_post_log(job.id,f" candidate profile has been submitted for {job.job_title} by recruiter {request.user.username}.")# need to change the function and id 
-                
+                job_profile_log(
+                    job_application.id,
+                    f"Candidate profile '{candidate_resume.candidate_name}' "
+                    f"({candidate_resume.candidate_email}) submitted for job '{job.job_title}' "
+                    f"by recruiter '{request.user.username}'."
+                )                
                 Notifications.objects.create(
     sender=request.user,
     category = Notifications.CategoryChoices.SEND_APPLICATION,
@@ -432,14 +436,18 @@ class ScheduleInterview(APIView):
         f"Please check the interview details here: link::interviewer/interviews/"
 )
 )
-            job_post_log(# need to change the function and id 
-    application.job_location.job_id.id,
-    f"Recruiter {request.user.username} scheduled an interview for candidate {customCand.username}  interviewer {interviewer.name.username} | "
-    f"Round: {interviewer.round_num} | "
-    f"Type: {interviewer.type_of_interview} | "
-    f"Mode: {interviewer.mode_of_interview} | "
-    f"Date: {scheduled_date}"
+            job_profile_log(
+    application.id,
+    f"Interview scheduled for candidate '{customCand.username}' ({customCand.email}) "
+    f"by recruiter '{request.user.username}'.\n"
+    f"Interviewer: {interviewer.name.username}\n"
+    f"Round: {interviewer.round_num}\n"
+    f"Type: {interviewer.type_of_interview}\n"
+    f"Mode: {interviewer.mode_of_interview}\n"
+    f"Date: {scheduled_date} ({from_time} - {to_time})\n"
+    f"Meet Link: {meet_link if meet_link else 'Not provided'}"
 )
+
 
             return Response({"message": "Next Interview Scheduled Successfully"}, status=status.HTTP_200_OK)
 
