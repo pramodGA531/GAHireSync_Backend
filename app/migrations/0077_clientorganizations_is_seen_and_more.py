@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0076_jobpostlog'),
+        ('app', '0076_organization_account_number_and_more'),
     ]
 
     operations = [
