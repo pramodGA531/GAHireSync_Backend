@@ -351,7 +351,8 @@ class PromoteCandidateView(APIView):
             secondary_skills = request.data.get('secondary_skills')
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
-            candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
+            print(application.resume.candidate_name)
+            candidate = CandidateProfile.objects.get(name__email = application.resume.candidate_email)
 
             remarks = CandidateEvaluation.objects.create(
                 primary_skills_rating = primary_skills,
@@ -570,7 +571,7 @@ HireSync.
             remarks = request.data.get('remarks', "")
             score = request.data.get('score', 0)
             
-            candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
+            candidate = CandidateProfile.objects.get(name__email = application.resume.candidate_email)
 
             print("Entered here")
 
@@ -642,10 +643,14 @@ HireSync.
         f"link::recruiter/postings/"
     )
 )
-                job_post_log(
-    job.id,
-    f"Candidate {customCand.username} cleared all rounds | Status: On Hold"
+                job_profile_log(
+    application.id,
+    f"Candidate '{customCand.username}' ({customCand.email}) has cleared all rounds of the interview process.\n"
+    f"Status: On Hold (Final Client Decision Pending)\n"
+    f"Role: {job.job_title}\n"
+    f"Recruiter: {request.user.username}"
 )
+
                 
                 applications_selected  = JobApplication.objects.filter(job_location__job_id = job).filter(status  = 'selected').count()
                 job_postings_req = req_postings

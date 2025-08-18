@@ -1,8 +1,8 @@
-# GA Hiresync – Complete Application Flow
+### GA Hiresync – Complete Application Flow
 
 ---
 
-#### **Roles and Their Functionalities**
+#### Roles and Their Functionalities
 
 ##### 1. **Agency Manager**
 - **Responsibilities:**

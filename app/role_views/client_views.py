@@ -1446,9 +1446,14 @@ class RejectApplicationView(APIView):
                     f"link::recruiter/postings/"
                 ),
             )
-            job_post_log(
-                job_id, f"candidate {candidate_resume.candidate_name} has been Rejected"
-            )  # need to change the function and id
+            job_profile_log(
+                    job_application.id,
+                    f"Candidate '{candidate_resume.candidate_name}' ({candidate_resume.candidate_email}) "
+                    f"has been **rejected** for job '{job_application.job_location.job_id.job_title}' "
+                    f"by client '{request.user.username}'. "
+                    f"Feedback: {job_application.feedback}"
+                )
+
             return Response(
                 {"message": "Rejected Successfully"}, status=status.HTTP_200_OK
             )
@@ -1566,9 +1571,13 @@ HireSync Team
                     body=message,
                     to_email=[candidate.name.email],
                 )
-                job_post_log(
-                    job_id, f"candidate {candidate.name.username} has been shortlisted"
-                )  # need to change the function and id
+                job_profile_log(
+                    job_application.id,
+                    f"Candidate '{candidate.name.username}' ({resume.candidate_email}) "
+                    f"has been shortlisted for job '{job_application.job_location.job_id.job_title}' "
+                    f"by client '{request.user.username}'."
+                )
+
                 job_application.save()
 
                 Notifications.objects.create(
@@ -1995,6 +2004,17 @@ class HandleSelect(APIView):
                 f"Joining Date: {selectedCand.joining_date}\n"
                 f"Agreed CTC: {selectedCand.ctc}\n\n",
             )
+
+            job_profile_log(
+                application.id,
+                f"Candidate '{customCand.username}' ({customCand.email}) has been SELECTED for the role '{job.job_title}'.\n"
+                f"Joining Date: {selectedCand.joining_date}\n"
+                f"Agreed CTC: {selectedCand.ctc}\n"
+                f"Recruiter: {application.sender.username}\n"
+                f"Client: {request.user.username}"
+            )
+
+
 
             return Response(
                 {"message": "Candidate is Selected"}, status=status.HTTP_200_OK
@@ -2786,6 +2806,16 @@ class CandidateLeftView(APIView):
                 f"Reason for leaving: {candidate.left_reason}",
             )
 
+            job_profile_log(
+                candidate.application.id,
+                f"Candidate '{candidate.candidate.name.username}' has LEFT the company.\n"
+                f"Position: {job.job_title}\n"
+                f"Reason: {candidate.left_reason}\n"
+                f"Resigned On: {candidate.resigned_date}\n"
+                f"Replacement Eligible: {'Yes' if candidate.is_replacement_eligible else 'No'}"
+            )
+
+
             return Response(
                 {"message": "Candidate status updated successfully"},
                 status=status.HTTP_200_OK,
@@ -2880,6 +2910,16 @@ class CandidateJoined(APIView):
                     candidate.application.job_location.job_id.id,
                     f"Candidate {candidate.candidate.name.username} successfully joined the position {candidate.application.job_location.job_id.job_title}",
                 )
+
+                job_profile_log(
+                    candidate.application.id,
+                    f"Candidate '{candidate.candidate.name.username}' has officially JOINED for the role '{candidate.application.job_location.job_id.job_title}'.\n"
+                    f"Client: {request.user.username}\n"
+                    f"Recruiter: {candidate.application.sender.username}\n"
+                    f"Joining Date: {candidate.joining_date}\n"
+                    f"Agreed CTC: {candidate.ctc}"
+                )
+
                 return Response(
                     {"candidate status updated successfully"}, status=status.HTTP_200_OK
                 )
@@ -3984,3 +4024,28 @@ class ApproveDeadline(APIView):
         except Exception as e:
             print("Error:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class ClientNegotiations(APIView):
+    permission_classes = [IsClient]
+    def get(self, request):
+        try:
+            negotiations = NegotiationRequests.objects.filter(client_organization__client__username = request.user)
+            negotiations_list = []
+            for negotiation in negotiations:
+                negotiations_list.append({
+                    "organization_name" : negotiation.client_organization.organization.name,
+                    "ctc_range": negotiation.ctc_range,
+                    "service_fee": negotiation.service_fee,
+                    "replacement_clause": negotiation.replacement_clause,
+                    "interest_percentage": negotiation.interest_percentage,
+                    "invoice_after": negotiation.invoice_after,
+                    "payment_within": negotiation.payment_within,
+                    "requested_date": negotiation.requested_date,
+                    "status": negotiation.status
+                })
+                
+            return Response({"negotiations": negotiations_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print("Error:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        

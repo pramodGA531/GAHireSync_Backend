@@ -743,6 +743,7 @@ def get_invoice_terms(selected_application_id):
 
     def parse_ctc_range(ctc_range_str):
         try:# get the range from terms 
+            print(ctc_range_str, " is the ctc range")
             clean_range = ctc_range_str.replace("LPA", "").replace(" ", "")
             min_str, max_str = clean_range.split("-")
             return float(min_str), float(max_str)
@@ -1004,6 +1005,21 @@ def job_post_log(id,message):
     
        
         
-        
+def job_profile_log(job_application_id, message):
+    try:
+        # Create log record
+        log = JobProfileLog.objects.create(
+            job_profile_id=job_application_id,
+            message=message
+        )
+        print("Job Profile Log created:", log.message)
+        return log
+    except JobApplication.DoesNotExist:
+        print(f"Error: JobApplication with id {job_application_id} does not exist.")
+        return None
+    except Exception as e:
+        print(f"Unexpected error while creating JobProfileLog: {e}")
+        return None
+
     
 

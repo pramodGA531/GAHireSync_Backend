@@ -1,8 +1,8 @@
-# Job Application Flow for GA Hiresync
+### Job Application Flow for GA Hiresync
 
 ---
 
-## **Job Application Status**
+#### **Job Application Status**
 
 - 🟡 **Pending** → When the application is initially submitted or awaiting client action.
 - 🟢 **Processing** → After client shortlists the application and interview process starts.
@@ -18,7 +18,7 @@
 
 ---
 
-## **Flow**
+#### **Flow**
 
 1. Recruiter adds candidate profiles/applications for allotted job post and location.  
 2. Candidates can also apply through the GA Hiresync job board.  
@@ -52,7 +52,7 @@
 
 ---
 
-## **Flowchart**
+#### Flowchart
 
 ```mermaid
 flowchart TD

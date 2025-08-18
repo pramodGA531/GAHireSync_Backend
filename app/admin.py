@@ -173,3 +173,5 @@ class ClientOrganizationsAdmin(admin.ModelAdmin):
 
 admin.site.register(ReplacementCandidates)
 
+admin.site.register(JobProfileLog)
+

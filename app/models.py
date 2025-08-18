@@ -81,6 +81,14 @@ class Organization(models.Model):
     is_subscribed = models.BooleanField(default=False)
     manager = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="managing_organization")
     recruiters = models.ManyToManyField(CustomUser, related_name="recruiting_organization", blank=True)
+    # bank details
+    account_number = models.CharField(max_length=50, null=True,default="", blank=True)
+    ifsc_code = models.CharField(max_length=50, null=True,default="", blank=True)
+    bank_name = models.CharField(max_length=200, null=True,default="", blank=True)
+    bank_holder_name = models.CharField(max_length=200, null=True,default="", blank=True)
+    msme_number = models.CharField(max_length=200, null=True,default="", blank=True)
+    udaan_number = models.CharField(max_length=200, null=True,default="", blank=True)
+
 
     def __str__(self):
         return self.name
@@ -279,7 +287,7 @@ class JobPostingsEditedVersion(models.Model):
     REJECTED = 'rejected'
     PENDING = 'pending'
 
-    STATUS_CHOICES = [
+    STATUS_CHOICES = [ 
         (ACCEPTED,'accepted'),
         (REJECTED,'rejected'),
         (PENDING,'pending'),
@@ -816,13 +824,14 @@ class InvoiceGenerated(models.Model):
     def __str__(self):
         return f"Invoice #{self.id} for Application {self.selected_candidate.application} - {self.client.user.email} ({self.invoice_status})"
 
+
     def save(self, *args, **kwargs):
-        from .tasks import notify_invoice_client_task 
         is_new = self.pk is None
-        super().save(*args, **kwargs) 
+        super().save(*args, **kwargs)
 
         if is_new:
-            self.invoice_code = f"{self.organization.org_code}-{self.client.id}-{self.created_at.date()}"
+            unique_suffix = str(uuid.uuid4().int)[:5]  
+            self.invoice_code = f"{self.organization.org_code}-{self.client.id}-{unique_suffix}"
             super().save(update_fields=['invoice_code'])
 
         # if is_new or kwargs.get('force_reschedule', False):
@@ -1213,3 +1222,19 @@ class JobPostLog(models.Model):
     def __str__(self):
         return f"Log for Job #{self.job_post.id}: {self.message}"
 
+
+class JobProfileLog(models.Model):
+    job_profile = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name="logs")
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Log for Job Profile #{self.job_profile.id}: {self.message}"
+
+class InterviewLog(models.Model):
+    interview = models.ForeignKey(InterviewSchedule, on_delete=models.CASCADE, related_name="logs")
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Log for Interview #{self.interview.id}: {self.message}"
