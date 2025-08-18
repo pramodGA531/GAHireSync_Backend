@@ -1,10 +1,10 @@
-# Backend Views Structure – Django Application
+### Backend Views Structure – Django Application
 
 This page explains how **Views** are structured and managed in the backend of the project. It includes the different view files created based on roles and common functionalities such as authentication and reusable actions.
 
 ---
 
-## Views File Structure
+#### Views File Structure
 
 - Views are organized into separate files to maintain clarity and modularity:
   - `views.py`
@@ -25,9 +25,9 @@ Developers can add or update views in any relevant file without needing to impor
 
 ---
 
-## Common Views
+#### Common Views
 
-### `app/views.py`
+##### `app/views.py`
 
 Contains basic and common views that can be accessed by two or more roles.
 
@@ -44,7 +44,7 @@ Modules included:
 
 ---
 
-### `app/authentication_views.py`
+##### `app/authentication_views.py`
 
 Handles all **authentication-related views**:
 - User login
@@ -56,16 +56,16 @@ Handles all **authentication-related views**:
 
 ---
 
-## Role-Based Views
+#### Role-Based Views
 
-### `app/role_views/agency_views.py`
+##### `app/role_views/agency_views.py`
 
 Includes all views specifically designed for **agency-related operations**.  
 Detailed explanations are provided in code comments for each view.
 
 ---
 
-### `app/role_views/candidate_views.py`
+##### `app/role_views/candidate_views.py`
 
 Views related to **candidate functionality**, such as:
 - Managing candidate profiles
@@ -76,7 +76,7 @@ Views related to **candidate functionality**, such as:
 
 ---
 
-### `app/role_views/client_views.py`
+##### `app/role_views/client_views.py`
 
 Views designed for **client interactions**, including:
 - Posting and managing job posts
@@ -87,7 +87,7 @@ Views designed for **client interactions**, including:
 
 ---
 
-### `app/role_views/interviewer_views.py`
+##### `app/role_views/interviewer_views.py`
 
 Handles interviewer-specific actions:
 - Viewing and accepting interview invitations
@@ -97,7 +97,7 @@ Handles interviewer-specific actions:
 
 ---
 
-### `app/role_views/recruiter_views.py`
+##### `app/role_views/recruiter_views.py`
 
 Covers recruiter functionalities:
 - Sourcing and recommending candidates
@@ -107,7 +107,7 @@ Covers recruiter functionalities:
 
 ---
 
-### `app/role_views/manager_views.py`
+##### `app/role_views/manager_views.py`
 
 Manager-related views include:
 - Approving job posts created by clients
@@ -117,7 +117,7 @@ Manager-related views include:
 
 ---
 
-### `app/role_views/celery_views.py`
+##### `app/role_views/celery_views.py`
 
 Defines all views related to **scheduled background tasks (Celery)**.  
 Tasks are static (not dynamically stored in the database).  
@@ -140,20 +140,20 @@ Types of views include:
 
 ---
 
-## Celery Task Files
+#### Celery Task Files
 
-### `app/tasks.py`
+##### `app/tasks.py`
 
 - Imports views from `celery_views`  
 - Registers and exposes them as **Celery shared tasks** for scheduling and execution.
 
-### `RTMAS_BACKEND/celery.py`
+##### `RTMAS_BACKEND/celery.py`
 
 - Sets up Celery configuration.
 - Defines and links all scheduled tasks.
 - Specifies which views/tasks need to run periodically.
 
-### `RTMAS_BACKEND/settings.py`
+##### `RTMAS_BACKEND/settings.py`
 
 - Includes the full Celery configuration.
 - Defines:

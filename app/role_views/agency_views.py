@@ -263,13 +263,12 @@ class NotApprovedJobs(APIView):
             job = JobPostings.objects.get(id = job_id)
             print(action, job_id)
             if action == 'APPROVE':
-                job.approval_status = "approved"
+                job.approval_status = "accepted"
             elif action == 'REJECT':
                 reject_reason = request.data.get('reason')
                 job.approval_status = 'rejected'
                 job.reason = reject_reason
             job.save()
-            print("Entered here")
 
             return Response({"message":f"Job post {action}D successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -899,9 +898,14 @@ class AssignRecruiterByLocationView(APIView):
             location = JobLocationsModel.objects.get(id=location_id)
             recruiter_ids = request.data.get('recruiters', [])
 
-            for user_id in recruiter_ids:
-                user = CustomUser.objects.get(id=user_id)
-                assigned_job = AssignedJobs.objects.create(
+            recruiters = CustomUser.objects.filter(id__in=recruiter_ids)
+            if recruiters.count() != len(recruiter_ids):
+                return Response(
+                    {"error": "One or more recruiter IDs are invalid."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            assigned_job, created = AssignedJobs.objects.get_or_create(
                 job_location=location,
                 job_id=location.job_id
                 )
@@ -919,13 +923,10 @@ class AssignRecruiterByLocationView(APIView):
                 {"error": "Job location not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except CustomUser.DoesNotExist:
-            return Response(
-                {"error": "One or more recruiters not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
 
 
 class RecruitersList(APIView):
@@ -1503,7 +1504,10 @@ class ClientsData(APIView):
             else:
                 jobs = JobPostings.objects.filter(organization__manager=user).order_by('created_at')
                 data = []
-                requests = ClientOrganizations.objects.filter(organization__manager = request.user, approval_status = 'pending')
+                
+                org_cients = ClientOrganizations.objects.filter(organization__manager = request.user)
+                requests = org_cients.filter(approval_status = 'pending')
+                clients = []
                 requests_list= []
                 for connection_request in requests:
                     requests_list.append(
@@ -1515,47 +1519,41 @@ class ClientsData(APIView):
                         }
                     )
 
-                added_clients = set()  
-                for job_item in jobs:
-                    client = ClientDetails.objects.filter(user=job_item.username).first()
+                for connection in org_cients:
+                    client = connection.client
+                    client_data = {
+                        "client_id": client.id,
+                        "client_username": client.username,
+                        "organization_name": client.name_of_organization,
+                        "contact_number": client.contact_number,
+                        "website_url": client.website_url,
+                        "gst_number": client.gst_number,
+                        "company_address": client.company_address,
+                        "associated_at": connection.created_at,
+                        "negotiation_requested_on": None,
+                        "negotiation_accepted_on": None,
+                        "negotiations_request": None
+                    }
 
-                    if client and client.username not in added_clients:
-                         
-                        client_data = {
-                            "client_id": client.id,
-                            "client_username": client.username,
-                            "organization_name": client.name_of_organization,
-                            "contact_number": client.contact_number,
-                            "website_url": client.website_url,
-                            "gst_number": client.gst_number,
-                            "company_address": client.company_address,
-                            "associated_at": job_item.created_at,
-                            "negotiation_requested_on": None,
-                            "negotiation_accepted_on": None,
-                            "negotiations_request": None
-                        }
+                    negotiation = NegotiationRequests.objects.filter(
+                        client_organization__client=client
+                    ).first()
 
-                        negotiation = NegotiationRequests.objects.filter(
-                            client_organization__client=client
-                        ).first()
-
-                        if negotiation:
-                            client_data.update({
-                                "negotiation_requested_on": negotiation.requested_date,
-                                "negotiation_accepted_on": negotiation.accepted_date,
-                                "negotiations_request": {
-                                    "ctc_range": negotiation.ctc_range,
-                                    "service_fee": negotiation.service_fee,
-                                    "replacement_clause": negotiation.replacement_clause,
-                                    "interest_percentage": negotiation.interest_percentage,
-                                    "invoice_after": negotiation.invoice_after,
-                                    "payment_within": negotiation.payment_within,
-                                    "status": negotiation.status
-                                }
-                            })
-
-                        data.append(client_data)
-                        added_clients.add(client.username)
+                    if negotiation:
+                        client_data.update({
+                            "negotiation_requested_on": negotiation.requested_date,
+                            "negotiation_accepted_on": negotiation.accepted_date,
+                            "negotiations_request": {
+                                "ctc_range": negotiation.ctc_range,
+                                "service_fee": negotiation.service_fee,
+                                "replacement_clause": negotiation.replacement_clause,
+                                "interest_percentage": negotiation.interest_percentage,
+                                "invoice_after": negotiation.invoice_after,
+                                "payment_within": negotiation.payment_within,
+                                "status": negotiation.status
+                            }
+                        })
+                    data.append(client_data)
 
                 return Response({"data": data, "connection_requests": requests_list}, status=200)
 
@@ -1849,8 +1847,8 @@ If you are interested in this exciting opportunity, please apply or reach out fo
             else:
                 return Response({
                     "error": "Failed to post on LinkedIn",
-                    "details": response.json()
-                }, status=response.status_code)
+                    "details": response_org.json()
+                }, status=response_org.status_code)
 
         except Exception as e:
             print( str(e))
@@ -2396,3 +2394,73 @@ class RemoveFromHold(APIView):
                 {"error": "An unexpected error occurred while updating the job."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class OldClientTerms(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            first_connection = ClientOrganizations.objects.filter(organization__manager = request.user).order_by('created_at').first()
+            print(first_connection.id, " is the frist connection")
+            first_connection_terms = ClientOrganizationTerms.objects.filter(client_organization = first_connection.id, is_negotiated =False)
+            print(first_connection_terms ," are teh terms")
+            terms_list = []
+            for terms in first_connection_terms:
+                terms_list.append({
+                    "service_fee": terms.service_fee,
+                    "ctc_range": terms.ctc_range,
+                    "service_fee_type": terms.service_fee_type,
+                    "interest_percentage": terms.interest_percentage,
+                    "replacement_clause": terms.replacement_clause,
+                    "payment_within": terms.payment_within,
+                    "invoice_after": terms.invoice_after
+                })
+
+
+            return Response({"data":terms_list},  status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(f"Error while fetching the terms: {e}")
+            return Response(
+                {"error": "An unexpected error occurred while fetching the terms."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        
+
+class AgencyBankDetails(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            organziation = Organization.objects.get(manager = request.user)
+            bank_details = {
+                "bank_name": organziation.bank_name,
+                "bank_holder_name": organziation.bank_holder_name,
+                "account_number": organziation.account_number,
+                "ifsc_code": organziation.ifsc_code,
+                "udaan_number": organziation.udaan_number,
+                "msme_number": organziation.msme_number,
+            }
+
+            return Response({"data": bank_details}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(f"Error while fetching the bank details : {e}")
+            return Response({"error":"An unexpected error while fetching the bank details"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+    def put(self, request):
+        try:
+            organziation = Organization.objects.get(manager = request.user)
+            data = request.data
+
+            organziation.account_number = data.get('account_number', organziation.account_number)
+            organziation.bank_name = data.get('bank_name', organziation.bank_name)
+            organziation.bank_holder_name = data.get('bank_holder_name', organziation.bank_holder_name)
+            organziation.ifsc_code = data.get('ifsc_code', organziation.ifsc_code)
+            organziation.udaan_number = data.get('udaan_number', organziation.udaan_number)
+            organziation.msme_number = data.get('msme_number', organziation.udaan_number)
+
+            organziation.save()
+
+            return Response({"message":"Organization details saved successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(f"Error while updating the bank details : {e}")
+            return Response({"error":"An unexpected error while updating the bank details"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -281,7 +281,7 @@ erDiagram
 ```
 
 ---
-# Database Models – Summary
+### Database Models – Summary
 
 This section provides an overview of the main database models used in the application, along with their purpose and relationships.
 
