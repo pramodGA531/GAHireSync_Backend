@@ -1,10 +1,10 @@
-# GA Hiresync – Modules Overview
+### GA Hiresync – Modules Overview
 
 This document outlines the **core modules**, their purpose, and functionality within the GA Hiresync application. It also highlights **future enhancements** for system improvement.
 
 ---
 
-## 1️⃣ Authentication Module
+##### 1️⃣ Authentication Module
 - **Signup/Access:**
   - **Agency Manager** and **Client** can **sign up** through the application.
   - **Agency Manager**:
@@ -26,7 +26,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 2️⃣ Client ↔️ Manager Connection & Terms Approval
+##### 2️⃣ Client ↔️ Manager Connection & Terms Approval
 - **Connection:**
   - Client connects to Agency Manager using a **unique agency code**.
   - Currently, the client manually requests the code (outside application).
@@ -45,7 +45,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 3️⃣ Job Post Creation Module
+##### 3️⃣ Job Post Creation Module
 - **Job Data Storage:**
   - `JobPostings Model` → all job details, raised by client, received by manager.
 - **Interview Management:**
@@ -59,7 +59,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 4️⃣ Job Post Editing Module
+##### 4️⃣ Job Post Editing Module
 - **Editing Process:**
   - `EditJobPost Model` → stores fields modified by client.
   - Clients can:
@@ -72,7 +72,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 5️⃣ Job Post Handling & Application Management Module
+##### 5️⃣ Job Post Handling & Application Management Module
 - **Manager Tasks:**
   - Approves job posts.
   - Posts job automatically on **Job Board**.
@@ -84,7 +84,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 6️⃣ Notification Module
+##### 6️⃣ Notification Module
 - **Current Behavior:**
   - Notifications categorized by type and **receiver** stored in `Notifications Model`.
   - Categories used to label **menu items** in sidebar.
@@ -94,7 +94,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 7️⃣ Celery Module
+##### 7️⃣ Celery Module
 - **Purpose:**
   - Handles **automatic scheduling** for background tasks.
   - Celery and Celery Beat used for periodic tasks.
@@ -103,7 +103,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 8️⃣ Resume Parsing & AI Functionalities
+##### 8️⃣ Resume Parsing & AI Functionalities
 - **Recruiter Tools:**
   - Parse resumes and score them.
   - Generate interview questions based on job post.
@@ -113,7 +113,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 9️⃣ LinkedIn Integration Module
+##### 9️⃣ LinkedIn Integration Module
 - **Storage:**
   - `LinkedInCred Model` → agency’s LinkedIn credentials.
   - GA Hiresync’s own LinkedIn credentials also stored.
@@ -124,7 +124,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 🔟 Job Board Module
+##### 🔟 Job Board Module
 - **Public Access:**
   - Lists all client-created job posts.
   - **No login required** for candidates.
@@ -134,7 +134,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 1️⃣1️⃣ Website Module
+##### 1️⃣1️⃣ Website Module
 - **Purpose:**
   - Static pages providing information about GA Hiresync.
 - **Pending Updates:**
@@ -143,7 +143,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 1️⃣2️⃣ Invoice Module
+##### 1️⃣2️⃣ Invoice Module
 - **Generation:**
   - Invoices automatically generated once **candidate joins** client’s company.
 - **Terms:**
@@ -151,7 +151,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 1️⃣3️⃣ Pricing Module
+##### 1️⃣3️⃣ Pricing Module
 - **Functionality:**
   - Defines **plans** with features.
 - **Notes:**
@@ -162,14 +162,14 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 1️⃣4️⃣ Draft Module
+##### 1️⃣4️⃣ Draft Module
 - **Purpose:**
   - Allows saving **job post drafts**.
   - Prevents loss of data during post creation.
 
 ---
 
-## 1️⃣5️⃣ Blogs Module
+##### 1️⃣5️⃣ Blogs Module
 - **Visibility:**
   - All blogs are **publicly visible**.
 - **Admin Role:**
@@ -181,7 +181,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 1️⃣6️⃣ Ticket Module (Support System)
+##### 1️⃣6️⃣ Ticket Module (Support System)
 - **Purpose:**
   - Users can **raise support tickets** via dashboard.
 - **Admin Panel:**
@@ -190,7 +190,7 @@ This document outlines the **core modules**, their purpose, and functionality wi
 
 ---
 
-## 🚀 Future Enhancements & Advancements
+#### 🚀 Future Enhancements & Advancements
 
 - Agency Manager can **add clients directly** (dashboard feature).
 - **Notification module redesign** for improved menu labeling.

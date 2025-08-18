@@ -769,7 +769,9 @@ class OrganizationApplications(APIView):
                             "status": application.status,
                             "application_id":application.id,
                             "cand_number":application.resume.contact_number,
-                            "job_title":application.job_location.job_id.job_title
+                            "job_title":application.job_location.job_id.job_title,
+                            "resume_url": application.resume.resume.url,
+                            "resume_name": application.resume.resume.name, 
                         }
                         application_list.append(application_json)
                     
@@ -1093,3 +1095,33 @@ class ViewCompleteCandidate(APIView):
             return Response({"data": candidate_data}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)   
+
+
+
+class ReplacementsRequestedToRecruiter(APIView):
+    permission_classes = [IsRecruiter]
+    def get(self, request):
+        try:
+            replacements = ReplacementCandidates.objects.filter(replacement_with__attached_to = request.user)
+            replacements_list = []
+            for replacement in replacements:
+                application = replacement.replacement_with
+                job = application.job_location.job_id
+                selected_candidate = SelectedCandidates.objects.get(application = application)
+                replacements_list.append({
+                    "job_id": job.id,
+                    "job_title": job.job_title,
+                    "candidate_name": application.resume.candidate_name,
+                    "accepted_ctc": selected_candidate.ctc,
+                    "joining_date": selected_candidate.joining_date,
+                    "left_reason": selected_candidate.left_reason,
+                    "left_on": selected_candidate.resigned_date,
+                    "application_id": application.id,
+                    "replacement_id": replacement.id,
+                    "replacement_status": replacement.status,
+                })
+
+            return Response({'data':replacements_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.fatal(f"Error in fetching replacements",e)
+            return Response({"error":"Error in fetching replacements"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

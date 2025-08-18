@@ -120,7 +120,7 @@ npm start
 
 
 
-### 📁 Version Control & Branching
+#### 📁 Version Control & Branching
 
 Our project follows Git-based version control using **GitHub**, with two separate repositories:
 
@@ -144,7 +144,7 @@ Currently, both repositories use the default branch (`main`). We recommend the f
 
 ---
 
-### 🔌 Third Party Dependencies & Integrations
+#### 🔌 Third Party Dependencies & Integrations
 
 We use a number of external services to enhance functionality and automation in our application:
 

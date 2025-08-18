@@ -1,10 +1,10 @@
-# Backend URL Structure – Django Application
+### Backend URL Structure – Django Application
 
 This page explains how URLs are structured and managed in the backend of the project. It includes the organization of URL files, roles, parameter types, and how frontend interacts with them.
 
 ---
 
-##  URL File Structure
+####  URL File Structure
 - All the backend URLs are consolidated in a **single file**:  
 
 
@@ -13,14 +13,14 @@ This page explains how URLs are structured and managed in the backend of the pro
 
 ---
 
-##  Role-Based URL Categorization
+####  Role-Based URL Categorization
 - The system has **multiple roles**, and URLs are organized based on the **role/action** they belong to.
 - This makes it easier to navigate and locate the correct URL for each role.
 - Some URLs are **shared across multiple roles** (e.g., authentication or common utilities), meaning they do not have a specific role prefix.
 
 ---
 
-##  Types of URLs
+####  Types of URLs
 URLs in the backend can be categorized as:
 
 1. **Query Parameter URLs**  
@@ -41,13 +41,13 @@ URLs in the backend can be categorized as:
 
 ---
 
-##  Current Implementation Status
+####  Current Implementation Status
 - **Most APIs currently use query parameters.**  
 - The process of converting suitable endpoints to use **path parameters** is ongoing for better RESTful practices.
 
 ---
 
-##  Frontend API Call Usage
+####  Frontend API Call Usage
 - When making API requests from the frontend:
 - **No need to manually add** `/api` or `/app` prefixes.
 - The routing is automatically handled via:

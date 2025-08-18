@@ -151,6 +151,7 @@ urlpatterns = [
     path('recruiter/reject-incoming-applications/', RejectIncomingApplication.as_view(), name='reject-incoming-application'),
     path('recruiter/application/reopen/', ReopenApplication.as_view(), name='reopen-the-application'),
     path('recruiter/candidate/complete/', ViewCompleteCandidate.as_view(), name='complete-candidate'),
+    path('recruiter/replacements/', ReplacementsRequestedToRecruiter.as_view(), name='get-replacement-requests-requested-by-client'),
 
     path('get_invoices/',Invoices.as_view()),
     path('update_invoices/',Invoices.as_view()),
@@ -192,7 +193,9 @@ urlpatterns = [
     path('manager/job/hold/<int:job_id>/',HoldJobView.as_view(), name='manager-hold-job'),
     path('manager/job/remove-hold/<int:job_id>/',RemoveFromHold.as_view(), name='manager-remove-job-from-hold'),
     path('manager/old-client-terms/',OldClientTerms.as_view(), name='get-old-client-terms'),
+    path('manager/bank-details/',AgencyBankDetails.as_view(), name='get-manager-bank-details'),
     
+
 
     
     path('api/linkedin/callback/', LinkedINCallBackView.as_view(), name='linkedin callback view'),

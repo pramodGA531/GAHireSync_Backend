@@ -68,11 +68,6 @@ This document outlines the key **pending features** to be completed before launc
 - Add some nudges to the application for the initial users. 
 - Give the detailed explanation of every button (also with skip button).
 
-##### 📝 Job Application Enhancements
-- Enhance job application logic and history tracking.
-- Allow better version control or tagging of resumes.
-- Introduce resume scoring or recommendation logic (if time permits).
-
 ##### Recruiter Credits Module, Incentive Module
 - Track the recruiter, track every activity of viewing the profile, downloading the profile.
 - Based on the performance of the recruiter, calculate the incentive for that recruiter (need more brainstorming discussions).
@@ -131,35 +126,6 @@ This document outlines the key **pending features** to be completed before launc
 ---
 
 
-
-
-
-
-
-
-
-
-
-Notification module - 2 days 
-Email functionality - 1 day (content should be ready, before developing)
-Labels for the dashboard - 1 day 
-Recruiter dashboard - 1 day
-Replacement logic - 1 day (after complete discussion and brainstorming of replcement logic/ functionality)
-Pricing module -> 3 days ( indepth controlling + upgrading plans + degrading plans)
-
-Agency manager profile section -> include 
-Functionality pages - 2days 
-Pricing pages -> 1 day
-Integrating pricing page with backend -> 1 day
-change the interviewer by client + Interview rescheduled by interviewer (complete documentation & flow needed) -> 1 and half day
-Invoice Html page + invoice calculation with backend -> 1 day
-Storing logs for every action on the job post and job profile -> 2 days
-Resume bank functionalities.. 
-  - If an candidate profile is submitted, until the rejection of the candidate/ until 6 months of the candidate joined, that profile should not be submitted by the recruiter in the agency.
-  - While recruiter sending the profile, fetch the available candidates in that organization, dont fetch by using the profiles.
-  - Control the resume bank. Manager/Recruiter can delete the profiles, if they found any irrelavent.
-  
-Store the log about the interview, and show that to the users (status of the interviewer, whether it is rescheduled/completed/cancelled/interviewer changes/candidate not joined).
 
 
 

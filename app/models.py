@@ -81,6 +81,14 @@ class Organization(models.Model):
     is_subscribed = models.BooleanField(default=False)
     manager = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="managing_organization")
     recruiters = models.ManyToManyField(CustomUser, related_name="recruiting_organization", blank=True)
+    # bank details
+    account_number = models.CharField(max_length=50, null=True,default="", blank=True)
+    ifsc_code = models.CharField(max_length=50, null=True,default="", blank=True)
+    bank_name = models.CharField(max_length=200, null=True,default="", blank=True)
+    bank_holder_name = models.CharField(max_length=200, null=True,default="", blank=True)
+    msme_number = models.CharField(max_length=200, null=True,default="", blank=True)
+    udaan_number = models.CharField(max_length=200, null=True,default="", blank=True)
+
 
     def __str__(self):
         return self.name

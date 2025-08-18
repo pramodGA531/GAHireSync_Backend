@@ -2408,3 +2408,43 @@ class OldClientTerms(APIView):
                 {"error": "An unexpected error occurred while fetching the terms."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        
+
+class AgencyBankDetails(APIView):
+    permission_classes = [IsManager]
+    def get(self, request):
+        try:
+            organziation = Organization.objects.get(manager = request.user)
+            bank_details = {
+                "bank_name": organziation.bank_name,
+                "bank_holder_name": organziation.bank_holder_name,
+                "account_number": organziation.account_number,
+                "ifsc_code": organziation.ifsc_code,
+                "udaan_number": organziation.udaan_number,
+                "msme_number": organziation.msme_number,
+            }
+
+            return Response({"data": bank_details}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(f"Error while fetching the bank details : {e}")
+            return Response({"error":"An unexpected error while fetching the bank details"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+    def put(self, request):
+        try:
+            organziation = Organization.objects.get(manager = request.user)
+            data = request.data
+
+            organziation.account_number = data.get('account_number', organziation.account_number)
+            organziation.bank_name = data.get('bank_name', organziation.bank_name)
+            organziation.bank_holder_name = data.get('bank_holder_name', organziation.bank_holder_name)
+            organziation.ifsc_code = data.get('ifsc_code', organziation.ifsc_code)
+            organziation.udaan_number = data.get('udaan_number', organziation.udaan_number)
+            organziation.msme_number = data.get('msme_number', organziation.udaan_number)
+
+            organziation.save()
+
+            return Response({"message":"Organization details saved successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(f"Error while updating the bank details : {e}")
+            return Response({"error":"An unexpected error while updating the bank details"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
