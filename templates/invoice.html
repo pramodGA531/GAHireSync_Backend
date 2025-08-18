@@ -1,346 +1,536 @@
-{% comment %} 
+{% comment %}
 
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Invoice</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
+      body {
+        font-family: Arial, sans-serif;
+      }
 
-        /* Invoice Container */
-        .invoice-container {
-            width: 50%; /* Adjust the width to 80% of the screen */
-            background-color: lightcyan;
-            margin: auto;
-            border: 1px solid #000;
-            padding: 20px;
-        }
+      /* Invoice Container */
+      .invoice-container {
+        width: 50%; /* Adjust the width to 80% of the screen */
+        background-color: lightcyan;
+        margin: auto;
+        border: 1px solid #000;
+        padding: 20px;
+      }
 
-        /* Header Section */
-        .header {
-            display: flex;
-            justify-content: space-between;
-          
-        }
+      /* Header Section */
+      .header {
+        display: flex;
+        justify-content: space-between;
+      }
 
-        .header img {
-            height: 100px;
-        }
+      .header img {
+        height: 100px;
+      }
 
-        /* Section for Buyer and Service Provider Information */
-        .section-container {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-        }
+      /* Section for Buyer and Service Provider Information */
+      .section-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+      }
 
-        .section {
-            border: 1px solid #000;
-            padding: 10px;
-            width: 48%; /* Adjust width to fit side by side */
-        }
+      .section {
+        border: 1px solid #000;
+        padding: 10px;
+        width: 48%; /* Adjust width to fit side by side */
+      }
 
-        .bold {
-            font-weight: bold;
-        }
+      .bold {
+        font-weight: bold;
+      }
 
-        /* Table Styling */
-        table {
-            width: 60%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
+      /* Table Styling */
+      table {
+        width: 60%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
 
-        table, th, td {
-            border: 1px solid black;
-        }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
 
-        th, td {
-            padding: 8px;
-            text-align: left;
-        }
+      th,
+      td {
+        padding: 8px;
+        text-align: left;
+      }
 
-        /* Total Section */
-        .total-section {
-            text-align: right;
-            margin-top: 10px;
-        }
+      /* Total Section */
+      .total-section {
+        text-align: right;
+        margin-top: 10px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="invoice-container">
-        <div class="header">
-            <img src="" alt="Company Logo">
-            
-            <div>
-                <p><strong>Invoice:</strong> {{ invoice_id }}</p>
-                <p><strong>Dated:</strong> {{ date }}</p>
-            </div>
-        </div>
-        
-        <div class="section-container">
-            <div class="section">
-                <p class="bold">Buyer/ Service Provided to</p>
-                <p><strong>{{ client_name }}</strong><br>{{ agency_name }}<br>Address: {{ buyer_address }}</p>
-                <p><strong>GST NO:</strong> {{ buyer_gst_no }}</p>
-                <p>Contact person: {{ buyer_contact_person }}</p>
-            </div>
+      <div class="header">
+        <img src="" alt="Company Logo" />
 
-            <div class="section">
-                <p class="bold">Service Provider</p>
-                <p><strong>{{ service_provider_name }}</strong><br>({{ service_provider_name }})<br>Address: {{ service_provider_address }}</p>
-                <p><strong>GST NO:</strong> {{ service_provider_gstin }}</p>
-                <p>Contact Person: {{ service_provider_contact_person }}<br>Email: <a href="mailto:{{ service_provider_email }}">{{ service_provider_email }}</a><br>Mobile No: {{ service_provider_mobile }}</p>
-            </div>
+        <div>
+          <p><strong>Invoice:</strong> {{ invoice_id }}</p>
+          <p><strong>Dated:</strong> {{ date }}</p>
+        </div>
+      </div>
+
+      <div class="section-container">
+        <div class="section">
+          <p class="bold">Buyer/ Service Provided to</p>
+          <p>
+            <strong>{{ client_name }}</strong><br />{{ agency_name }}<br />Address:
+            {{ buyer_address }}
+          </p>
+          <p><strong>GST NO:</strong> {{ buyer_gst_no }}</p>
+          <p>Contact person: {{ buyer_contact_person }}</p>
         </div>
 
-        <!-- Invoice Table -->
-        <table>
-            <tr>
-                <th>SL No</th>
-                <th>Service Description with HSN Code</th>
-                <th>Candidate Name</th>
-                <th>Job Title</th>
-                <th>Date of Joining</th>
-                <th>CTC</th>
-                <th>Recruitment Service Fee (% of CTC)</th>
-                <th>Recruitment Service Fee</th>
-            </tr>
-            <tr>
-                <td>1</td>
-                <td>{{ service_description }}</td>
-                <td>{{ candidate_name }}</td>
-                <td>{{ job_title }}</td>
-                <td>{{ date_of_joining }}</td>
-                <td>{{ ctc }}</td>
-                <td>{{ service_fee_percentage }}</td>
-                <td>{{ service_fee }}</td>
-            </tr>
-        </table>
-        
-        <!-- Total Section -->
-        <div class="total-section">
-            <p>Sub-Total: {{ sub_total }}</p>
-
-            {% if igst == 0 %}
-                <!-- If IGST is 0, show SGST and CGST -->
-                <p>SGST @9%: {{ sgst }}</p>
-                <p>CGST @9%: {{ cgst }}</p>
-            {% else %}
-                <!-- If IGST is not 0, show IGST -->
-                <p>IGST @18%: {{ igst }}</p>
-            {% endif %}
-            
-            <p><strong>Total: {{ total_amount }}</strong></p>
+        <div class="section">
+          <p class="bold">Service Provider</p>
+          <p>
+            <strong>{{ service_provider_name }}</strong><br />({{
+            service_provider_name }})<br />Address: {{ service_provider_address
+            }}
+          </p>
+          <p><strong>GST NO:</strong> {{ service_provider_gstin }}</p>
+          <p>
+            Contact Person: {{ service_provider_contact_person }}<br />Email:
+            <a href="mailto:{{ service_provider_email }}"
+              >{{ service_provider_email }}</a
+            ><br />Mobile No: {{ service_provider_mobile }}
+          </p>
         </div>
+      </div>
+
+      <!-- Invoice Table -->
+      <table>
+        <tr>
+          <th>SL No</th>
+          <th>Service Description with HSN Code</th>
+          <th>Candidate Name</th>
+          <th>Job Title</th>
+          <th>Date of Joining</th>
+          <th>CTC</th>
+          <th>Recruitment Service Fee (% of CTC)</th>
+          <th>Recruitment Service Fee</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>{{ service_description }}</td>
+          <td>{{ candidate_name }}</td>
+          <td>{{ job_title }}</td>
+          <td>{{ date_of_joining }}</td>
+          <td>{{ ctc }}</td>
+          <td>{{ service_fee_percentage }}</td>
+          <td>{{ service_fee }}</td>
+        </tr>
+      </table>
+
+      <!-- Total Section -->
+      <div class="total-section">
+        <p>Sub-Total: {{ sub_total }}</p>
+
+        {% if igst == 0 %}
+        <!-- If IGST is 0, show SGST and CGST -->
+        <p>SGST @9%: {{ sgst }}</p>
+        <p>CGST @9%: {{ cgst }}</p>
+        {% else %}
+        <!-- If IGST is not 0, show IGST -->
+        <p>IGST @18%: {{ igst }}</p>
+        {% endif %}
+
+        <p><strong>Total: {{ total_amount }}</strong></p>
+      </div>
     </div>
-</body>
+  </body>
 </html>
 
-
- {% endcomment %}
-
-
- <!DOCTYPE html>
+{% endcomment %} {% comment %}
+<!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Invoice</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f9;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f4f4f9;
+      }
 
-        /* Invoice Container */
+      /* Invoice Container */
+      .invoice-container {
+        width: 80%; /* Adjust the width for mobile responsiveness */
+
+        margin: auto;
+        border: 1px solid #000;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      /* Header Section */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
+      .header img {
+        height: 80px; /* Adjust the size of the logo */
+      }
+
+      /* Section for Buyer and Service Provider Information */
+      .section-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .section {
+        border: 1px solid #000;
+        padding: 15px;
+        width: 48%;
+        box-sizing: border-box;
+      }
+
+      .bold {
+        font-weight: bold;
+      }
+
+      /* Table Styling */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+
+      th,
+      td {
+        padding: 8px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #f2f2f2;
+      }
+
+      /* Total Section */
+      .total-section {
+        text-align: right;
+        margin-top: 20px;
+      }
+
+      /* Media Queries for responsiveness */
+      @media (max-width: 768px) {
         .invoice-container {
-            width: 80%; /* Adjust the width for mobile responsiveness */
-            max-width: 1000px; /* Limit the max-width for large screens */
-            margin: auto;
-            border: 1px solid #000;
-            padding: 20px;
-            box-sizing: border-box;
+          width: 95%;
         }
 
-        /* Header Section */
         .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+          flex-direction: column;
+          align-items: flex-start;
         }
 
-        .header img {
-            height: 80px; /* Adjust the size of the logo */
-        }
-
-        /* Section for Buyer and Service Provider Information */
         .section-container {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
+          flex-direction: column;
+          gap: 10px;
         }
 
         .section {
-            border: 1px solid #000;
-            padding: 15px;
-            width: 48%;
-            box-sizing: border-box;
+          width: 100%; /* Full width for smaller screens */
         }
 
-        .bold {
-            font-weight: bold;
-        }
-
-        /* Table Styling */
         table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
+          width: 100%;
+          margin-top: 15px;
         }
 
-        table, th, td {
-            border: 1px solid black;
-        }
-
-        th, td {
-            padding: 8px;
-            text-align: left;
-        }
-
-        th {
-            background-color: #f2f2f2;
-        }
-
-        /* Total Section */
         .total-section {
-            text-align: right;
-            margin-top: 20px;
+          text-align: left;
+          margin-top: 15px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .header img {
+          height: 60px; /* Smaller logo size for very small screens */
         }
 
-        /* Media Queries for responsiveness */
-        @media (max-width: 768px) {
-            .invoice-container {
-                width: 95%;
-            }
-
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .section-container {
-                flex-direction: column;
-                gap: 10px;
-            }
-
-            .section {
-                width: 100%; /* Full width for smaller screens */
-            }
-
-            table {
-                width: 100%;
-                margin-top: 15px;
-            }
-
-            .total-section {
-                text-align: left;
-                margin-top: 15px;
-            }
+        .invoice-container {
+          padding: 10px;
         }
 
-        @media (max-width: 480px) {
-            .header img {
-                height: 60px; /* Smaller logo size for very small screens */
-            }
-
-            .invoice-container {
-                padding: 10px;
-            }
-
-            .total-section p {
-                font-size: 14px; /* Adjust font size for small screens */
-            }
-
-            th, td {
-                padding: 6px; /* Reduce padding for better fit */
-                font-size: 14px;
-            }
+        .total-section p {
+          font-size: 14px; /* Adjust font size for small screens */
         }
+
+        th,
+        td {
+          padding: 6px; /* Reduce padding for better fit */
+          font-size: 14px;
+        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="invoice-container">
-        <div class="header">
-            <img src="{{ url }}/../Pictures/ALL SCREEN SHOTS/Ameer passport pic.jpg" alt="Company Logo">
-            <div>
-                <p><strong>Invoice:</strong> {{ invoice_id }}</p>
-                <p><strong>Generated Date:</strong> {{ date }}</p>
-            </div>
+      <div class="header">
+        <img
+          src="{{ url }}/../Pictures/ALL SCREEN SHOTS/Ameer passport pic.jpg"
+          alt="Company Logo"
+        />
+        <div>
+          <p><strong>Invoice:</strong> {{ invoice_id }}</p>
+          <p><strong>Generated Date:</strong> {{ date }}</p>
         </div>
-        
-        <div class="section-container">
-            <div class="section">
-                <p class="bold">Buyer/ Service Provided to</p>
-                <p><strong>{{ client_name }}</strong><br>{{ agency_name }}<br>Address: {{ buyer_address }}</p>
-                <p><strong>GST NO:</strong> {{ buyer_gst_no }}</p>
-                <p>Contact Person: {{ client_name }}<br>Email: <a href="mailto:{{ client_email }}">{{ client_email }}</a><br>Mobile No: {{ buyer_contact_number }}</p>
-            </div>
+      </div>
 
-            <div class="section">
-                <p class="bold">Service Provider</p>
-                <p><strong>{{ service_provider_name }}</strong><br><br>Address: {{ service_provider_address }}</p>
-                <p><strong>GST NO:</strong> {{ service_provider_gstin }}</p>
-                <p>Contact Person: {{ service_provider_contact_person }}<br>Email: <a href="mailto:{{ service_provider_email }}">{{ service_provider_email }}</a><br>Mobile No: {{ service_provider_mobile }}</p>
-            </div>
+      <div class="section-container">
+        <div class="section">
+          <p class="bold">Buyer/ Service Provided to</p>
+          <p>
+            <strong>{{ client_name }}</strong><br />{{ agency_name }}<br />Address:
+            {{ buyer_address }}
+          </p>
+          <p><strong>GST NO:</strong> {{ buyer_gst_no }}</p>
+          <p>
+            Contact Person: {{ client_name }}<br />Email:
+            <a href="mailto:{{ client_email }}">{{ client_email }}</a
+            ><br />Mobile No: {{ buyer_contact_number }}
+          </p>
         </div>
 
-        <table>
-            <tr>
-                <th>SL No</th>
-                <th>Service Description with HSN Code</th>
-                <th>Candidate Name</th>
-                <th>Job Title</th>
-                <th>Date of Joining</th>
-                <th>CTC</th>
-                <th>Recruitment Service Fee (% of CTC)</th>
-                <th>Recruitment Service Fee</th>
-            </tr>
-            <tr>
-                <td>1</td>
-                <td>{{ service_description }}</td>
-                <td>{{ candidate_name }}</td>
-                <td>{{ job_title }}</td>
-                <td>{{ date_of_joining }}</td>
-                <td>{{ ctc }}</td>
-                <td>{{ service_fee_percentage }}</td>
-                <td>{{ service_fee }}</td>
-            </tr>
-        </table>
-        
-        <div class="total-section">
-            <p>Sub-Total: {{ sub_total }}</p>
-
-            {% if igst == 0 %}
-                <!-- If IGST is 0, show SGST and CGST -->
-                <p>SGST @9%: {{ sgst }}</p>
-                <p>CGST @9%: {{ cgst }}</p>
-            {% else %}
-                <!-- If IGST is not 0, show IGST -->
-                <p>IGST @18%: {{ igst }}</p>
-            {% endif %}
-            
-            <p><strong>Total: {{ total_amount }}</strong></p>
+        <div class="section">
+          <p class="bold">Service Provider</p>
+          <p>
+            <strong>{{ service_provider_name }}</strong><br /><br />Address: {{
+            service_provider_address }}
+          </p>
+          <p><strong>GST NO:</strong> {{ service_provider_gstin }}</p>
+          <p>
+            Contact Person: {{ service_provider_contact_person }}<br />Email:
+            <a href="mailto:{{ service_provider_email }}"
+              >{{ service_provider_email }}</a
+            ><br />Mobile No: {{ service_provider_mobile }}
+          </p>
         </div>
+      </div>
+
+      <table>
+        <tr>
+          <th>SL No</th>
+          <th>Service Description with HSN Code</th>
+          <th>Candidate Name</th>
+          <th>Job Title</th>
+          <th>Date of Joining</th>
+          <th>CTC</th>
+          <th>Recruitment Service Fee (% of CTC)</th>
+          <th>Recruitment Service Fee</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>{{ service_description }}</td>
+          <td>{{ candidate_name }}</td>
+          <td>{{ job_title }}</td>
+          <td>{{ date_of_joining }}</td>
+          <td>{{ ctc }}</td>
+          <td>{{ service_fee_percentage }}</td>
+          <td>{{ service_fee }}</td>
+        </tr>
+      </table>
+
+      <div class="total-section">
+        <p>Sub-Total: {{ sub_total }}</p>
+
+        {% if igst == 0 %}
+        <!-- If IGST is 0, show SGST and CGST -->
+        <p>SGST @9%: {{ sgst }}</p>
+        <p>CGST @9%: {{ cgst }}</p>
+        {% else %}
+        <!-- If IGST is not 0, show IGST -->
+        <p>IGST @18%: {{ igst }}</p>
+        {% endif %}
+
+        <p><strong>Total: {{ total_amount }}</strong></p>
+      </div>
     </div>
-</body>
+  </body>
 </html>
+{% endcomment %} {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Invoice</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 font-sans">
+    <div class="max-w-4xl mx-auto bg-white mt-6 m-2">
+      <div
+        class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6"
+      >ś
+        <div class="text-sm">
+          <p><span class="font-bold">Invoice:</span> {{ invoice_id }}</p>
+          <p><span class="font-bold">Generated Date:</span> {{ date }}</p>
+        </div>
+      </div>
 
+      <div class="flex flex-col md:flex-row max-w-3xl mx-auto text-sm">
+        <div
+          class="border border-black flex-1 md:max-w-[48%] p-3 rounded-l-lg bg-white shadow-sm font-sans text-gray-800"
+        >
+          <p class="text-base font-semibold mb-2 border-b border-gray-300 pb-1">
+            Buyer / Service Provided to
+          </p>
 
+          <p class="mb-2 leading-snug">
+            <span class="font-semibold text-gray-900">{{ client_name }}</span
+            ><br />
+            {{ agency_name }}<br />
+            <span class="text-xs text-gray-600">
+              Address: {{ buyer_address }}
+            </span>
+          </p>
+
+          <p class="mb-2">
+            <span class="font-semibold">GST NO:</span> {{ buyer_gst_no }}
+          </p>
+
+          <p class="mb-1">
+            <span class="font-semibold">Contact Person:</span> {{ client_name }}
+          </p>
+          <p class="mb-1">
+            <span class="font-semibold">Email:</span>
+            <a
+              href="mailto:{{ client_email }}"
+              class="text-blue-600 underline hover:text-blue-800"
+            >
+              {{ client_email }}
+            </a>
+          </p>
+          <p>
+            <span class="font-semibold">Mobile No:</span>
+            {{ buyer_contact_number }}
+          </p>
+        </div>
+
+        <div
+          class="border border-black flex-1 md:max-w-[48%] p-3 rounded-r-lg bg-white shadow-sm font-sans text-gray-800"
+        >
+          <p class="text-base font-semibold mb-2 border-b border-gray-300 pb-1">
+            Service Provider
+          </p>
+
+          <p class="mb-2 leading-snug">
+            <span class="font-semibold text-gray-900">
+              {{ service_provider_name }} </span
+            ><br />
+            <span class="text-xs text-gray-600">
+              Address: {{ service_provider_address }}
+            </span>
+          </p>
+
+          <p class="mb-2">
+            <span class="font-semibold">GST NO:</span> {{service_provider_gstin}}
+          </p>
+
+          <p class="mb-1">
+            <span class="font-semibold">Contact Person:</span>
+            {{ service_provider_contact_person }}
+          </p>
+          <p class="mb-1">
+            <span class="font-semibold">Email:</span>
+            <a
+              href="mailto:{{ service_provider_email }}"
+              class="text-blue-600 underline hover:text-blue-800"
+            >
+              {{ service_provider_email }}
+            </a>
+          </p>
+          <p>
+            <span class="font-semibold">Mobile No:</span>
+            {{ service_provider_mobile }}
+          </p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto mt-6">
+        <table
+          class="w-[50%] border border-black border-collapse small-text-table"
+        >
+          <thead>
+            <tr class="bg-gray-200 text-sm">
+              <th class="border border-black px-1 py-1">SL No</th>
+              <th class="border border-black px-1 py-1">
+                Service Description with HSN Code
+              </th>
+              <th class="border border-black px-1 py-1">Candidate Name</th>
+              <th class="border border-black px-1 py-1">Job Title</th>
+              <th class="border border-black px-1 py-1">Date of Joining</th>
+              <th class="border border-black px-1 py-1">CTC</th>
+              <th class="border border-black px-1 py-1">
+                Recruitment Service Fee (% of CTC)
+              </th>
+              <th class="border border-black px-1 py-1">
+                Recruitment Service Fee
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="text-sm">
+              <td class="border border-black px-1 py-1">1</td>
+              <td class="border border-black px-1 py-1">
+                {{ service_description }}
+              </td>
+              <td class="border border-black px-1 py-1">
+                {{ candidate_name }}
+              </td>
+              <td class="border border-black px-1 py-1">{{ job_title }}</td>
+              <td class="border border-black px-1 py-1">
+                {{ date_of_joining }}
+              </td>
+              <td class="border border-black px-1 py-1">{{ ctc }}</td>
+              <td class="border border-black px-1 py-1">
+                {{ service_fee_percentage }}
+              </td>
+              <td class="border border-black px-1 py-1">{{ sub_total }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="text-right mt-6 text-sm">
+        <p>Sub-Total: {{ sub_total }}</p>
+
+        {% if igst == 0 %}
+        <p>SGST @9%: {{ sgst }}</p>
+        <p>CGST @9%: {{ cgst }}</p>
+        {% else %}
+        <p>IGST @18%: {{ igst }}</p>
+        {% endif %}
+
+        <p class="font-bold">Total: {{ total_amount }}</p>
+      </div>
+    </div>
+  </body>
+</html>

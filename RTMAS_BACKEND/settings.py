@@ -26,6 +26,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 SECRET_KEY = os.getenv('SIGNING_KEY')
 
+BACKEND_URL = os.getenv("backendurl")
+
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
