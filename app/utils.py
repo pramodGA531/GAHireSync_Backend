@@ -996,6 +996,21 @@ def job_post_log(id,message):
     print("job log",job_post_log.message)
        
         
-        
+def job_profile_log(job_application_id, message):
+    try:
+        # Create log record
+        log = JobProfileLog.objects.create(
+            job_profile_id=job_application_id,
+            message=message
+        )
+        print("Job Profile Log created:", log.message)
+        return log
+    except JobApplication.DoesNotExist:
+        print(f"Error: JobApplication with id {job_application_id} does not exist.")
+        return None
+    except Exception as e:
+        print(f"Unexpected error while creating JobProfileLog: {e}")
+        return None
+
     
 
