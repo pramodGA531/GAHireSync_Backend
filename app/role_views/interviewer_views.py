@@ -391,8 +391,10 @@ class PromoteCandidateView(APIView):
         f"link::recruiter/schedule_applications/"
     )
 )
-            
-            
+            job_post_log(# need to change the function and id 
+    job.id,
+    f"Interviewer {request.user.username} conducted the interview and selected candidate {customCand.username}"
+)
             Notifications.objects.create(
     sender=request.user,
     receiver=customCand,
@@ -480,6 +482,10 @@ class RejectCandidate(APIView):
         f"After careful consideration following your interview for round {application.next_interview.round_num}, "
         f"we regret to inform you that we will not be moving forward with your application at this time.\n\n"
     )
+)
+            job_post_log(# need to change the function and id 
+    job.id,
+    f"Interviewer {request.user.username} conducted the interview and Rejected candidate {customCand.username} reson: {remarks}"
 )
             return Response({"message":"Rejected successfully"},status = status.HTTP_201_CREATED)
         except Exception as e:
@@ -635,6 +641,10 @@ HireSync.
         f"Kindly follow up with the client for the final decision.\n\n"
         f"link::recruiter/postings/"
     )
+)
+                job_post_log(
+    job.id,
+    f"Candidate {customCand.username} cleared all rounds | Status: On Hold"
 )
                 
                 applications_selected  = JobApplication.objects.filter(job_location__job_id = job).filter(status  = 'selected').count()

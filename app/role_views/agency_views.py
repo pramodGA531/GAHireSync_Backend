@@ -534,6 +534,7 @@ class OrgJobEdits(APIView):
                     f"link::client/approvals/"
                 )
                                 )
+                job_post_log(job.id,f"organization has requested an edit for the job {job.job_title} to client {job.username.username}")
                 # Email logic...
 
                 return Response(
@@ -579,7 +580,8 @@ class AcceptJobPostView(APIView):
                             f"Thank you for using our platform! 🙌"
                         )
                     )
-
+                    
+                    job_post_log(job_post.id,f"client {job_post.username.username} job request for  jobtitle: {job_post.job_title} has been approved by the agency manager {request.user.username} ")
 
                 elif(action == 'reject'):
                     job_post.approval_status  = "rejected"
@@ -600,6 +602,8 @@ class AcceptJobPostView(APIView):
                             f"Thank you for understanding."
                         )
                     )
+                    
+                    job_post_log(job_post.id,f"client {job_post.username.username} job request for  jobtitle: {job_post.job_title} has been Rejected by the agency manager {request.user.username} reson for rejection {job_post.reason}")
 
                 job_post.save()
                 return Response({"message":"Job post updated successfully"}, status=status.HTTP_200_OK)
@@ -649,7 +653,11 @@ class JobEditActionView(APIView):
                         f"{request.user}"
                     )
                 )
+                job_post_log(job.id,f"edit request from the client has been approved by agency manager {request.user.username}")
+                
+                
                 return Response({"message":"Job approved successfully"}, status=status.HTTP_200_OK)
+            
             
             if action == 'reject':
                 job.approval_status = 'reject'
@@ -667,6 +675,9 @@ class JobEditActionView(APIView):
                         f"{request.user}"
                     )
                 )
+                
+                job_post_log(job.id,f"edit request from the client has been Rejected by agency manager {request.user.username}")
+                
                 return Response({"message":"Job post rejected successfully"}, status=status.HTTP_200_OK)            
 
         except Exception as e:
@@ -822,6 +833,8 @@ HireSync Team
                                     f"id::{job.id} link::recruiter/postings/"
                                 ),
                             )
+                            
+                            job_post_log(job.id,f"Recruiter {recruiter} has been assigned by manager for a job posting {job.job_title} joblocation:{job_location.location}")
 
                     # Remove recruiters
                     if to_remove:
@@ -865,6 +878,7 @@ HireSync Team
                                     f"id::{job.id} link::recruiter/postings/"
                                 ),
                             )
+                            job_post_log(job.id,f"Recruiter {recruiter} has been removed for a job posting {job.job_title} by manager joblocation:{job_location.location}")
 
                 except JobLocationsModel.DoesNotExist:
                     return Response({"error": "Job location does not exist"}, status=status.HTTP_200_OK)
@@ -894,8 +908,10 @@ class AssignRecruiterByLocationView(APIView):
             assigned_job, created = AssignedJobs.objects.get_or_create(
                 job_location=location,
                 job_id=location.job_id
-            )
-            assigned_job.assigned_to.set(recruiter_ids)
+                )
+                assigned_job.assigned_to.set(recruiter_ids)
+                
+                job_post_log(location.job_id.id,f"Recruiter {user.username} has been assigned by manager for a job posting {location.job_id.job_title} joblocation:{location}")
 
             return Response(
                 {"message": "Recruiters assigned successfully"},

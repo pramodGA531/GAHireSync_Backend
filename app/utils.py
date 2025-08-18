@@ -434,7 +434,7 @@ def create_invoice_context(invoice_id):
     terms = invoice.terms_id
 
     context = {
-        "url":"backend.hirsync",
+        "url":settings.BACKEND_URL,# from settings backendurl  .env have backendurl="http://localhost:8000"
         "invoice_id": invoice.invoice_code,  
         "date":invoice.created_at.date(),
         "service_provider_name": organization.name,
@@ -742,7 +742,7 @@ def get_invoice_terms(selected_application_id):
     selected_ctc = float(selected_application.ctc)
 
     def parse_ctc_range(ctc_range_str):
-        try:
+        try:# get the range from terms 
             clean_range = ctc_range_str.replace("LPA", "").replace(" ", "")
             min_str, max_str = clean_range.split("-")
             return float(min_str), float(max_str)
@@ -753,7 +753,7 @@ def get_invoice_terms(selected_application_id):
         negotiated_terms = job_terms.get(is_negotiated=True)
         min_ctc, max_ctc = parse_ctc_range(negotiated_terms.ctc_range)
 
-        if selected_ctc <= max_ctc:
+        if selected_ctc <= max_ctc:# checks that ctc comes under which range in terms 
             service_fee = float(negotiated_terms.service_fee)
             invoice_amount = round((selected_ctc * 100000) * (service_fee / 100), 2)
             cgst = 0
@@ -805,6 +805,11 @@ def get_invoice_terms(selected_application_id):
             continue  
 
     return {"error": "No applicable service fee terms for the selected CTC"}
+
+def get_gst_calculation(invoice_amount):
+    print("need fetch the gst numbers for both the agency and the client ")
+   
+                                             
 
 
 def update_location_to_hold(location_id):
@@ -988,5 +993,32 @@ def can_add_recruiter(organization_id):
         return recruiters < allowed_recruiters
     except Exception as e:
         raise ValueError(f"{e}")
+    
+    
+def job_post_log(id,message):
+    try:
+        job_post_log = JobPostLog.objects.create(job_post_id=id, message=message)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    
+       
+        
+def job_profile_log(job_application_id, message):
+    try:
+        # Create log record
+        log = JobProfileLog.objects.create(
+            job_profile_id=job_application_id,
+            message=message
+        )
+        print("Job Profile Log created:", log.message)
+        return log
+    except JobApplication.DoesNotExist:
+        print(f"Error: JobApplication with id {job_application_id} does not exist.")
+        return None
+    except Exception as e:
+        print(f"Unexpected error while creating JobProfileLog: {e}")
+        return None
+
     
 

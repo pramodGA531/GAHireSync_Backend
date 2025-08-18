@@ -1205,4 +1205,22 @@ class PlanHistory(models.Model):
 
     class Meta:
         ordering = ['-subscribed_at']
+        
+        
+        
+class JobPostLog(models.Model):
+    job_post = models.ForeignKey(JobPostings, on_delete=models.CASCADE, related_name="logs")
+    message = models.TextField()  
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"Log for Job #{self.job_post.id}: {self.message}"
+
+
+class JobProfileLog(models.Model):
+    job_profile = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name="logs")
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Log for Job Profile #{self.job_profile.id}: {self.message}"
