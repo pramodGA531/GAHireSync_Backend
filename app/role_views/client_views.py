@@ -2793,10 +2793,29 @@ class CandidateJoined(APIView):
         service_fee = terms_result["service_fee_percent"]
         invoice_amount = terms_result["invoice_amount"]
         terms_id = terms_result["terms_id"]
-        cgst = terms_result["cgst"]
-        sgst = terms_result["sgst"]
-        final_price = terms_result["final_price"]
+        cgst = 0
+        sgst = 0
+        igst=0
+        final_price = 0
+        
+        client_state_code = str(client.gst_number)[:2]
+        org_state_code = str(organization.gst_number)[:2]
 
+        if client_state_code == org_state_code:
+            # Intra-state supply
+            cgst = invoice_amount * 0.09
+            sgst = invoice_amount * 0.09
+            final_price = invoice_amount + cgst + sgst
+        else:
+            # Inter-state supply
+            igst = invoice_amount * 0.18
+            final_price = invoice_amount + igst
+
+        print("CGST:", cgst)
+        print("SGST:", sgst)
+        print("IGST:", igst)
+        print("Final Price:", final_price)
+                
         job_terms = JobPostTerms.objects.get(id=terms_id)
         invoice_after = job_terms.invoice_after
 
@@ -2809,6 +2828,7 @@ class CandidateJoined(APIView):
             terms_id=job_terms,
             invoice_calculated=invoice_amount,
             final_price=final_price,
+            sub_total=invoice_amount,
             cgst=cgst,
             sgst=sgst,
             scheduled_date=scheduled_date,
@@ -2920,6 +2940,9 @@ class ReplacementsView(APIView):
                 job_location.save()
                 job_post.status = "opened"
                 job_post.save()
+                
+                job_post_log(job_post.id,f"Replacement Request for the jobpost :{job_post.job_title} to the agency")
+                
 
             return Response(
                 {"message": "Replacement applied successfully"},
