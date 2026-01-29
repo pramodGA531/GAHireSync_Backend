@@ -36,11 +36,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://annabella-paterfamiliar-judgmatically.ngrok-free.dev",
-    "https://gahiresync.vercel.app",
-    "http://192.168.0.132:8000",
-]
+# CSRF_TRUSTED_ORIGINS = [
+#     "https://annabella-paterfamiliar-judgmatically.ngrok-free.dev",
+#     "https://gahiresync.vercel.app",
+#     "http://192.168.0.132:8000",
+# ]
 
 
 # Application definition
@@ -113,14 +113,14 @@ if ENVIRONMENT == "localhost":
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = "smtp.gmail.com"
-    EMAIL_PORT = 587
-    EMAIL_HOST_USER = os.environ.get("EMAIL_ID")
-    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_PASSWORD")
-    EMAIL_USE_TLS = True
-    EMAIL_USE_SSL = False
-    DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_ID")
+    # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    # EMAIL_HOST = "smtp.gmail.com"
+    # EMAIL_PORT = 587
+    # EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+    # EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+    # EMAIL_USE_TLS = True
+    # EMAIL_USE_SSL = False
+    # DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_HOST_USER")
 
 else:
     DATABASES = {
@@ -133,16 +133,26 @@ else:
             "PORT": os.getenv("DB_PORT"),
         }
     }
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = "mail.gaconsulting.in"
-    EMAIL_PORT = 465
-    EMAIL_HOST_USER = os.environ.get("EMAIL_ID")
-    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_PASSWORD")
-    EMAIL_USE_TLS = False
-    EMAIL_USE_SSL = True
-    DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_ID")
+    # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    # EMAIL_HOST = "mail.gaconsulting.in"
+    # EMAIL_PORT = 465
+    # EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+    # EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+    # EMAIL_USE_TLS = False
+    # EMAIL_USE_SSL = True
+    # DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_HOST_USER")
 
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 465
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
