@@ -1,4 +1,4 @@
-﻿absl-py==2.3.1
+absl-py==2.3.1
 accelerate==1.10.1
 aiofiles==24.1.0
 aiohappyeyeballs==2.6.1
@@ -119,7 +119,7 @@ gunicorn==23.0.0
 gym==0.22.0
 gym-notices==0.0.8
 # Editable install with no version control (gym_donkeycar==1.3.1)
--e c:\users\intel\gym-donkeycar
+# -e c:\users\intel\gym-donkeycar
 h11==0.16.0
 h5py==3.14.0
 httpcore==1.0.9
