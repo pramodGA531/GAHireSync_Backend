@@ -9,12 +9,12 @@ from .models import *
 from .serializers import *
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings 
+from django.conf import settings
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 from .permissions import *
 import jwt
-import string 
+import string
 import random
 from django.contrib.auth.tokens import default_token_generator
 from django.template import Template, Context
@@ -23,45 +23,95 @@ from .utils import *
 from django.utils.encoding import force_str
 
 
-frontend_url = os.environ['FRONTENDURL']
+frontend_url = os.environ["FRONTENDURL"]
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
 
 class VerifyEmailView(APIView):
-    def get(self, request, uidb64, token):
-        try:
 
+    def get(self, request, uidb64, token):
+        print(f"[VERIFY-GET] uidb64={uidb64}, token={token}")
+
+        try:
             uid = force_str(urlsafe_base64_decode(uidb64))
-            user = get_object_or_404(CustomUser, pk=uid) 
+            user = get_object_or_404(CustomUser, pk=uid)
 
             if email_verification_token.check_token(user, token):
                 user.is_verified = True
                 user.is_active = True
-                user.save()
-                return Response({"message": "Email verified successfully! You can now log in."}, status=status.HTTP_200_OK)
-            else:
-                return Response({"error": "Invalid verification link."}, status=status.HTTP_400_BAD_REQUEST)
+                user.save(update_fields=["is_verified", "is_active"])
+
+                print(f"[VERIFY-GET] Email verified: {user.email}")
+
+                return Response(
+                    {"message": "Email verified successfully. You can now log in."},
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {"error": "Invalid or expired verification link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+            print("[VERIFY-GET] ERROR:", str(e))
+            return Response(
+                {"error": "Invalid verification link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     def post(self, request):
-        try:    
-            email = request.data.get('email')
-            try:
-                user = CustomUser.objects.get(email = email)
-            except CustomUser.DoesNotExist:
-                return Response({"error":"User with this email id does not exists"}, status= status.HTTP_400_BAD_REQUEST)
-            
-            if user.is_verified:
-                return Response({"message":"Your email is already verified, try login"}, status=status.HTTP_200_OK)
-            
-            try:
-                send_email_verification_link(user,False, "all")
-                return Response({"message":"Verification Link sent successfully"}, status=status.HTTP_200_OK)
-            
-            except Exception as e:
-                return Response({"error":"Error sending verification email"}, status=status.HTTP_400_BAD_REQUEST)
+        email = request.data.get("email")
+
+        print(f"[VERIFY-POST] Request received for email={email}")
+
+        if not email:
+            return Response(
+                {"error": "Email is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "User with this email does not exist"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if user.is_verified:
+            return Response(
+                {"message": "Email already verified. Please login."},
+                status=status.HTTP_200_OK,
+            )
+
+        # 🔥 SINGLE try–except for email sending
+        try:
+            print(f"[VERIFY-POST] Sending verification email to {email}")
+
+            send_email_verification_link(user,False,"all")
+
+            print(f"[VERIFY-POST] Email SENT to {email}")
+
+            return Response(
+                {"message": "Verification link sent successfully"},
+                status=status.HTTP_200_OK,
+            )
+
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            print(f"[VERIFY-POST] EMAIL FAILED:", str(e))
+
+            return Response(
+                {"error": "Failed to send verification email"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
 
 class ClientSignupView(APIView):
 
@@ -71,101 +121,119 @@ class ClientSignupView(APIView):
         combined_values = request.data
         try:
             with transaction.atomic():
-                user_serializer = CustomUserSerializer(data={
-                    'email': combined_values.get('email'),
-                    'username': combined_values.get('username'),
-                    'role': CustomUser.CLIENT,
-                    'credit' : 50,
-                    'password': combined_values.get('password')
-                })
+                user_serializer = CustomUserSerializer(
+                    data={
+                        "email": combined_values.get("email"),
+                        "username": combined_values.get("username"),
+                        "role": CustomUser.CLIENT,
+                        "credit": 50,
+                        "password": combined_values.get("password"),
+                    }
+                )
 
                 if user_serializer.is_valid(raise_exception=True):
                     user = user_serializer.save()
-                    user.set_password(combined_values.get('password'))
+                    user.set_password(combined_values.get("password"))
                     user.save()
-                    
+
                     client_data = {
-                        'username': user.username,
-                        'user': user.id,
-                        'name_of_organization': combined_values.get('name_of_organization'),
-                        'designation': combined_values.get('designation'),
-                        'contact_number': combined_values.get('contact_number'),
-                        'website_url': combined_values.get('website_url'),
-                        'gst_number': combined_values.get('gst'),
-                        'company_pan': combined_values.get('company_pan'),
-                        'company_address': combined_values.get('company_address')
+                        "username": user.username,
+                        "user": user.id,
+                        "name_of_organization": combined_values.get(
+                            "name_of_organization"
+                        ),
+                        "designation": combined_values.get("designation"),
+                        "contact_number": combined_values.get("contact_number"),
+                        "website_url": combined_values.get("website_url"),
+                        "gst_number": combined_values.get("gst"),
+                        "company_pan": combined_values.get("company_pan"),
+                        "company_address": combined_values.get("company_address"),
                     }
                     client_serializer = ClientDetailsSerializer(data=client_data)
-                    
+
                     if client_serializer.is_valid(raise_exception=True):
                         client_serializer.save()
 
                         try:
-                            send_email_verification_link(user = user, signup = True, role="client")
-                            
+                            send_email_verification_link(
+                                user=user, signup=True, role="client"
+                            )
+
                         except Exception as e:
                             print(str(e))
                             return Response(
-                                {"error": "There was an issue sending the welcome email. Please try again later."},
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                                {
+                                    "error": "There was an issue sending the welcome email. Please try again later."
+                                },
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             )
 
-                    return Response({"message": "Verification link send successfully"}, status=status.HTTP_201_CREATED)
-        
+                    return Response(
+                        {"message": "Verification link send successfully"},
+                        status=status.HTTP_201_CREATED,
+                    )
+
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+
+
 class ClientInfo(APIView):
-    
+
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         try:
             request_user = request.user  # Correct variable naming
 
-            user = CustomUser.objects.get(id=request_user.id)  # Correct lookup: id=request_user.i
+            user = CustomUser.objects.get(
+                id=request_user.id
+            )  # Correct lookup: id=request_user.i
             client_details = ClientDetails.objects.get(user=user)
             user_serializer = CustomUserSerializer(user)
             client_serializer = ClientDetailsSerializer(client_details)
             combined_data = {
                 "user": user_serializer.data,
-                "client_details": client_serializer.data
+                "client_details": client_serializer.data,
             }
 
             return Response(combined_data, status=status.HTTP_200_OK)
 
         except CustomUser.DoesNotExist:
-            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         except ClientDetails.DoesNotExist:
-            return Response({"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+
     def put(self, request, *args, **kwargs):
         combined_values = request.data
-        requestUser=request.user
+        requestUser = request.user
         try:
             with transaction.atomic():
-                user_id = combined_values.get('user_id')
+                user_id = combined_values.get("user_id")
                 user = get_object_or_404(CustomUser, id=requestUser.id)
 
                 # Update user fields
                 user_serializer = CustomUserSerializer(
                     user,
                     data={
-                        'email': combined_values.get('email', user.email),
-                        'username': combined_values.get('username', user.username),
-                        'role': CustomUser.CLIENT,
-                        'credit': user.credit,  # Keeping existing credit unless you want to change
+                        "email": combined_values.get("email", user.email),
+                        "username": combined_values.get("username", user.username),
+                        "role": CustomUser.CLIENT,
+                        "credit": user.credit,  # Keeping existing credit unless you want to change
                     },
-                    partial=True
+                    partial=True,
                 )
 
                 if user_serializer.is_valid(raise_exception=True):
                     user = user_serializer.save()
 
                     # Update password if provided
-                    password = combined_values.get('password')
+                    password = combined_values.get("password")
                     if password:
                         user.set_password(password)
                         user.save()
@@ -174,48 +242,64 @@ class ClientInfo(APIView):
                 client_details = get_object_or_404(ClientDetails, user=user)
 
                 client_data = {
-                    'username': user.username,
-                    'user': user.id,
-                    'name_of_organization': combined_values.get('name_of_organization', client_details.name_of_organization),
-                    'designation': combined_values.get('designation', client_details.designation),
-                    'contact_number': combined_values.get('contact_number', client_details.contact_number),
-                    'website_url': combined_values.get('website_url', client_details.website_url),
-                    'gst_number': combined_values.get('gst', client_details.gst_number),
-                    'company_pan': combined_values.get('company_pan', client_details.company_pan),
-                    'company_address': combined_values.get('company_address', client_details.company_address),
-                    "about": combined_values.get('about', client_details.about),
+                    "username": user.username,
+                    "user": user.id,
+                    "name_of_organization": combined_values.get(
+                        "name_of_organization", client_details.name_of_organization
+                    ),
+                    "designation": combined_values.get(
+                        "designation", client_details.designation
+                    ),
+                    "contact_number": combined_values.get(
+                        "contact_number", client_details.contact_number
+                    ),
+                    "website_url": combined_values.get(
+                        "website_url", client_details.website_url
+                    ),
+                    "gst_number": combined_values.get("gst", client_details.gst_number),
+                    "company_pan": combined_values.get(
+                        "company_pan", client_details.company_pan
+                    ),
+                    "company_address": combined_values.get(
+                        "company_address", client_details.company_address
+                    ),
+                    "about": combined_values.get("about", client_details.about),
                 }
 
                 client_serializer = ClientDetailsSerializer(
-                    client_details,
-                    data=client_data,
-                    partial=True
+                    client_details, data=client_data, partial=True
                 )
 
                 if client_serializer.is_valid(raise_exception=True):
                     client_serializer.save()
 
-                return Response({
-                    "message": "User and client details updated successfully",
-                    "updated_user": user_serializer.data,
-                    "updated_client": client_serializer.data
-                }, status=status.HTTP_200_OK)
+                return Response(
+                    {
+                        "message": "User and client details updated successfully",
+                        "updated_user": user_serializer.data,
+                        "updated_client": client_serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
         except CustomUser.DoesNotExist:
-            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         except ClientDetails.DoesNotExist:
-            return Response({"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Client details not found."}, status=status.HTTP_404_NOT_FOUND
+            )
         except Exception as e:
             logger.error(str(e))  # Log the error for debugging
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 
 class AgencySignupView(APIView):
     """
     API view to sign up a new client user.
     """
+
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
@@ -226,156 +310,195 @@ class AgencySignupView(APIView):
         #     return Response({"error": "Organization with the give code already exists"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             with transaction.atomic():
-                selected_plan_id = combined_values.get('selected_plan')
-                user_serializer = CustomUserSerializer(data={
-                    'email': combined_values.get('email'),
-                    'username': combined_values.get('username'),
-                    'role': CustomUser.MANAGER,
-                    'credit' : 0,
-                    'password': combined_values.get('password')
-                })
+                selected_plan_id = combined_values.get("selected_plan")
+                user_serializer = CustomUserSerializer(
+                    data={
+                        "email": combined_values.get("email"),
+                        "username": combined_values.get("username"),
+                        "role": CustomUser.MANAGER,
+                        "credit": 0,
+                        "password": combined_values.get("password"),
+                    }
+                )
 
                 if user_serializer.is_valid(raise_exception=True):
                     user = user_serializer.save()
-                    user.set_password(combined_values.get('password'))
+                    user.set_password(combined_values.get("password"))
                     user.save()
-                    
+
                     org_data = {
-                        'name': combined_values.get('name'),
+                        "name": combined_values.get("name"),
                         # 'org_code': combined_values.get('org_code'),
-                        'contact_number': combined_values.get('contact_number'),
+                        "contact_number": combined_values.get("contact_number"),
                         # 'website_url': combined_values.get('website_url'),
-                        'gst_number': combined_values.get('gst'),
-                        'company_pan': combined_values.get('company_pan'),
-                        'company_address': combined_values.get('company_address'),
-                        'manager': user.id,
+                        "gst_number": combined_values.get("gst"),
+                        "company_pan": combined_values.get("company_pan"),
+                        "company_address": combined_values.get("company_address"),
+                        "manager": user.id,
                     }
                     CODE_WORDS = [
-                                # Greek-origin (enterprise-safe)
-                                "ALPHA",
-                                "DELTA",
-                                "SIGMA",
-                                "OMEGA",
-                                "GAMMA",
-                                "LAMBDA",
-                                "THETA",
-
-                                # Latin / classical business tone
-                                "PRIME",
-                                "VECTOR",
-                                "RATIO",
-                                "STATUS",
-                                "FORMA",
-                                "CORPUS",
-
-                                # Modern enterprise (Latin/Greek roots)
-                                "AXIS",
-                                "NEXUS",
-                                "APEX",
-                                "CORE",
-                                "VERTEX",
-                                "SUMMIT",
-                                "FOCUS",
-                                "GADS"
+                        # Greek-origin (enterprise-safe)
+                        "ALPHA",
+                        "DELTA",
+                        "SIGMA",
+                        "OMEGA",
+                        "GAMMA",
+                        "LAMBDA",
+                        "THETA",
+                        # Latin / classical business tone
+                        "PRIME",
+                        "VECTOR",
+                        "RATIO",
+                        "STATUS",
+                        "FORMA",
+                        "CORPUS",
+                        # Modern enterprise (Latin/Greek roots)
+                        "AXIS",
+                        "NEXUS",
+                        "APEX",
+                        "CORE",
+                        "VERTEX",
+                        "SUMMIT",
+                        "FOCUS",
+                        "GADS",
                     ]
 
                     # UNIQUELY 26 LAKH COMBINATIONS-ORGANISATION CODE
                     import random as rm
-                    org_data['org_code'] = rm.choice(CODE_WORDS) + str(rm.randint(0, 99999))
+
+                    org_data["org_code"] = rm.choice(CODE_WORDS) + str(
+                        rm.randint(0, 99999)
+                    )
                     # to check any code exists in the db previously
-                    while Organization.objects.filter(org_code=org_data['org_code']).exists():
+                    while Organization.objects.filter(
+                        org_code=org_data["org_code"]
+                    ).exists():
                         print("match found")
-                        org_data['org_code'] = rm.choice(CODE_WORDS) + str(rm.randint(0, 99999))
-                    
-                    if combined_values.get('website_url'):
-                        org_data['website_url'] = combined_values.get('website_url')
+                        org_data["org_code"] = rm.choice(CODE_WORDS) + str(
+                            rm.randint(0, 99999)
+                        )
+
+                    if combined_values.get("website_url"):
+                        org_data["website_url"] = combined_values.get("website_url")
                     org_serializer = OrganizationSerializer(data=org_data)
-                    selected_plan = Plan.objects.get(id = selected_plan_id)
-                    
+                    selected_plan = Plan.objects.get(id=selected_plan_id)
+
                     if org_serializer.is_valid(raise_exception=True):
                         organization = org_serializer.save()
                         organization_plan = OrganizationPlan.objects.create(
-                            organization = organization,
-                            plan = selected_plan,
-                            expiry_date  = timezone.now() + timedelta(days=selected_plan.duration_days),
+                            organization=organization,
+                            plan=selected_plan,
+                            expiry_date=timezone.now()
+                            + timedelta(days=selected_plan.duration_days),
                         )
                         user.organization = organization
                         user.save()
 
                     try:
-                        send_email_verification_link(user, True , "manager")
+                        send_email_verification_link(user, True, "manager")
 
                     except Exception as e:
                         print(str(e))
                         print(f"Error sending verification link: {str(e)}")
 
-                    return Response({"message": "Verification link successfully sent to your mail"}, status=status.HTTP_201_CREATED)
-        
+                    return Response(
+                        {"message": "Verification link successfully sent to your mail"},
+                        status=status.HTTP_201_CREATED,
+                    )
+
         except ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
-      
+
     def put(self, request, *args, **kwargs):
         combined_values = request.data
-        org_code = combined_values.get('org_code')
+        org_code = combined_values.get("org_code")
 
         try:
             organization = Organization.objects.get(org_code=org_code)
         except Organization.DoesNotExist:
-            return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             with transaction.atomic():
                 user = organization.manager
                 user_data = {
-                    'email': combined_values.get('email', user.email),
-                    'username': combined_values.get('username', user.username),
-                    'role': CustomUser.MANAGER,
+                    "email": combined_values.get("email", user.email),
+                    "username": combined_values.get("username", user.username),
+                    "role": CustomUser.MANAGER,
                 }
-                if combined_values.get('password'):
-                    user.set_password(combined_values.get('password'))
+                if combined_values.get("password"):
+                    user.set_password(combined_values.get("password"))
 
-                user_serializer = CustomUserSerializer(user, data=user_data, partial=True)
+                user_serializer = CustomUserSerializer(
+                    user, data=user_data, partial=True
+                )
                 if user_serializer.is_valid(raise_exception=True):
                     user_serializer.save()
 
                 org_data = {
-                    'name': combined_values.get('name', organization.name),
-                    'contact_number': combined_values.get('contact_number', organization.contact_number),
-                    'website_url': combined_values.get('website_url', organization.website_url),
-                    'gst_number': combined_values.get('gst', organization.gst_number),
-                    'company_pan': combined_values.get('company_pan', organization.company_pan),
-                    'company_address': combined_values.get('company_address', organization.company_address),
-                    'manager': user.id,
+                    "name": combined_values.get("name", organization.name),
+                    "contact_number": combined_values.get(
+                        "contact_number", organization.contact_number
+                    ),
+                    "website_url": combined_values.get(
+                        "website_url", organization.website_url
+                    ),
+                    "gst_number": combined_values.get("gst", organization.gst_number),
+                    "company_pan": combined_values.get(
+                        "company_pan", organization.company_pan
+                    ),
+                    "company_address": combined_values.get(
+                        "company_address", organization.company_address
+                    ),
+                    "manager": user.id,
                 }
-                org_serializer = OrganizationSerializer(organization, data=org_data, partial=True)
+                org_serializer = OrganizationSerializer(
+                    organization, data=org_data, partial=True
+                )
                 if org_serializer.is_valid(raise_exception=True):
                     org_serializer.save()
 
-                return Response({"message": "Organization and manager details updated successfully"}, status=status.HTTP_200_OK)
+                return Response(
+                    {
+                        "message": "Organization and manager details updated successfully"
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
         except Exception as e:
             print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
 from django.utils.timezone import now
+
+
 class LoginView(APIView):
     def post(self, request):
         email = request.data.get("email", "").strip()
         password = request.data.get("password", "").strip()
         try:
-            custom_user = CustomUser.objects.get(email = email)
+            custom_user = CustomUser.objects.get(email=email)
         except CustomUser.DoesNotExist:
-            return Response({"error":"User doesnot exist with this email"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "User doesnot exist with this email"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user = authenticate(request, email=email, password=password)
 
         if user is not None:
             if not user.is_verified:
-                return Response({
-                    "error": "Your email is not verified yet, please verify your email",
-                    "not_verified": True
-                }, status=status.HTTP_200_OK)
-            
+                return Response(
+                    {
+                        "error": "Your email is not verified yet, please verify your email",
+                        "not_verified": True,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
             first_login_flag = True
             if user.role == CustomUser.MANAGER:
                 if user.is_first_login:
@@ -389,19 +512,27 @@ class LoginView(APIView):
                 "username": user.username,
                 "role": user.role,
                 "id": user.id,
-                "is_first_login": first_login_flag if user.role == CustomUser.MANAGER else None
+                "is_first_login": (
+                    first_login_flag if user.role == CustomUser.MANAGER else None
+                ),
             }
-            
+
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
 
-            return Response({
-                'access_token': access_token,
-                'role': user.role,
-                "user_details": user_details
-            }, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "access_token": access_token,
+                    "role": user.role,
+                    "user_details": user_details,
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response(
+            {"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
+        )
+
 
 class VerifyTokenView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -409,36 +540,53 @@ class VerifyTokenView(APIView):
     def post(self, request):
         token = request.data.get("token")
         if not token:
-            return Response({"error": "Token not provided"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Token not provided"}, status=status.HTTP_400_BAD_REQUEST
+            )
         try:
-            decoded_token = jwt.decode(token, settings.SIGNING_KEY, algorithms=[settings.JWT_ALGORITHM])
-            return Response({"valid": True, "decoded_token": decoded_token}, status=status.HTTP_200_OK)
+            decoded_token = jwt.decode(
+                token, settings.SIGNING_KEY, algorithms=[settings.JWT_ALGORITHM]
+            )
+            return Response(
+                {"valid": True, "decoded_token": decoded_token},
+                status=status.HTTP_200_OK,
+            )
         except jwt.ExpiredSignatureError:
-            return Response({"error": "Token expired"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"error": "Token expired"}, status=status.HTTP_401_UNAUTHORIZED
+            )
         except jwt.InvalidTokenError:
-            return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
 
 class TokenRefreshView(APIView):
     permission_classes = (IsAuthenticated,)
+
     def post(self, request):
         refresh = RefreshToken.for_user(request.user)
         access_token = str(refresh.access_token)
-        return Response({'access_token': access_token}, status=status.HTTP_200_OK)
+        return Response({"access_token": access_token}, status=status.HTTP_200_OK)
 
 
 def generate_random_password(length=8):
     characters = string.ascii_letters + string.digits
-    password = ''.join(random.choice(characters) for _ in range(length))
+    password = "".join(random.choice(characters) for _ in range(length))
     return password
+
 
 class ForgotPasswordAPIView(APIView):
     def post(self, request):
         data = request.data
-        email = data['email']
+        email = data["email"]
         try:
             user = CustomUser.objects.get(email=email)
         except CustomUser.DoesNotExist:
-            return Response({'error': 'User with this email does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         else:
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -459,16 +607,24 @@ Best,
 HireSync Support Team
 """
             template = Template(email_template)
-            context = Context({
-                'user': user,
-                'reset_password_link': reset_password_link,
-            })
+            context = Context(
+                {
+                    "user": user,
+                    "reset_password_link": reset_password_link,
+                }
+            )
 
             message = template.render(context)
 
-            send_custom_mail( subject = 'Reset Your Password – HireSync', body=message, to_email=[email])
-            
-            return Response({'success': 'Password reset email has been sent.'}, status = status.HTTP_200_OK)
+            send_custom_mail(
+                subject="Reset Your Password – HireSync", body=message, to_email=[email]
+            )
+
+            return Response(
+                {"success": "Password reset email has been sent."},
+                status=status.HTTP_200_OK,
+            )
+
 
 class ResetPasswordAPIView(APIView):
     def get(self, request, uidb64, token):
@@ -476,42 +632,46 @@ class ResetPasswordAPIView(APIView):
             uid = urlsafe_base64_decode(uidb64).decode()
             user = CustomUser.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
-            return Response({'error': 'Invalid token.'}, status=400)
+            return Response({"error": "Invalid token."}, status=400)
         else:
             if default_token_generator.check_token(user, token):
-                return Response({'uidb64': uidb64, 'token': token})
+                return Response({"uidb64": uidb64, "token": token})
             else:
-                return Response({'error': 'Invalid token.'}, status=400)
+                return Response({"error": "Invalid token."}, status=400)
 
     def post(self, request, uidb64, token):
         try:
             uid = urlsafe_base64_decode(uidb64).decode()
             user = CustomUser.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
-            return Response({'error': 'Invalid token.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invalid token."}, status=status.HTTP_400_BAD_REQUEST
+            )
         else:
             if default_token_generator.check_token(user, token):
-                new_password = request.data.get('password')
+                new_password = request.data.get("password")
                 user.set_password(new_password)
                 user.save()
                 message = f"Password successfully changed. If not done by you please change your password."
                 send_custom_mail(
-                    'Password Changed',
+                    "Password Changed",
                     message,
                     [user.email],
                 )
-                
-                return Response({'success': 'Password has been reset successfully.'})
+
+                return Response({"success": "Password has been reset successfully."})
             else:
-                return Response({'error': 'Invalid token.'}, status=400)
+                return Response({"error": "Invalid token."}, status=400)
+
 
 class changePassword(APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         user = request.user
-        current_password = request.data.get('currentPassword')
-        new_password = request.data.get('newPassword')
-        confirm_password = request.data.get('confirmPassword')
+        current_password = request.data.get("currentPassword")
+        new_password = request.data.get("newPassword")
+        confirm_password = request.data.get("confirmPassword")
 
         if user.check_password(current_password):
             if new_password == confirm_password:
@@ -519,49 +679,65 @@ class changePassword(APIView):
                 user.save()
                 message = f"Password successfully changed. If not done by you please change your password."
                 send_custom_mail(
-                    'Password Changed',
+                    "Password Changed",
                     message,
-                    '',
+                    "",
                     [user.email],
                     fail_silently=False,
                 )
-                
-#                 notification = Notifications.objects.create(
-#     sender='GA HireSync Team',
-#     receiver=request.user,
-#     subject=f"Your Password Has beed Changed  ",
-#     message=(
-#         f"Your Password Has beed Changed "
-#     )
-# )
-                return Response({'success': True})
+
+                #                 notification = Notifications.objects.create(
+                #     sender='GA HireSync Team',
+                #     receiver=request.user,
+                #     subject=f"Your Password Has beed Changed  ",
+                #     message=(
+                #         f"Your Password Has beed Changed "
+                #     )
+                # )
+                return Response({"success": True})
             else:
-                return Response({'success': False, 'message': 'New passwords do not match.'})
+                return Response(
+                    {"success": False, "message": "New passwords do not match."}
+                )
         else:
-            return Response({'success': False, 'message': 'Invalid current password.'})
+            return Response({"success": False, "message": "Invalid current password."})
 
-
-
- 
 
 # This is to change the password for the users after logged in
 class ChangePassword(APIView):
-    permission_classes=[IsAuthenticated]
-    def post(self, request,):
-            user = request.user
-            old_password = request.data.get('old_password')
-            new_password = request.data.get('new_password')
-            confirm_password = request.data.get('confirm_password')
-            if old_password and new_password and confirm_password:
-                if new_password != confirm_password:
-                    return Response({"error": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
-                if user.check_password(old_password):
-                    user.set_password(new_password)
-                    user.save()
-                    return Response({"message": "Password changed successfully"}, status=status.HTTP_200_OK)
-                else:
-                    return Response({"error": "Old password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
-               
+    permission_classes = [IsAuthenticated]
+
+    def post(
+        self,
+        request,
+    ):
+        user = request.user
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
+        confirm_password = request.data.get("confirm_password")
+        if old_password and new_password and confirm_password:
+            if new_password != confirm_password:
+                return Response(
+                    {"error": "Passwords do not match"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if user.check_password(old_password):
+                user.set_password(new_password)
+                user.save()
+                return Response(
+                    {"message": "Password changed successfully"},
+                    status=status.HTTP_200_OK,
+                )
             else:
-                return Response({"error": " Old password,New password and confirm password are required"}, status=status.HTTP_400)
-                                    
+                return Response(
+                    {"error": "Old password is incorrect"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        else:
+            return Response(
+                {
+                    "error": " Old password,New password and confirm password are required"
+                },
+                status=status.HTTP_400,
+            )

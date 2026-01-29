@@ -590,14 +590,17 @@ def send_custom_mail(subject, body, to_email):
 
     except Exception as e:
         print(f"Failed to send email: {e}")
+        raise e
 
 
 def send_email_verification_link(user, signup, role, password=None):
-
+    print(
+        f"[EMAIL-VERIFY] Generating link for user={user.email}, signup={signup}, role={role}"
+    )
     token = email_verification_token.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    print(user)
     link = f"{frontend_url}/verify-email/{uid}/{token}/"
+    print(f"[EMAIL-VERIFY] Created verification link: {link}")
 
     if signup == False:
         message = f"""
@@ -735,6 +738,9 @@ HireSync Team
 
 """
 
+    print(
+        f"[EMAIL-VERIFY] Sending custom email to {user.email} with subject: {subject}"
+    )
     send_custom_mail(
         subject=subject,
         body=message,
