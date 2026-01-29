@@ -28,12 +28,19 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 SECRET_KEY = os.getenv("SIGNING_KEY")
 
 BACKEND_URL = os.getenv("backendurl")
+CORS_ALLOW_CREDENTIALS = True
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://annabella-paterfamiliar-judgmatically.ngrok-free.dev",
+    "https://gahiresync.vercel.app",
+    "http://192.168.0.132:8000",
+]
 
 
 # Application definition
@@ -52,6 +59,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -60,8 +68,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     # "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.common.CommonMiddleware",
+    #  "django.middleware.common.CommonMiddleware",
 ]
 
 ROOT_URLCONF = "RTMAS_BACKEND.urls"
@@ -85,6 +92,12 @@ TEMPLATES = [
 WSGI_APPLICATION = "RTMAS_BACKEND.wsgi.application"
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "ngrok-skip-browser-warning",
+]
 
 
 # Database
