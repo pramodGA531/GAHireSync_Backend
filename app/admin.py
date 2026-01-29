@@ -94,7 +94,12 @@ admin.site.register(CandidateEducation)
 admin.site.register(CandidateExperiences)
 admin.site.register(RecruiterProfile)
 admin.site.register(ClientOrganizationTerms)
-
+admin.site.register(OrganizationPlan)
+admin.site.register(Plan)
+# admin.site.register(InterviewerDetails)
+admin.site.register(PlanFeature)
+admin.site.register(Feature)
+admin.site.register(JobEditRequestsByClient)
 @admin.register(SelectedCandidates)
 class SelectedCandidatesAdmin(admin.ModelAdmin):
     list_display = ('application','joining_date','ctc','joining_status','candidate')

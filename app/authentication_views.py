@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
@@ -219,9 +220,10 @@ class AgencySignupView(APIView):
 
     def post(self, request, *args, **kwargs):
         combined_values = request.data
-        org_code = combined_values.get('org_code')
-        if Organization.objects.filter(org_code=org_code).exists():
-            return Response({"error": "Organization with the give code already exists"}, status=status.HTTP_400_BAD_REQUEST)
+        # print(combined_values)
+        # org_code = combined_values.get('org_code')
+        # if Organization.objects.filter(org_code=org_code).exists():
+        #     return Response({"error": "Organization with the give code already exists"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             with transaction.atomic():
                 selected_plan_id = combined_values.get('selected_plan')
@@ -240,15 +242,53 @@ class AgencySignupView(APIView):
                     
                     org_data = {
                         'name': combined_values.get('name'),
-                        'org_code': combined_values.get('org_code'),
+                        # 'org_code': combined_values.get('org_code'),
                         'contact_number': combined_values.get('contact_number'),
-                        'website_url': combined_values.get('website_url'),
+                        # 'website_url': combined_values.get('website_url'),
                         'gst_number': combined_values.get('gst'),
                         'company_pan': combined_values.get('company_pan'),
                         'company_address': combined_values.get('company_address'),
                         'manager': user.id,
                     }
+                    CODE_WORDS = [
+                                # Greek-origin (enterprise-safe)
+                                "ALPHA",
+                                "DELTA",
+                                "SIGMA",
+                                "OMEGA",
+                                "GAMMA",
+                                "LAMBDA",
+                                "THETA",
+
+                                # Latin / classical business tone
+                                "PRIME",
+                                "VECTOR",
+                                "RATIO",
+                                "STATUS",
+                                "FORMA",
+                                "CORPUS",
+
+                                # Modern enterprise (Latin/Greek roots)
+                                "AXIS",
+                                "NEXUS",
+                                "APEX",
+                                "CORE",
+                                "VERTEX",
+                                "SUMMIT",
+                                "FOCUS",
+                                "GADS"
+                    ]
+
+                    # UNIQUELY 26 LAKH COMBINATIONS-ORGANISATION CODE
+                    import random as rm
+                    org_data['org_code'] = rm.choice(CODE_WORDS) + str(rm.randint(0, 99999))
+                    # to check any code exists in the db previously
+                    while Organization.objects.filter(org_code=org_data['org_code']).exists():
+                        print("match found")
+                        org_data['org_code'] = rm.choice(CODE_WORDS) + str(rm.randint(0, 99999))
                     
+                    if combined_values.get('website_url'):
+                        org_data['website_url'] = combined_values.get('website_url')
                     org_serializer = OrganizationSerializer(data=org_data)
                     selected_plan = Plan.objects.get(id = selected_plan_id)
                     
@@ -259,6 +299,8 @@ class AgencySignupView(APIView):
                             plan = selected_plan,
                             expiry_date  = timezone.now() + timedelta(days=selected_plan.duration_days),
                         )
+                        user.organization = organization
+                        user.save()
 
                     try:
                         send_email_verification_link(user, True , "manager")
@@ -269,10 +311,9 @@ class AgencySignupView(APIView):
 
                     return Response({"message": "Verification link successfully sent to your mail"}, status=status.HTTP_201_CREATED)
         
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+      
     def put(self, request, *args, **kwargs):
         combined_values = request.data
         org_code = combined_values.get('org_code')

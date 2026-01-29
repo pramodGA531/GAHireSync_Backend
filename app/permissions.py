@@ -26,3 +26,6 @@ class IsClient(BaseRolePermission):
 
 class IsInterviewer(BaseRolePermission):
     required_role = 'interviewer'
+
+class IsAdmin(BaseRolePermission):
+    required_role = 'admin'

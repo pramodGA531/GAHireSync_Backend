@@ -1679,20 +1679,36 @@ class FetchPlans(APIView):
     def get(self, request):
         try:
             plans = Plan.objects.all()
+
             plans_list = []
+
             for plan in plans:
-                plans_list.append({
+                plan_data = {
+                    "id": plan.id,
                     "name": plan.name,
                     "price": plan.price,
                     "duration": plan.duration_days,
-                    "id":plan.id,
-                })
-            return Response({"data":plans_list}, status=status.HTTP_200_OK)
-        except Exception as e:
-            print(str(e))
-            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+                    "features": []
+                }
 
+                plan_features = PlanFeature.objects.filter(plan=plan)
+
+                for pf in plan_features:
+                    plan_data["features"].append({
+                        "id": pf.id,
+                        "feature": pf.feature.name,
+                        "limit": pf.limit
+                    })
+
+                plans_list.append(plan_data)
+
+            return Response({"data": plans_list}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 # This view is called whenever the limit is crossed while creating a job post by the client. Its an automatic alert generated and sent to the agency manager
 class UpgradeRequestMail(APIView):
     def get(self, request):
@@ -1748,3 +1764,4 @@ class BlogImageUploadView(APIView):
         serializer = BlogImageSerializer(image_instances, many=True)
         urls = [img.image_url for img in image_instances]
         return Response({"urls": urls, "images": serializer.data}, status=status.HTTP_201_CREATED)
+

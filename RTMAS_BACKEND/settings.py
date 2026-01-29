@@ -15,25 +15,25 @@ import os
 from datetime import timedelta
 from dotenv import load_dotenv
 from celery.schedules import crontab, schedule
-load_dotenv()
+
+load_dotenv(override=True)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 
-SECRET_KEY = os.getenv('SIGNING_KEY')
+SECRET_KEY = os.getenv("SIGNING_KEY")
 
 BACKEND_URL = os.getenv("backendurl")
-
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -53,13 +53,13 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
@@ -69,7 +69,7 @@ ROOT_URLCONF = "RTMAS_BACKEND.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [os.path.join(BASE_DIR, 'templates')],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -91,10 +91,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 
+ENVIRONMENT = os.getenv("environment", "production")
 
-ENVIRONMENT = os.getenv('environment', 'production')
-
-if ENVIRONMENT == 'localhost':
+if ENVIRONMENT == "localhost":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -104,31 +103,31 @@ if ENVIRONMENT == 'localhost':
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     EMAIL_HOST = "smtp.gmail.com"
     EMAIL_PORT = 587
-    EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
-    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
+    EMAIL_HOST_USER = os.environ.get("EMAIL_ID")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_PASSWORD")
     EMAIL_USE_TLS = True
     EMAIL_USE_SSL = False
-    DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
+    DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_ID")
 
 else:
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME'),
-            'USER': os.getenv('DB_USER'),
-            'PASSWORD': os.getenv('DB_PASSWORD'),
-            'HOST': os.getenv('DB_HOST'),
-            'PORT': os.getenv('DB_PORT'),
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST"),
+            "PORT": os.getenv("DB_PORT"),
         }
     }
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = "mail.gaconsulting.in"
     EMAIL_PORT = 465
-    EMAIL_HOST_USER = os.environ.get('EMAIL_ID')  
-    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
+    EMAIL_HOST_USER = os.environ.get("EMAIL_ID")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_PASSWORD")
     EMAIL_USE_TLS = False
     EMAIL_USE_SSL = True
-    DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_ID')
+    DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_ID")
 
 
 # Password validation
@@ -161,15 +160,15 @@ USE_I18N = True
 
 USE_TZ = True
 
-LINKEDIN_CLIENT_ID = os.environ.get('LINKEDIN_CLIENT_ID')
-LINKEDIN_CLIENT_SECRET = os.environ.get('LINKEDIN_CLIENT_SECRET')
+LINKEDIN_CLIENT_ID = os.environ.get("LINKEDIN_CLIENT_ID")
+LINKEDIN_CLIENT_SECRET = os.environ.get("LINKEDIN_CLIENT_SECRET")
 LINKEDIN_REDIRECT_URI = f'{os.environ.get("frontendurl")}/linkedin/callback'
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -179,117 +178,111 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "app.CustomUser"
 
-JWT_ALGORITHM = 'HS256'
+JWT_ALGORITHM = "HS256"
 
-SIGNING_KEY = os.environ.get('SIGNING_KEY')
+SIGNING_KEY = os.environ.get("SIGNING_KEY")
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
 }
 
 AUTHENTICATION_BACKENDS = [
-    'app.backends.CustomUserAuthBackend',
-    'django.contrib.auth.backends.ModelBackend',
+    "app.backends.CustomUserAuthBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=30), 
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=60), 
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'SIGNING_KEY': SIGNING_KEY,
-} 
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=60),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "SIGNING_KEY": SIGNING_KEY,
+}
 
 
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 
 USE_TZ = True  # Important for timezone-aware datetimes
-TIME_ZONE = 'Asia/Kolkata'
+TIME_ZONE = "Asia/Kolkata"
 
 
-# CELERY SET UP HERE 
-
+# CELERY SET UP HERE
 
 
 # CELERY_BROKER_URL = 'redis://localhost:6379/0'  # RabbitMQ default URL
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
 # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
-CELERY_TIMEZONE = 'Asia/Kolkata'
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-
+CELERY_TIMEZONE = "Asia/Kolkata"
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
+CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
 
 
 CELERY_BEAT_SCHEDULE = {
-    
     # 'run-task-every-10-seconds': {
     #     'task': 'app.tasks.my_function',
-    #     'schedule': timedelta(seconds=10),  
+    #     'schedule': timedelta(seconds=10),
     # },
     # 'invoice-generation-task':{
     #     'task': 'app.tasks.invoice_generated',
-    #     'schedule': crontab(minute=38, hour=16), # here need to add the data not only the time 
+    #     'schedule': crontab(minute=38, hour=16), # here need to add the data not only the time
     # },
-
-    
-    'daily_tasks':{
-        'task': 'app.tasks.daily_tasks_runner',
-        'schedule':crontab(minute=22, hour=10), 
+    "daily_tasks": {
+        "task": "app.tasks.daily_tasks_runner",
+        "schedule": crontab(minute=22, hour=10),
     },
-    'approve_job_daily_10am': {
-        'task': 'app.tasks.approve_job_post_10_AM',
-        'schedule': crontab(minute=33, hour=14, day_of_week='mon-fri'),
+    "approve_job_daily_10am": {
+        "task": "app.tasks.approve_job_post_10_AM",
+        "schedule": crontab(minute=33, hour=14, day_of_week="mon-fri"),
     },
-    'approve_negotation_request': {
-        'task': 'app.tasks.approve_negotation_request',
-        'schedule': crontab(minute=5, hour=10, day_of_week='mon-fri'),
+    "approve_negotation_request": {
+        "task": "app.tasks.approve_negotation_request",
+        "schedule": crontab(minute=5, hour=10, day_of_week="mon-fri"),
     },
-    'assign_job_post': {
-        'task': 'app.tasks.assign_job_post',
-        'schedule': crontab(minute=45, hour=14, day_of_week='mon-fri'),
+    "assign_job_post": {
+        "task": "app.tasks.assign_job_post",
+        "schedule": crontab(minute=45, hour=14, day_of_week="mon-fri"),
     },
-    'shortlist_application': {
-        'task': 'app.tasks.shortlist_application',
-        'schedule': crontab(minute=21, hour=14, day_of_week='mon-fri'),
+    "shortlist_application": {
+        "task": "app.tasks.shortlist_application",
+        "schedule": crontab(minute=21, hour=14, day_of_week="mon-fri"),
     },
-    'schedule_interview': {
-        'task': 'app.tasks.schedule_interview',
-        'schedule': crontab(minute=49, hour=14, day_of_week='mon-fri'),
+    "schedule_interview": {
+        "task": "app.tasks.schedule_interview",
+        "schedule": crontab(minute=49, hour=14, day_of_week="mon-fri"),
     },
-    'add_interview_remarks': {
-        'task': 'app.tasks.add_interview_remarks',
-        'schedule': crontab(minute=59, hour=13, day_of_week='mon-fri'),
+    "add_interview_remarks": {
+        "task": "app.tasks.add_interview_remarks",
+        "schedule": crontab(minute=59, hour=13, day_of_week="mon-fri"),
     },
-    'select_candidate_client': {
-        'task': 'app.tasks.select_candidate_client',
-        'schedule': crontab(minute=53, hour=14, day_of_week='mon-fri'),
+    "select_candidate_client": {
+        "task": "app.tasks.select_candidate_client",
+        "schedule": crontab(minute=53, hour=14, day_of_week="mon-fri"),
     },
-    'approve_job_offer_candidate': {
-        'task': 'app.tasks.job_offer_candidate',
-        'schedule': crontab(minute=57, hour=14, day_of_week='mon-fri'),
+    "approve_job_offer_candidate": {
+        "task": "app.tasks.job_offer_candidate",
+        "schedule": crontab(minute=57, hour=14, day_of_week="mon-fri"),
     },
-    'update_profile_candidate': {
-        'task': 'app.tasks.update_profile_candidate',
-        'schedule': crontab(minute=40, hour=10, day_of_week='mon-fri'),
+    "update_profile_candidate": {
+        "task": "app.tasks.update_profile_candidate",
+        "schedule": crontab(minute=40, hour=10, day_of_week="mon-fri"),
     },
-    'job_deadline': {
-        'task': 'app.tasks.job_deadline',
-        'schedule': crontab(minute=7, hour=15, day_of_week='mon-fri'),
+    "job_deadline": {
+        "task": "app.tasks.job_deadline",
+        "schedule": crontab(minute=7, hour=15, day_of_week="mon-fri"),
     },
-    'confirm_joining_client': {
-        'task': 'app.tasks.confirm_joining_client',
-        'schedule': crontab(minute=17, hour=15, day_of_week='mon-fri'),
+    "confirm_joining_client": {
+        "task": "app.tasks.confirm_joining_client",
+        "schedule": crontab(minute=17, hour=15, day_of_week="mon-fri"),
     },
 }
 
 
-# This is for the to maximize the size of the request Header 
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520 
+# This is for the to maximize the size of the request Header
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520
 
 
-
-
+X_FRAME_OPTIONS = "SAMEORIGIN"

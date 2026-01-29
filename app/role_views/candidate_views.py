@@ -748,7 +748,7 @@ class CandidateDashboard(APIView):
                     selected_application = SelectedCandidates.objects.get(application = application)
                     if selected_application.joining_status == 'pending':
                         onhold +=1
-                
+            # print(onhold,user,candidate_profile,recruiter_shared,latest_job_title,latest_application,selected_application,application)
 
             
             candidate_data = {
@@ -765,6 +765,7 @@ class CandidateDashboard(APIView):
             
             upcoming_interviews = []
             applications = recruiter_shared.filter(is_closed = False)
+            # print(candidate_data)
             for application in applications:
                 if application.next_interview is not None:
                     next_interview = application.next_interview
@@ -779,6 +780,7 @@ class CandidateDashboard(APIView):
                             "scheduled_date_and_time": InterviewScheduleSerializer(next_interview).data,
                         }
                         upcoming_interviews.append(application_json)  
+                        # print(application_json)
                     except Exception as e:
                         print(str(e))
                         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -786,7 +788,7 @@ class CandidateDashboard(APIView):
             return Response({"candidate_data": candidate_data, "upcoming_interviews": upcoming_interviews}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.log(e)
+            print(str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 

@@ -35,3 +35,5 @@ logs/
 
 # Ignore environment variables file (if you use one)
 .env
+Sample_JD.pdf
+Sample_JD_Test.pdf
