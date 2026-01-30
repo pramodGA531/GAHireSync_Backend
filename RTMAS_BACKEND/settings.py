@@ -57,7 +57,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
 ]
-
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -67,6 +68,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     # "django.middleware.clickjacking.XFrameOptionsMiddleware",
     #  "django.middleware.common.CommonMiddleware",
 ]
