@@ -106,6 +106,11 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+USE_TZ = True
+TIME_ZONE = "UTC"
+
+CELERY_ENABLE_UTC = True
+CELERY_TIMEZONE = "UTC"
 
 ENVIRONMENT = os.getenv("environment", "production")
 
