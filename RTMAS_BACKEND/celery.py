@@ -6,7 +6,8 @@ from celery import Celery
 
 # Set default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RTMAS_BACKEND.settings')
-
+import eventlet
+eventlet.monkey_patch()
 app = Celery('RTMAS_BACKEND')
 
 # Using a string here means the worker doesn't have to serialize

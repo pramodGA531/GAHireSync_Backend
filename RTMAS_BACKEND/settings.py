@@ -16,10 +16,10 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from celery.schedules import crontab, schedule
 
-load_dotenv(override=True)
-
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from the project root .env file
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
@@ -57,8 +57,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
 ]
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -137,17 +137,17 @@ else:
     #     }
     # }
     DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',
-        'USER': 'postgres.ctfcjswudzkpsnbrvmmd',
-        'PASSWORD': 'GA_HIRESYNC',
-        'HOST': 'aws-1-ap-south-1.pooler.supabase.com',
-        'PORT': '5432',
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
-    }
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "postgres",
+            "USER": "postgres.ctfcjswudzkpsnbrvmmd",
+            "PASSWORD": "GA_HIRESYNC",
+            "HOST": "aws-1-ap-south-1.pooler.supabase.com",
+            "PORT": "5432",
+            "OPTIONS": {
+                "sslmode": "require",
+            },
+        }
     }
 
     # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -252,15 +252,14 @@ TIME_ZONE = "Asia/Kolkata"
 # CELERY SET UP HERE
 
 
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
+
 # CELERY_BROKER_URL = 'redis://localhost:6379/0'  # RabbitMQ default URL
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CELERY_TIMEZONE = "Asia/Kolkata"
-CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
-CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
-
-
 CELERY_BEAT_SCHEDULE = {
     # 'run-task-every-10-seconds': {
     #     'task': 'app.tasks.my_function',

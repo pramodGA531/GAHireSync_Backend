@@ -6,11 +6,12 @@ from django.core.mail import EmailMessage
 
 
 import time
-from RTMAS_BACKEND import settings
+from django.conf import settings
 
 # @shared_task
 # def my_function():
 #     print(f'Function executed at {time.strftime("%Y-%m-%d %H:%M:%S")}')
+
 
 @shared_task
 def invoice_generated():
@@ -20,12 +21,13 @@ def invoice_generated():
 @shared_task
 def daily_tasks_runner():
     invoice_validate()
-    
+
+
 @shared_task
 def remainders_task():
     print("here is remainders tasks called bro ")
     # remainders()
-    
+
 
 @shared_task(bind=True)
 def approve_job_post_10_AM(self):
@@ -36,7 +38,8 @@ def approve_job_post_10_AM(self):
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
 
-@shared_task(bind = True)
+
+@shared_task(bind=True)
 def send_celery_mail(self, subject, body, to_email):
     try:
         from_email = settings.DEFAULT_FROM_EMAIL
@@ -53,6 +56,51 @@ def send_celery_mail(self, subject, body, to_email):
         print(f"Failed to send email: {e}")
 
 
+@shared_task(bind=True)
+def send_template_email_task(self, subject, template_name, context, recipient_list):
+    """
+    Asynchronous version of sendemailTemplate
+    """
+    from django.template.loader import render_to_string
+    from django.utils.html import strip_tags
+    from django.core.mail import EmailMultiAlternatives
+
+    try:
+        html_content = render_to_string(template_name, context)
+        text_content = strip_tags(html_content)
+
+        email = EmailMultiAlternatives(
+            subject, text_content, settings.DEFAULT_FROM_EMAIL, recipient_list
+        )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
+        return True
+    except Exception as e:
+        print(f"Failed to send template email: {e}")
+        return False
+
+
+@shared_task(bind=True)
+def send_html_email_task(self, subject, html_message, recipient_list):
+    """
+    Sends an HTML email asynchronously.
+    """
+    from django.core.mail import EmailMessage
+
+    try:
+        email = EmailMessage(
+            subject=subject,
+            body=html_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=recipient_list if isinstance(recipient_list, list) else [recipient_list],
+        )
+        email.content_subtype = "html"
+        email.send(fail_silently=False)
+        return True
+    except Exception as e:
+        print(f"Failed to send HTML email: {e}")
+        return False
+
 
 @shared_task(bind=True)
 def add_interview_remarks(self):
@@ -62,7 +110,7 @@ def add_interview_remarks(self):
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
-    
+
 
 @shared_task(bind=True)
 def shortlist_application(self):
@@ -72,7 +120,7 @@ def shortlist_application(self):
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
-    
+
 
 @shared_task(bind=True)
 def approve_negotation_request(self):
@@ -102,7 +150,7 @@ def schedule_interview(self):
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
-    
+
 
 @shared_task(bind=True)
 def select_candidate_client(self):
@@ -122,7 +170,8 @@ def job_offer_candidate(self):
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
-    
+
+
 @shared_task(bind=True)
 def update_profile_candidate(self):
     try:
@@ -131,7 +180,7 @@ def update_profile_candidate(self):
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Job approval task failed: {e}"
-    
+
 
 @shared_task(bind=True)
 def job_deadline(self):
@@ -158,7 +207,10 @@ def notify_invoice_client_task(self, invoice_id):
     try:
         invoice = InvoiceGenerated.objects.get(id=invoice_id)
 
-        if getattr(invoice, "is_canceled", False) or invoice.invoice_status == InvoiceGenerated.SENT:
+        if (
+            getattr(invoice, "is_canceled", False)
+            or invoice.invoice_status == InvoiceGenerated.SENT
+        ):
             return "Invoice is canceled or already sent"
 
         subject = f"Invoice Reminder: Application #{invoice.application_id}"
@@ -180,11 +232,3 @@ This is a reminder for your invoice of ₹{invoice.final_price} scheduled on {in
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Retrying due to error: {e}"
-
-
-    
-
-    
-
-
-   
