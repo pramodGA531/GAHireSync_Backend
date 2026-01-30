@@ -116,26 +116,40 @@ if ENVIRONMENT == "localhost":
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-    # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    # EMAIL_HOST = "smtp.gmail.com"
-    # EMAIL_PORT = 587
-    # EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
-    # EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
-    # EMAIL_USE_TLS = True
-    # EMAIL_USE_SSL = False
-    # DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_HOST_USER")
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.gmail.com"
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+    DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_HOST_USER")
 
 else:
+    # DATABASES = {
+    #     "default": {
+    #         "ENGINE": "django.db.backends.postgresql",
+    #         "NAME": os.getenv("DB_NAME"),
+    #         "USER": os.getenv("DB_USER"),
+    #         "PASSWORD": os.getenv("DB_PASSWORD"),
+    #         "HOST": os.getenv("DB_HOST"),
+    #         "PORT": os.getenv("DB_PORT"),
+    #     }
+    # }
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("DB_NAME"),
-            "USER": os.getenv("DB_USER"),
-            "PASSWORD": os.getenv("DB_PASSWORD"),
-            "HOST": os.getenv("DB_HOST"),
-            "PORT": os.getenv("DB_PORT"),
-        }
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'postgres.ctfcjswudzkpsnbrvmmd',
+        'PASSWORD': 'GA_HIRESYNC',
+        'HOST': 'aws-1-ap-south-1.pooler.supabase.com',
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
     }
+    }
+
     # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     # EMAIL_HOST = "mail.gaconsulting.in"
     # EMAIL_PORT = 465
@@ -145,17 +159,17 @@ else:
     # EMAIL_USE_SSL = True
     # DEFAULT_FROM_EMAIL = os.environ.get("EMAIL_HOST_USER")
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
+    EMAIL_HOST = "smtp.gmail.com"
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
 
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
