@@ -57,6 +57,7 @@ class CustomUser(AbstractUser):
     )
     is_verified = models.BooleanField(default=False)
     is_first_login = models.BooleanField(default=True)
+    designation = models.CharField(max_length=150, null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
@@ -247,6 +248,7 @@ class JobPostings(models.Model):
     job_level = models.CharField(max_length=100, blank=True)
     qualifications = models.TextField()
     timings = models.CharField(max_length=100)
+    is_seen = models.BooleanField(default=False)
     other_benefits = models.TextField(blank=True, null=True)
     working_days_per_week = models.IntegerField(blank=True, null=True)
     decision_maker = models.CharField(max_length=100, blank=True)
@@ -269,7 +271,7 @@ class JobPostings(models.Model):
     )
     notice_time = models.CharField(max_length=30, default=" ", blank=True)
     industry = models.CharField(
-        max_length=40,
+        max_length=255,
     )
     differently_abled = models.CharField(max_length=40, blank=True)
     languages = models.CharField(max_length=100, blank=True)
@@ -659,6 +661,7 @@ class JobApplication(models.Model):
     ACCEPTED = "accepted"
     APPLIED = "applied"
     JOBCLOSED = "job_closed"
+    LEFT = "left"
 
     STATUS = [
         (SELECTED, "selected"),
@@ -667,6 +670,7 @@ class JobApplication(models.Model):
         (PENDING, "pending"),
         (PROCESSING, "processing"),
         (JOBCLOSED, "job_closed"),
+        (LEFT, "left"),
     ]
 
     id = models.AutoField(primary_key=True)
@@ -933,6 +937,7 @@ class SelectedCandidates(models.Model):
 
     REPLACEMENT_STATUS_CHOICES = [
         ("no", "no"),
+        ("pending_manager_approval", "pending_manager_approval"),
         ("pending", "pending"),
         ("completed", "completed"),
         ("incomplete", "incomplete"),
@@ -959,6 +964,7 @@ class SelectedCandidates(models.Model):
         max_length=20, choices=CANDIDATE_ACCEPTANCE_CHOICES, default="pending"
     )
     recruiter_acceptance = models.BooleanField(default=True)
+    reconfirmed_by_recruiter = models.BooleanField(default=False)
     feedback = models.CharField(max_length=250, blank=True)
     left_reason = models.CharField(max_length=200, blank=True)
     edit_request = models.CharField(max_length=200, blank=True)
@@ -1097,7 +1103,7 @@ class ReplacementCandidates(models.Model):
     )
     replacement_within = models.DateField(blank=True, null=True)
     status = models.CharField(
-        max_length=15,
+        max_length=50,
         default="pending",
         choices=SelectedCandidates.REPLACEMENT_STATUS_CHOICES,
     )
@@ -1251,6 +1257,42 @@ class Notifications(models.Model):
         CANDIDATE_LEFT = "candidate_left", "CandidateLeft"  # recruiter, manager
         CANDIDATE_JOINED = "candidate_joined", "CandidateJoined"  # recruiter, manager
         SENT_CONNECTION = "sent_connection", "SentConnection"  # client, agency
+        ACCEPT_CONNECTION = "accept_connection", "AcceptConnection"  # agency, client
+        CANDIDATE_EDIT_REQUEST = (
+            "candidate_edit_request",
+            "CandidateEditRequest",
+        )  # client, agency
+        CANDIDATE_JOINING_DATE_UPDATE = (
+            "candidate_joining_date_update",
+            "CandidateJoiningDateUpdate",
+        )  # client, agency
+        INVOICE_GENERATED = "invoice_generated", "InvoiceGenerated"  # agency
+        PLAN_LIMIT_REJECT = "plan_limit_reject", "PlanLimitReject"  # client, agency
+        MANAGER_VIEWED_JOB = "manager_viewed_job", "ManagerViewedJob"  # client
+        TICKET_RAISED = "ticket_raised", "TicketRaised"  # admin
+        TICKET_REPLY = "ticket_reply", "TicketReply"  # user, admin
+        TICKET_STATUS_UPDATE = "ticket_status_update", "TicketStatusUpdate"  # user
+        BLOG_SUBMITTED = "blog_submitted", "BlogSubmitted"  # admin
+        BLOG_APPROVED = "blog_approved", "BlogApproved"  # user
+        BLOG_REJECTED = "blog_rejected", "BlogRejected"  # user
+        JOB_NEAR_DEADLINE = "job_near_deadline", "JobNearDeadline"  # manager, client
+        JOB_EXPIRED = "job_expired", "JobExpired"  # manager, client
+        FEEDBACK_PENDING = "feedback_pending", "FeedbackPending"  # interviewer
+        INTERVIEW_FEEDBACK_ADDED = (
+            "interview_feedback_added",
+            "InterviewFeedbackAdded",
+        )  # manager
+        RECRUITER_ASSIGNED_TO_JOB = (
+            "recruiter_assigned_to_job",
+            "RecruiterAssignedToJob",
+        )  # client
+        CANDIDATE_OFFER_REJECTED = (
+            "candidate_offer_rejected",
+            "CandidateOfferRejected",
+        )  # client, manager
+        REPLACEMENT_REQUEST = "replacement_request", "ReplacementRequest"
+        REPLACEMENT_ACCEPTED = "replacement_accepted", "ReplacementAccepted"
+        REPLACEMENT_REJECTED = "replacement_rejected", "ReplacementRejected"
 
     sender = models.ForeignKey(
         CustomUser,
@@ -1617,3 +1659,56 @@ class JobEditRequestsByClient(models.Model):
         job_id = self.job_id.id if self.job_id else "Unknown"
         username = self.edited_by.username if self.edited_by else "Unknown"
         return f"Edit request for Job #{job_id} by {username}"
+
+
+class TOPUP(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    sms_limit = models.IntegerField(default=0)
+    whatsapp_limit = models.IntegerField(default=0)
+    email_limit = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.amount}"
+
+
+class SMSUsage(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    topup = models.ForeignKey(
+        TOPUP, on_delete=models.CASCADE, related_name="sms_usages"
+    )
+
+    sms_count = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def remaining_sms(self):
+        return max(self.topup.sms_limit - self.sms_count, 0)
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.sms_count}"
+
+
+class WhatsAppUsage(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    topup = models.ForeignKey(
+        TOPUP, on_delete=models.CASCADE, related_name="whatsapp_usages"
+    )
+
+    whatsapp_count = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def remaining_whatsapp(self):
+        return max(self.topup.whatsapp_limit - self.whatsapp_count, 0)
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.whatsapp_count}"

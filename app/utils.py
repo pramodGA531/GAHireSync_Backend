@@ -286,12 +286,23 @@ def send_questions_mail(job_title, questions, recipients):
     """
 
     try:
-        from .tasks import send_html_email_task
+        if settings.ENVIRONMENT == "localhost":
+            email = EmailMessage(
+                subject=subject,
+                body=html_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=recipients,
+            )
+            email.content_subtype = "html"
+            email.send(fail_silently=False)
+            return True
+        else:
+            from .tasks import send_html_email_task
 
-        send_html_email_task.delay(subject, html_message, recipients)
-        return True
+            send_html_email_task.delay(subject, html_message, recipients)
+            return True
     except Exception as e:
-        print(f"Failed to queue questions email: {e}")
+        print(f"Failed to send questions email: {e}")
         return False
 
 
@@ -546,29 +557,53 @@ logger = logging.getLogger(__name__)
 
 def sendemailTemplate(subject, template_name, context, recipient_list):
     """
-    Sends an HTML email asynchronously using Celery.
+    Sends an HTML email. Synchronous on localhost, Asynchronous on others.
     """
-    from .tasks import send_template_email_task
-
     try:
-        send_template_email_task.delay(subject, template_name, context, recipient_list)
-        return True
+        if settings.ENVIRONMENT == "localhost":
+            html_content = render_to_string(template_name, context)
+            text_content = strip_tags(html_content)
+            email = EmailMultiAlternatives(
+                subject, text_content, settings.DEFAULT_FROM_EMAIL, recipient_list
+            )
+            email.attach_alternative(html_content, "text/html")
+            email.send()
+            logger.info(f"Email sent successfully to: {', '.join(recipient_list)}")
+            return True
+        else:
+            from .tasks import send_template_email_task
+
+            send_template_email_task.delay(
+                subject, template_name, context, recipient_list
+            )
+            return True
     except Exception as e:
         logger.error(
-            f"Failed to queue template email to {', '.join(recipient_list)}. Error: {e}"
+            f"Failed to send template email to {', '.join(recipient_list)}. Error: {e}"
         )
         return False
 
 
 def send_custom_mail(subject, body, to_email):
-    from .tasks import send_celery_mail
-
+    """
+    Sends a basic email. Synchronous on localhost, Asynchronous on others.
+    """
     try:
-        send_celery_mail.delay(subject, body, to_email)
+        if settings.ENVIRONMENT == "localhost":
+            from_email = settings.DEFAULT_FROM_EMAIL
+            email = EmailMessage(
+                subject=subject,
+                body=body,
+                from_email=from_email,
+                to=to_email if isinstance(to_email, list) else [to_email],
+            )
+            email.send(fail_silently=False)
+        else:
+            from .tasks import send_celery_mail
+
+            send_celery_mail.delay(subject, body, to_email)
     except Exception as e:
-        print(f"Failed to queue email: {e}")
-        # Not raising here to prevent blocking if Redis is down,
-        # but in a real app you might want to log this properly.
+        print(f"Failed to send custom email: {e}")
 
 
 def send_email_verification_link(user, signup, role, password=None):
@@ -649,6 +684,7 @@ Congratulations! Your recruiter account on HireSync has been successfully create
 
 You can now send applications/schedule interviews seamlessly.
 
+Email : {user.email}
 Password : {password}
 
 Verify your account 
@@ -669,6 +705,7 @@ Congratulations! Your interviewer account on HireSync has been successfully crea
 
 You can now send conduct interviews seamlessly.
 
+Email : {user.email}
 Password : {password}
 
 Verify your account 

@@ -4,3 +4,6 @@ from .client_views import *
 from .interviewer_views import *
 from .recruiter_views import *
 from .admin_views import *
+from .sms_views import *
+from .whatsapp_views import *
+from .celery_views import *

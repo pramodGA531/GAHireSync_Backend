@@ -1,4 +1,5 @@
 from ..models import *
+from datetime import date
 from ..permissions import *
 from ..serializers import *
 from ..authentication_views import *
@@ -19,10 +20,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import requests
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Sum
+from django.db.models import Sum, Count
 from decimal import Decimal, InvalidOperation
 import csv
 from django.http import HttpResponse
+import traceback
 
 
 logger = logging.getLogger(__name__)
@@ -288,14 +290,14 @@ class ClosedHoldJobs(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class NotApprovedJobs(APIView):
+class RejectedJobs(APIView):
     permission_classes = [IsManager]
 
     def get(self, request):
         try:
             user = request.user
             jobs = JobPostings.objects.filter(
-                organization__manager=user, approval_status="pending"
+                organization__manager=user, approval_status="rejected"
             )
             jobs_list = []
             for job in jobs:
@@ -307,6 +309,70 @@ class NotApprovedJobs(APIView):
                         "status": job.status,
                         "created_at": job.created_at,
                         "id": job.id,
+                        "reason": job.reason,
+                    }
+                )
+
+            return Response({"data": jobs_list}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class NotApprovedJobs(APIView):
+    permission_classes = [IsManager]
+
+    def get_job_post_limit(self, organization_id):
+        try:
+            organization = Organization.objects.get(id=organization_id)
+        except Organization.DoesNotExist:
+            return False
+
+        try:
+            org_plan = OrganizationPlan.objects.get(
+                organization=organization, is_active=True
+            )
+        except OrganizationPlan.DoesNotExist:
+            return False
+
+        plan = org_plan.plan
+        if not plan:
+            return False
+
+        try:
+            feature = Feature.objects.get(code="active_jobpost")
+        except Feature.DoesNotExist:
+            return False
+
+        try:
+            plan_feature = PlanFeature.objects.get(plan=plan, feature=feature)
+            job_limit = plan_feature.limit
+        except PlanFeature.DoesNotExist:
+            return False
+
+        current_jobs = JobPostings.objects.filter(organization=organization).count()
+
+        return current_jobs < job_limit if job_limit is not None else True
+
+    def get(self, request):
+
+        try:
+            user = request.user
+            jobs = JobPostings.objects.filter(
+                organization__manager=user, approval_status="pending"
+            )
+            jobs_list = []
+            for job in jobs:
+
+                jobs_list.append(
+                    {
+                        "job_title": job.job_title,
+                        "client_name": job.username.username,
+                        "deadline": job.job_close_duration,
+                        "status": job.status,
+                        "created_at": job.created_at,
+                        "id": job.id,
+                        "can_open": self.get_job_post_limit(job.organization.id),
+                        "reason": job.reason,
                     }
                 )
 
@@ -338,6 +404,42 @@ class NotApprovedJobs(APIView):
                         f"Thank you for understanding."
                     ),
                 )
+            elif action == "PLAN_LIMIT_REJECT":
+                reject_reason = request.data.get("reason")
+                job.reason = reject_reason
+
+                # Create Dashboard Notification
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=job.username,
+                    category=Notifications.CategoryChoices.PLAN_LIMIT_REJECT,
+                    subject=f"Update regarding your job post: {job.job_title}",
+                    message=(
+                        f"Dear {job.username.username},\n\n"
+                        f"Thank you for posting the job for '{job.job_title}'.\n\n"
+                        f"We wanted to inform you that we are unable to open this job posting at this time.\n\n"
+                        f"Manager's Note: {reject_reason}\n\n"
+                        f"We value our partnership and will notify you as soon as we are able to proceed with this posting.\n\n"
+                        f"Best regards,\n"
+                        f"{request.user.username}\n"
+                        f"{request.user.organization.name if request.user.organization else ''}"
+                    ),
+                )
+
+                # Send Email
+                email_subject = f"Update regarding your job post: {job.job_title}"
+                email_body = (
+                    f"Dear {job.username.username},\n\n"
+                    f"Thank you for posting the job for '{job.job_title}'.\n\n"
+                    f"We wanted to inform you that we are unable to open this job posting at this time.\n\n"
+                    f"Manager's Note: {reject_reason}\n\n"
+                    f"We value our partnership and will notify you as soon as we are able to proceed with this posting.\n\n"
+                    f"Best regards,\n"
+                    f"{request.user.username}\n"
+                    f"{request.user.organization.name if request.user.organization else ''}"
+                )
+                send_custom_mail(email_subject, email_body, [job.username.email])
+
             job.save()
 
             return Response(
@@ -433,33 +535,28 @@ class JobEditStatusAPIView(APIView):
             job_id = request.GET.get("id")
             if not job_id:
                 return Response(
-                    {"error": "Job ID is required"}, status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Job ID is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             job = JobPostings.objects.get(id=job_id)
 
-            if job.approval_status == "accepted":
-                return Response({"status": "accepted"}, status=status.HTTP_200_OK)
+            job_edit_versions = JobPostingsEditedVersion.objects.filter(
+                job_id=job
+            ).order_by("-created_at")
 
-            if job.approval_status == "reject":
-                return Response({"status": "rejected"}, status=status.HTTP_200_OK)
-
-            job_edit_version = (
-                JobPostingsEditedVersion.objects.filter(job_id=job_id)
-                .order_by("-created_at")
-                .first()
-            )
-
-            if not job_edit_version:
+            if not job_edit_versions.exists():
                 return Response(
-                    {"notFound": "Job edit post not found"},
+                    {"notFound": "No job edit history found"},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            job_edit_fields = JobPostEditFields.objects.filter(edit_id=job_edit_version)
+            response_data = []
 
-            if any(field.status == "rejected" for field in job_edit_fields):
-                rejected_fields_json = [
+            for version in job_edit_versions:
+                job_edit_fields = JobPostEditFields.objects.filter(edit_id=version)
+
+                fields_json = [
                     {
                         "field_name": field.field_name,
                         "field_value": field.field_value,
@@ -468,54 +565,57 @@ class JobEditStatusAPIView(APIView):
                     for field in job_edit_fields
                 ]
 
-                return Response(
-                    {
-                        "status": "field_rejected",
-                        "fields_rejected": rejected_fields_json,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+                rejected = any(f.status == "rejected" for f in job_edit_fields)
 
-            if (
-                job_edit_version.user == request.user
-                or job_edit_version.status == "accepted"
-            ):
-                return Response(
-                    {"status": job_edit_version.status}, status=status.HTTP_200_OK
-                )
+                old_fields_json = []
+                if version.base_version:
+                    old_edit_fields = JobPostEditFields.objects.filter(
+                        edit_id=version.base_version
+                    )
+                    old_fields_json = [
+                        {
+                            "field_name": field.field_name,
+                            "field_value": field.field_value,
+                            "status": field.status,
+                        }
+                        for field in old_edit_fields
+                    ]
 
-            old_fields_json = []
-            if job_edit_version.base_version:
-                old_edit_fields = JobPostEditFields.objects.filter(
-                    edit_id=job_edit_version.base_version
-                )
-                old_fields_json = [
+                response_data.append(
                     {
-                        "field_name": field.field_name,
-                        "field_value": field.field_value,
-                        "status": field.status,
+                        "edit_id": version.id,
+                        "status": version.status,
+                        "edited_by": version.user.username,
+                        "created_at": version.created_at,
+                        "has_rejected_fields": rejected,
+                        "old_fields": old_fields_json,
+                        "new_fields": fields_json,
                     }
-                    for field in old_edit_fields
-                ]
+                )
 
-            new_fields_json = [
-                {"field_name": field.field_name, "field_value": field.field_value}
-                for field in job_edit_fields
-            ]
-
-            # 9. Return diff
             return Response(
                 {
-                    "status": job_edit_version.status,
-                    "old_fields": old_fields_json,
-                    "new_fields": new_fields_json,
+                    "job_id": job.id,
+                    "status": (
+                        job_edit_versions[0].status
+                        if job_edit_versions.exists()
+                        else None
+                    ),
+                    "edit_history": response_data,
                 },
                 status=status.HTTP_200_OK,
             )
 
+        except JobPostings.DoesNotExist:
+            return Response(
+                {"error": "Job not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class OrgJobEdits(APIView):
@@ -583,12 +683,28 @@ class OrgJobEdits(APIView):
                 for field_name, field_value in changes.items():
                     original_value = getattr(job, field_name, None)
 
-                    if field_value != original_value:
+                    print(
+                        f"DEBUG: field_name='{field_name}', incoming_type={type(field_value)}, original_type={type(original_value)}"
+                    )
+                    print(
+                        f"DEBUG: incoming_value='{field_value}', original_value='{original_value}'"
+                    )
+
+                    # Handle stringified comparison for range fields or potential type mismatches
+                    str_incoming = str(field_value).replace(" ", "").strip("[]")
+                    str_original = str(original_value).replace(" ", "").strip("[]")
+
+                    if str_incoming != str_original:
+                        print(
+                            f"DEBUG: Field '{field_name}' changed. Creating JobPostEditFields."
+                        )
                         JobPostEditFields.objects.create(
                             edit_id=edit_version,
                             field_name=field_name,
                             field_value=field_value,
                         )
+                    else:
+                        print(f"DEBUG: Field '{field_name}' has no change.")
 
                 actual_primary_skills = SkillMetricsModel.objects.filter(
                     job_id=job, is_primary=True
@@ -670,7 +786,7 @@ class OrgJobEdits(APIView):
                         f"Position: *{job.job_title}*\n"
                         f"Client: {job.username}\n\n"
                         f"Please review the requested changes and update the job post accordingly.\n\n"
-                        f"link::client/approvals/"
+                        f"link::client/edit-requests"
                     ),
                 )
                 job_post_log(
@@ -981,6 +1097,24 @@ class AssignRecruiterView(APIView):
                         )
                         assigned_job.assigned_to.add(*recruiters_to_add)
 
+                        # Notify Client regarding recruiter assignment (Dashboard + Email)
+                        recruiter_names = ", ".join(
+                            [r.username for r in recruiters_to_add]
+                        )
+                        client = job.username
+                        Notifications.objects.create(
+                            sender=request.user,
+                            receiver=client,
+                            category=Notifications.CategoryChoices.RECRUITER_ASSIGNED_TO_JOB,
+                            subject=f"Recruiters Assigned: {job.job_title}",
+                            message=f"Recruiters ({recruiter_names}) have been assigned to your job '{job.job_title}' at {job_location.location}.",
+                        )
+                        send_custom_mail(
+                            subject=f"Recruiters Assigned - {job.job_title}",
+                            to_email=[client.email],
+                            body=f"Hello {client.username},\n\nWe are pleased to inform you that the following recruiters have been assigned to source candidates for your job '{job.job_title}' at {job_location.location}:\n\n{recruiter_names}\n\nGA Hiresync Team",
+                        )
+
                         for recruiter in recruiters_to_add:
                             link = f"{frontend_url}/recruiter/postings/{job_id}"
                             message = f"""
@@ -1264,6 +1398,15 @@ class CloseJobView(APIView):
 
             job.save()
 
+            # Create notification for invoice generation
+            Notifications.objects.create(
+                sender=request.user,
+                receiver=request.user,
+                subject=f"Invoice Generated for {job.job_title}",
+                message=f"Invoice has been generated for job {job.job_title}",
+                category=Notifications.CategoryChoices.INVOICE_GENERATED,
+            )
+
             # generate invoice here for single job post
             return Response(
                 {"message": "Job  Post Closed Successfully"}, status=status.HTTP_200_OK
@@ -1305,65 +1448,187 @@ class AgencyJobPosts(APIView):
                 rounds_details = []
 
                 num_of_positions = 0
-                locations = JobLocationsModel.objects.filter(job_id=job)
-                for location in locations:
+                locations_list = JobLocationsModel.objects.filter(job_id=job)
+                for location in locations_list:
                     num_of_positions += location.positions
 
-                rounds_details.extend(
-                    [
-                        {"Vacancies": num_of_positions},
-                        {"Applied": applied},
-                        {"Under Review": under_review},
-                    ]
-                )
+                # Candidate Status Counts
+                applied_count = job_postings.count()  # Total Profiles Sent
+                shortlisted_count = job_postings.filter(
+                    status="processing", round_num=1
+                ).count()
+                processing_count = job_postings.filter(
+                    status="processing", round_num__gt=1
+                ).count()
+                on_hold_count = job_postings.filter(status="hold").count()
+                rejected_count = job_postings.filter(status="rejected").count()
+                selected_count = job_postings.filter(status="selected").count()
+
+                candidate_counts = {
+                    "Applied": applied_count,
+                    "Shortlisted": shortlisted_count,
+                    "Processing": processing_count,
+                    "on-Hold": on_hold_count,
+                    "Rejected": rejected_count,
+                    "Selected": selected_count,
+                }
+
+                num_of_rounds = job.rounds_of_interview
+                rounds_details = [
+                    {"Vacancies": num_of_positions},
+                    {"Applied": applied_count},
+                    {"Processing": processing_count},
+                ]
 
                 for round_num in range(1, num_of_rounds + 1):
                     count = job_postings.filter(
                         round_num=round_num, status="processing"
                     ).count()
-
                     rounds_details.append({f"Interview Round {round_num}": count})
 
-                rounds_details.extend([{"Hired": hired}, {"Rejected": rejected}])
+                rounds_details.extend(
+                    [{"Hired": selected_count}, {"Rejected": rejected_count}]
+                )
 
                 locations_assigned_to = AssignedJobs.objects.filter(job_id=job)
                 assigned_to = {}
+                is_any_assigned = locations_assigned_to.exists()
 
-                for location in locations:
+                for location in locations_list:
                     recruiters = locations_assigned_to.filter(job_location=location)
                     recruiter_list = []
 
                     for recruiter in recruiters:
-                        for (
-                            user
-                        ) in recruiter.assigned_to.all():  # Iterate over M2M recruiters
-                            print(user, " is the usr")
+                        for user in recruiter.assigned_to.all():
                             applications_count = JobApplication.objects.filter(
                                 attached_to=user, job_location=location
                             ).count()
-                            recruiter_list.append([user.username, applications_count])
+                            profile_url = (
+                                request.build_absolute_uri(user.profile.url)
+                                if user.profile
+                                else None
+                            )
+                            recruiter_list.append(
+                                [user.username, applications_count, profile_url]
+                            )
 
                     assigned_to[location.location] = recruiter_list
 
-                    client = ClientDetails.objects.get(user=job.username)
+                client = ClientDetails.objects.get(user=job.username)
 
-                    job_details = {
-                        "job_title": job.job_title,
-                        "assigned_to": assigned_to,
-                        "client_name": (
-                            job.username.username if job.username else "Unknown"
-                        ),
-                        "organization_name": client.name_of_organization,
-                        "deadline": job.job_close_duration,
-                        "status": job.status,
-                        "approval_status": job.approval_status,
-                        "location": location.location,
-                        "id": job.id,
-                        "rounds_details": rounds_details,
-                        "created_at": job.created_at,
-                        "is_posted_on_linkedin": job.is_linkedin_posted,
+                primary_skills = job.skills.filter(is_primary=True)
+                secondary_skills = job.skills.filter(is_primary=False)
+
+                p_skills = [
+                    {
+                        "skill_name": s.skill_name,
+                        "metric_value": s.metric_value,
+                        "metric_type": s.metric_type,
                     }
+                    for s in primary_skills
+                ]
+                s_skills = [
+                    {
+                        "skill_name": s.skill_name,
+                        "metric_value": s.metric_value,
+                        "metric_type": s.metric_type,
+                    }
+                    for s in secondary_skills
+                ]
 
+                job_logs = list(
+                    job.logs.all()
+                    .values("message", "created_at")
+                    .order_by("-created_at")
+                )
+
+                interviewers = InterviewerDetails.objects.filter(
+                    job_id=job
+                ).select_related("name")
+                interview_panel = []
+                for inter in interviewers:
+                    profile_url = (
+                        request.build_absolute_uri(inter.name.profile.url)
+                        if inter.name.profile
+                        else None
+                    )
+                    interview_panel.append(
+                        {
+                            "name": inter.name.username,
+                            "type": inter.type_of_interview,
+                            "mode": inter.mode_of_interview,
+                            "round": inter.round_num,
+                            "avatar": profile_url,
+                        }
+                    )
+
+                is_under_negotiation = (
+                    JobPostingsEditedVersion.objects.filter(
+                        job_id=job, status="pending"
+                    )
+                    .exclude(user=job.organization.manager)
+                    .exists()
+                )
+
+                if job.approval_status == "rejected":
+                    rec_status = "rejected"
+                elif job.status == "closed":
+                    rec_status = "closed"
+                elif is_under_negotiation:
+                    rec_status = "under-negotiation"
+                elif is_any_assigned:
+                    rec_status = "assigned"
+                else:
+                    rec_status = "New"
+
+                job_details = {
+                    "job_id": job.jobcode,
+                    "job_title": job.job_title,
+                    "job_description": job.job_description,
+                    "assigned_to": assigned_to,
+                    "recruitment_status": rec_status,
+                    "client_name": (
+                        job.username.username if job.username else "Unknown"
+                    ),
+                    "organization_name": client.name_of_organization,
+                    "deadline": job.job_close_duration,
+                    "status": job.status,
+                    "approval_status": job.approval_status,
+                    "vacancies": num_of_positions,
+                    "location": (
+                        location.location if "location" in locals() else "Multiple"
+                    ),
+                    "id": job.id,
+                    "rounds_details": rounds_details,
+                    "candidate_counts": candidate_counts,
+                    "created_at": job.created_at,
+                    "is_posted_on_linkedin": job.is_linkedin_posted,
+                    "job_department": job.job_department,
+                    "years_of_experience": job.years_of_experience,
+                    "ctc": job.ctc,
+                    "job_type": job.job_type,
+                    "job_level": job.job_level,
+                    "qualifications": job.qualifications,
+                    "timings": job.timings,
+                    "other_benefits": job.other_benefits,
+                    "working_days_per_week": job.working_days_per_week,
+                    "decision_maker": job.decision_maker,
+                    "decision_maker_email": job.decision_maker_email,
+                    "bond": job.bond,
+                    "rotational_shift": job.rotational_shift,
+                    "age": job.age,
+                    "gender": job.gender,
+                    "visa_status": job.visa_status,
+                    "passport_availability": job.passport_availability,
+                    "notice_period": job.notice_period,
+                    "notice_time": job.notice_time,
+                    "industry": job.industry,
+                    "languages": job.languages,
+                    "job_logs": job_logs,
+                    "interview_panel": interview_panel,
+                    "primary_skills": p_skills,
+                    "secondary_skills": s_skills,
+                }
                 jobs_list.append(job_details)
                 total_postings += num_of_positions
 
@@ -1743,6 +2008,8 @@ class ManagerAllAlerts(APIView):
             partial_edit = 0
             candidate_joined = 0
             candidate_left = 0
+            edit_job = 0
+            invoice_generated = 0
 
             for alert in all_alerts:
                 if alert.category == Notifications.CategoryChoices.NEGOTIATE_TERMS:
@@ -1759,6 +2026,29 @@ class ManagerAllAlerts(APIView):
                     candidate_joined += 1
                 elif alert.category == Notifications.CategoryChoices.CANDIDATE_LEFT:
                     candidate_left += 1
+                elif alert.category == Notifications.CategoryChoices.EDIT_JOB:
+                    edit_job += 1
+                elif alert.category == Notifications.CategoryChoices.INVOICE_GENERATED:
+                    invoice_generated += 1
+
+            # Calculate job-related counts
+            organization = Organization.objects.get(manager=request.user)
+            my_jobs = JobPostings.objects.filter(
+                organization=organization, status="Open"
+            ).count()
+
+            not_assigned = (
+                JobPostings.objects.filter(organization=organization, status="Open")
+                .annotate(recruiter_count=Count("assignedjobs"))
+                .filter(recruiter_count=0)
+                .count()
+            )
+
+            closed_hold = JobPostings.objects.filter(
+                organization=organization, status__in=["closed", "on_hold"]
+            ).count()
+
+            analytics = 0  # Placeholder as per requirement
 
             data = {
                 "negotiate_terms": negotiate_terms,
@@ -1766,7 +2056,13 @@ class ManagerAllAlerts(APIView):
                 "accept_job_edit": accept_job_edit,
                 "reject_job_edit": reject_job_edit,
                 "partial_edit": partial_edit,
+                "edit_job": edit_job,
+                "invoice_generated": invoice_generated,
                 "total_alerts": all_alerts.count(),
+                "my_jobs": my_jobs,
+                "not_assigned": not_assigned,
+                "closed_hold": closed_hold,
+                "analytics": analytics,
             }
 
             return Response({"data": data}, status=status.HTTP_200_OK)
@@ -1780,20 +2076,33 @@ class ClientsData(APIView):
     permission_classes = [IsManager]
 
     def get(self, request):
+        print("=== ClientsData API HIT ===")
+        print("Manager:", request.user)
+        # print("Client ID received:", id)
+
         try:
             user = request.user
-            client_id = request.GET.get("id")
+            client_id = request.query_params.get("id")
 
+            # ================= SINGLE CLIENT =================
             if client_id:
+                print("Fetching single client data...")
+
                 try:
-                    client = ClientDetails.objects.filter(user=client_id).first()
+                    client = ClientDetails.objects.filter(id=client_id).first()
+                    print("Client object:", client)
+
                     if not client:
+                        print("Client NOT FOUND")
                         return Response({"error": "Client not found"}, status=404)
 
                     jobs = JobPostings.objects.filter(
                         username=client.user, organization__manager=user
                     )
+                    print("Jobs found:", jobs.count())
+
                     associated_at = jobs.order_by("created_at").first()
+                    print("Associated at:", associated_at)
 
                     total_positions = (
                         JobLocationsModel.objects.filter(job_id__in=jobs).aggregate(
@@ -1801,6 +2110,7 @@ class ClientsData(APIView):
                         )["total"]
                         or 0
                     )
+                    print("Total positions:", total_positions)
 
                     client_data = {
                         "client_username": client.username,
@@ -1809,18 +2119,36 @@ class ClientsData(APIView):
                         "website_url": client.website_url,
                         "gst_number": client.gst_number,
                         "company_address": client.company_address,
-                        "associated_at": associated_at.created_at,
+                        "associated_at": (
+                            associated_at.created_at if associated_at else None
+                        ),
+                        "designation": client.designation,
+                        "pan": client.company_pan,
+                        "gst": client.gst_number,
                     }
+                    # print("client data",client_data)
 
                     jobs_data = []
                     for job in jobs:
+                        print("Processing job:", job.id, job.job_title)
+
                         locations = JobLocationsModel.objects.filter(job_id=job)
+                        print("Locations count:", locations.count())
+
                         for location in locations:
+                            print("Location ID:", location.id)
+
                             applications = JobApplication.objects.filter(
                                 job_location=location
                             )
+                            print("Applications:", applications.count())
+
                             selected_application = SelectedCandidates.objects.filter(
                                 application__in=applications
+                            )
+                            print(
+                                "Selected candidates:",
+                                selected_application.count(),
                             )
 
                             jobs_data.append(
@@ -1846,83 +2174,221 @@ class ClientsData(APIView):
                                 }
                             )
 
+                    # Calculate Stats for the client
+                    total_openings = total_positions
+                    total_joined = SelectedCandidates.objects.filter(
+                        application__job_location__job_id__in=jobs,
+                        joining_status="joined",
+                    ).count()
+                    total_replaced = SelectedCandidates.objects.filter(
+                        application__job_location__job_id__in=jobs, is_replaced=True
+                    ).count()
+                    satisfaction = (
+                        (total_joined / total_openings * 100)
+                        if total_openings > 0
+                        else 0
+                    )
+
+                    stats = {
+                        "total_openings": total_openings,
+                        "total_joined": total_joined,
+                        "total_replaced": total_replaced,
+                        "satisfaction": round(satisfaction, 2),
+                    }
+
+                    print("Single client response ready")
                     return Response(
-                        {"client_data": client_data, "jobs_data": jobs_data},
+                        {
+                            "client_data": client_data,
+                            "jobs_data": jobs_data,
+                            "stats": stats,
+                        },
                         status=status.HTTP_200_OK,
                     )
+
                 except Exception as e:
+                    print("ERROR in single client block:", str(e))
                     return Response({"error": str(e)}, status=500)
-            else:
-                jobs = JobPostings.objects.filter(organization__manager=user).order_by(
-                    "created_at"
+
+            # ================= ALL CLIENTS =================
+            print("Fetching ALL clients for manager")
+
+            jobs = JobPostings.objects.filter(organization__manager=user).order_by(
+                "created_at"
+            )
+            print("Total jobs for manager:", jobs.count())
+
+            org_cients = ClientOrganizations.objects.filter(
+                organization__manager=request.user, approval_status="accepted"
+            )
+            print("Accepted clients:", org_cients.count())
+
+            requests = ClientOrganizations.objects.filter(
+                organization__manager=request.user, approval_status="pending"
+            )
+            print("Pending requests:", requests.count())
+
+            requests_list = []
+            for connection_request in requests:
+                print("Pending request ID:", connection_request.id)
+
+                requests_list.append(
+                    {
+                        "company_name": connection_request.client.name_of_organization,
+                        "client_name": connection_request.client.user.username,
+                        "client_email": connection_request.client.user.email,
+                        "id": connection_request.id,
+                    }
                 )
-                data = []
-                #  org_cients = ClientOrganizations.objects.filter(organization__manager = request.user)
-                org_cients = ClientOrganizations.objects.filter(
-                    organization__manager=request.user, approval_status="accepted"
-                )
-                requests = org_cients.filter(approval_status="pending")
-                clients = []
-                requests = ClientOrganizations.objects.filter(
-                    organization__manager=request.user, approval_status="pending"
-                )
-                print("reqeustss", requests.count())
-                requests_list = []
-                for connection_request in requests:
-                    requests_list.append(
+
+            data = []
+            for connection in org_cients:
+                client = connection.client
+                print("Processing client:", client.username)
+
+                client_data = {
+                    "client_id": client.id,
+                    "client_username": client.username,
+                    "organization_name": client.name_of_organization,
+                    "contact_number": client.contact_number,
+                    "website_url": client.website_url,
+                    "gst_number": client.gst_number,
+                    "company_address": client.company_address,
+                    "associated_at": connection.created_at,
+                    "negotiation_requested_on": None,
+                    "negotiation_accepted_on": None,
+                    "negotiations_request": None,
+                }
+
+                negotiation = NegotiationRequests.objects.filter(
+                    client_organization__client=client
+                ).first()
+
+                print("Negotiation object:", negotiation)
+
+                if negotiation:
+                    client_data.update(
                         {
-                            "company_name": connection_request.client.name_of_organization,
-                            "client_name": connection_request.client.user.username,
-                            "client_email": connection_request.client.user.email,
-                            "id": connection_request.id,
+                            "negotiation_requested_on": negotiation.requested_date,
+                            "negotiation_accepted_on": negotiation.accepted_date,
+                            "negotiations_request": {
+                                "ctc_range": negotiation.ctc_range,
+                                "service_fee": negotiation.service_fee,
+                                "replacement_clause": negotiation.replacement_clause,
+                                "interest_percentage": negotiation.interest_percentage,
+                                "invoice_after": negotiation.invoice_after,
+                                "payment_within": negotiation.payment_within,
+                                "status": negotiation.status,
+                            },
                         }
                     )
 
-                for connection in org_cients:
-                    client = connection.client
-                    client_data = {
-                        "client_id": client.id,
-                        "client_username": client.username,
-                        "organization_name": client.name_of_organization,
-                        "contact_number": client.contact_number,
-                        "website_url": client.website_url,
-                        "gst_number": client.gst_number,
-                        "company_address": client.company_address,
-                        "associated_at": connection.created_at,
-                        "negotiation_requested_on": None,
-                        "negotiation_accepted_on": None,
-                        "negotiations_request": None,
-                    }
+                data.append(client_data)
 
-                    negotiation = NegotiationRequests.objects.filter(
-                        client_organization__client=client
-                    ).first()
-
-                    if negotiation:
-                        client_data.update(
-                            {
-                                "negotiation_requested_on": negotiation.requested_date,
-                                "negotiation_accepted_on": negotiation.accepted_date,
-                                "negotiations_request": {
-                                    "ctc_range": negotiation.ctc_range,
-                                    "service_fee": negotiation.service_fee,
-                                    "replacement_clause": negotiation.replacement_clause,
-                                    "interest_percentage": negotiation.interest_percentage,
-                                    "invoice_after": negotiation.invoice_after,
-                                    "payment_within": negotiation.payment_within,
-                                    "status": negotiation.status,
-                                },
-                            }
-                        )
-                    data.append(client_data)
-
-                return Response(
-                    {"data": data, "connection_requests": requests_list}, status=200
-                )
+            print("All clients response ready")
+            return Response(
+                {"data": data, "connection_requests": requests_list},
+                status=200,
+            )
 
         except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            print("UNEXPECTED ERROR:", str(e))
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ClientCommunicationsView(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            client_id = request.query_params.get("client_id")
+            if not client_id:
+                return Response({"error": "client_id is required"}, status=400)
+
+            client = ClientDetails.objects.filter(id=client_id).first()
+            if not client:
+                return Response({"error": "Client not found"}, status=404)
+
+            client_user = client.user
+
+            # 1. Fetch Notifications
+            notifications = Notifications.objects.filter(
+                Q(sender=client_user) | Q(receiver=client_user)
+            ).order_by("-created_at")
+
+            # 2. Fetch JobPostLogs
+            job_post_logs = JobPostLog.objects.filter(
+                job_post__username=client_user
+            ).order_by("-created_at")
+
+            # 3. Fetch JobProfileLogs
+            job_profile_logs = JobProfileLog.objects.filter(
+                job_profile__job_location__job_id__username=client_user
+            ).order_by("-created_at")
+
+            # 4. Fetch InterviewLogs
+            interview_logs = InterviewLog.objects.filter(
+                interview__application__job_location__job_id__username=client_user
+            ).order_by("-created_at")
+
+            # Aggregate events
+            events = []
+
+            for n in notifications:
+                events.append(
+                    {
+                        "type": "Notification",
+                        "subject": n.subject,
+                        "message": n.message,
+                        "timestamp": n.created_at,
+                        "category": n.category,
+                        "sender": n.sender.username if n.sender else "System",
+                    }
+                )
+
+            for log in job_post_logs:
+                events.append(
+                    {
+                        "type": "Job Log",
+                        "subject": f"Job: {log.job_post.job_title}",
+                        "message": log.message,
+                        "timestamp": log.created_at,
+                        "sender": "System",
+                    }
+                )
+
+            for log in job_profile_logs:
+                events.append(
+                    {
+                        "type": "Application Log",
+                        "subject": f"Candidate: {log.job_profile.resume.candidate_name}",
+                        "message": log.message,
+                        "timestamp": log.created_at,
+                        "sender": "System",
+                    }
+                )
+
+            for log in interview_logs:
+                events.append(
+                    {
+                        "type": "Interview Log",
+                        "subject": f"Round {log.interview.round_num} - {log.interview.application.resume.candidate_name}",
+                        "message": log.message,
+                        "timestamp": log.created_at,
+                        "sender": "System",
+                    }
+                )
+
+            # Sort events by timestamp descending
+            events.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            return Response({"events": events}, status=200)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 
 class RejectApprovalClient(APIView):
@@ -2016,6 +2482,19 @@ class AcceptApprovalClient(APIView):
                         payment_within=terms.get("payment_within"),
                         interest_percentage=terms.get("interest_percentage"),
                     )
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=connection.client.user,
+                        category=Notifications.CategoryChoices.ACCEPT_CONNECTION,
+                        subject=f"Connection Request Accepted by {request.user.username}",
+                        message=(
+                            f"Connection Request Accepted\n\n"
+                            f"Manager: {request.user.username}\n\n"
+                            f"Your connection request has been accepted. "
+                            f"You are now successfully connected with the organization."
+                        ),
+                    )
+
             return Response(
                 {"message": "Accepted successfully"}, status=status.HTTP_200_OK
             )
@@ -3081,7 +3560,9 @@ class ClientOrganizationsSeenView(APIView):
         """
         POST -> Mark all unseen ClientOrganizations as seen
         """
-        updated = ClientOrganizations.objects.filter(is_seen=False).update(is_seen=True)
+        updated = ClientOrganizations.objects.filter(
+            is_seen=False, organization__manager=request.user
+        ).update(is_seen=True)
         return Response({"updated_records": updated}, status=status.HTTP_200_OK)
 
 
@@ -3145,86 +3626,46 @@ class JobEditByClientView(APIView):
     def get(self, request):
         try:
             user = request.user
-            user_id = user.id
             request_id = request.GET.get("id")
 
             if request_id:
-                edit_request = JobEditRequestsByClient.objects.get(id=request_id)
-                serializer = JobEditRequestsByClientSerializer(edit_request)
-
-                # Fetch the associated job to display details (similar to client view)
+                # We need to fetch from JobPostingsEditedVersion now
                 try:
-                    job = edit_request.job_id
-                except Exception:
+                    edit_version = JobPostingsEditedVersion.objects.get(id=request_id)
+                except JobPostingsEditedVersion.DoesNotExist:
                     return Response(
-                        {"error": "Associated job posting not found"},
+                        {"error": "Edit request not found"},
                         status=status.HTTP_404_NOT_FOUND,
                     )
 
-                # We might need to serialize job data too if the frontend expects it separate
-                # serialized_job = JobPostingsSerializer(job).data
-                # For now just return the edit request data which has fields.
-                # Actually, the client view returned {job: ..., edited_job: ...}
-                # But looking at JobEditRequest.jsx, it expects 'job' object and 'edited_job' (which seems to be changes).
-                # The JobEditRequestsByClient model HAS 'job_title', 'job_description', etc. stored on it?
-                # No, looking at models.py, it stores 'job_title', 'job_description' etc. directly on the model...
-                # It duplicates the fields? Or are these the EDITED values?
-                # Let's verify model structure again from snippet 594.
-                # It has job_title, job_description etc. presumably as the NEW values.
+                job = edit_version.job_id
 
-                # Client's JobEditRequest.jsx expects:
-                # setJob(data.job);
-                # setEditedValues(data.edited_job || {});
-
-                # data.job seems to be the ORIGINAL job (or current state).
-                # data.edited_job seems to be the CHANGES.
-
-                # For Manager, we want to show:
-                # 1. The Current Job Details
-                # 2. The Requested Changes
-
-                # So we should return:
-                # job: The current JobPostings object data
-                # edit_request: The JobEditRequestsByClient data
+                # Verify Organization Ownership
+                if job.organization.manager != user:
+                    return Response(
+                        {"error": "Unauthorized access to this request"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
                 from app.serializers import JobPostingsSerializer
 
                 job_serializer = JobPostingsSerializer(job)
 
-                # Construct "editedValues" format as expected by frontend:
-                # [{field_name: 'job_title', field_value: 'New Title'}, ...]
-                # or just return the serializer data and let frontend parse.
-                # Client's JobEditRequest.jsx uses 'editedValues' which is an array of objects.
-                # However, our serializer returns a flat object.
-                # We can adapt the frontend or the backend. Adapting backend to match frontend expectation is usually safer for copy-paste.
+                edit_fields = JobPostEditFields.objects.filter(edit_id=edit_version)
 
-                # Let's inspect what fields are in JobEditRequestsByClient.
-                # It has all fields. We should compare them with Job fields or just send non-nulls?
-                # It seems simpler to send 'edit_request' as 'edited_details' and 'job' as 'job'.
+                # Transform to a dictionary for the frontend
+                filtered_edit_request = {}
+                for field in edit_fields:
+                    # Attempt to parse JSON if it looks like a list or dict (e.g. job_locations)
+                    val = field.field_value
+                    if val and (val.startswith("[") or val.startswith("{")):
+                        try:
+                            import json
 
-                exclude_fields = [
-                    "id",
-                    "job_id",
-                    "organization",
-                    "edited_by",
-                    "edited_at",
-                    "edit_status",
-                    "is_seen",
-                    "edit_reason",
-                    "approval_status",
-                    "status",
-                    "created_at",
-                    "reason",
-                    "is_linkedin_posted",
-                ]
-
-                # Check what fields are actually different or requested for edit
-                # We overwrite the serializer data with filtered entries for the frontend
-                filtered_edit_request = {
-                    k: v
-                    for k, v in serializer.data.items()
-                    if k not in exclude_fields and v is not None
-                }
+                            val = json.loads(val)
+                        except:
+                            pass
+                    filtered_edit_request[field.field_name] = val
 
                 return Response(
                     {"job": job_serializer.data, "edit_request": filtered_edit_request},
@@ -3234,15 +3675,30 @@ class JobEditByClientView(APIView):
             else:
                 try:
                     organization = Organization.objects.get(manager=user)
-                    edit_requests = JobEditRequestsByClient.objects.filter(
-                        organization=organization
-                    )
-                    serializer = JobEditRequestsByClientSerializer(
-                        edit_requests, many=True
-                    )
-                    return Response(
-                        {"data": serializer.data}, status=status.HTTP_200_OK
-                    )
+                    # Fetch pending edits created by Clients for this organization's jobs
+                    edit_requests = JobPostingsEditedVersion.objects.filter(
+                        job_id__organization=organization, status="pending"
+                    ).exclude(user=user)
+
+                    data = []
+                    for req in edit_requests:
+                        data.append(
+                            {
+                                "id": req.id,
+                                "job_id": (
+                                    req.job_id.jobcode
+                                    if hasattr(req.job_id, "jobcode")
+                                    else req.job_id.id
+                                ),
+                                "job_title": req.job_id.job_title,
+                                "edited_by": req.user.username,
+                                "edited_at": req.created_at,
+                                "edit_status": req.status,
+                                "edit_reason": "Client Edit Request",
+                            }
+                        )
+
+                    return Response({"data": data}, status=status.HTTP_200_OK)
                 except Organization.DoesNotExist:
                     return Response({"data": []}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -3257,7 +3713,6 @@ class JobEditRequestActionView(APIView):
 
     def post(self, request):
         try:
-            # print("action on edit job", request.data)
             request_id = request.data.get("request_id")
             status_update = request.data.get("status")  # 'accepted' or 'rejected'
             accepted_fields = request.data.get(
@@ -3271,76 +3726,57 @@ class JobEditRequestActionView(APIView):
                 )
 
             try:
-                edit_request = JobEditRequestsByClient.objects.get(id=request_id)
-            except JobEditRequestsByClient.DoesNotExist:
+                # Use the new model
+                edit_version = JobPostingsEditedVersion.objects.get(id=request_id)
+            except JobPostingsEditedVersion.DoesNotExist:
                 return Response(
                     {"error": "Request not found"}, status=status.HTTP_404_NOT_FOUND
                 )
 
+            job = edit_version.job_id
+
             # Verify Organization Ownership
-            if edit_request.organization.manager != request.user:
+            if job.organization.manager != request.user:
                 return Response(
                     {"error": "Unauthorized access to this request"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            try:
-                job = edit_request.job_id
-            except Exception:
-                return Response(
-                    {"error": "Associated job posting not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+            with transaction.atomic():
+                if status_update == "rejected":
+                    edit_version.status = "rejected"
+                    edit_version.save()
+                    JobPostEditFields.objects.filter(edit_id=edit_version).update(
+                        status="rejected"
+                    )
 
-            if status_update == "rejected":
-                edit_request.edit_status = "rejected"
-                edit_request.save()
-                # We will clear the flag and notify below
+                elif status_update == "accepted":
+                    edit_version.status = "accepted"
+                    edit_version.save()
 
-            elif status_update == "accepted":
-                edit_request.edit_status = "accepted"
-                edit_request.save()
+                    edit_fields = JobPostEditFields.objects.filter(edit_id=edit_version)
 
-                # If accepted_fields is provided, only update those.
-                # If empty/none, and status is accepted, assume ALL fields from edit_request that are not null
-                # Strictly exclude internal status fields for safety
-                exclude_fields = [
-                    "id",
-                    "job_id",
-                    "organization",
-                    "edited_by",
-                    "edited_at",
-                    "edit_status",
-                    "is_seen",
-                    "edit_reason",
-                    "approval_status",
-                    "status",
-                    "created_at",
-                    "reason",
-                    "is_linkedin_posted",
-                ]
-                changes = {
-                    f.name: getattr(edit_request, f.name)
-                    for f in JobEditRequestsByClient._meta.get_fields()
-                    if f.name not in exclude_fields
-                    and getattr(edit_request, f.name) is not None
-                }
+                    fields_to_process = (
+                        [f for f in edit_fields if f.field_name in accepted_fields]
+                        if accepted_fields
+                        else edit_fields
+                    )
 
-                fields_to_update = (
-                    [f for f in accepted_fields if f in changes]
-                    if accepted_fields
-                    else list(changes.keys())
-                )
+                    for field in fields_to_process:
+                        field_name = field.field_name
+                        new_value = field.field_value
 
-                for field in fields_to_update:
-                    if hasattr(edit_request, field):
-                        new_value = getattr(edit_request, field)
+                        field.status = "accepted"
+                        field.save()
 
-                        if field == "job_locations" and new_value:
-                            # Handle Job Locations Update: Match and update, delete missing, create new
-                            from app.models import JobLocationsModel
+                        if field_name == "job_locations":
+                            # Handle Job Locations Update
+                            import json
 
                             try:
+                                locations_list = json.loads(new_value)
+                                from app.models import JobLocationsModel
+
                                 existing_locations = {
                                     loc.location: loc
                                     for loc in JobLocationsModel.objects.filter(
@@ -3349,12 +3785,11 @@ class JobEditRequestActionView(APIView):
                                 }
                                 processed_locations = set()
 
-                                for loc_data in new_value:
+                                for loc_data in locations_list:
                                     loc_name = loc_data.get("location")
                                     if not loc_name:
                                         continue
 
-                                    # Fallback to 'office' if job_type is missing or invalid for choices
                                     job_type_val = loc_data.get("job_type", "office")
                                     if job_type_val not in [
                                         "remote",
@@ -3381,23 +3816,19 @@ class JobEditRequestActionView(APIView):
                                         processed_locations.add(loc_name)
 
                                 # Delete locations that are no longer in the request
-                                for (
-                                    loc_name,
-                                    loc_obj,
-                                ) in existing_locations.items():
+                                for loc_name, loc_obj in existing_locations.items():
                                     if loc_name not in processed_locations:
-                                        loc_obj.delete()  # This will cascade delete assignments for THAT location
+                                        loc_obj.delete()
                             except Exception as loc_e:
                                 print(f"Error updating locations: {loc_e}")
-                                # We continue with other fields
 
                         elif new_value is not None:
-                            # Handle simple fields
-                            if hasattr(job, field):
-                                setattr(job, field, new_value)
+                            if hasattr(job, field_name):
+                                setattr(job, field_name, new_value)
 
-            # job.is_edited_by_client = False
-            job.save()
+                # Clear the flag as action is taken
+                job.is_edited_by_client = False
+                job.save()
 
             # Send Notifications
             try:
@@ -3411,12 +3842,10 @@ class JobEditRequestActionView(APIView):
                     else Notifications.CategoryChoices.REJECT_JOB_EDIT
                 )
 
-                # 1. Notify Client (Owner)
                 create_notification(
                     request.user, job.username, subject, message, category
                 )
 
-                # 2. Notify Recruiters
                 recruiters = (
                     AssignedJobs.objects.filter(job_id=job)
                     .values_list("assigned_to", flat=True)
@@ -3429,7 +3858,6 @@ class JobEditRequestActionView(APIView):
                             request.user, recruiter, subject, message, category
                         )
 
-                # 3. Notify Interviewers
                 interviewers = (
                     InterviewerDetails.objects.filter(job_id=job)
                     .values_list("name", flat=True)
@@ -3454,3 +3882,207 @@ class JobEditRequestActionView(APIView):
                 {"error": str(e), "traceback": traceback.format_exc()},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class AgencyTermsWithClientAgreedView(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            user = request.user
+            print("user :", user)
+            client_id = request.query_params.get("id")
+            print("client: ", client_id)
+            if not client_id:
+                # print("id is missing")
+                return Response(
+                    {"error": "Client ID is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            client_organization = ClientOrganizations.objects.filter(
+                client_id=client_id, organization__manager=user
+            ).first()
+
+            if not client_organization:
+                return Response(
+                    {"error": "Client organisation not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            terms = ClientOrganizationTerms.objects.filter(
+                client_organization=client_organization
+            )
+            terms_data = ClientOrganizationTermsSerializer(terms, many=True).data
+
+            # Include negotiated terms if they exist and are accepted
+            try:
+                negotiated = NegotiationRequests.objects.filter(
+                    client_organization=client_organization, status="accepted"
+                ).first()
+                if negotiated:
+                    today = date.today()
+                    # Check if negotiated terms are not expired
+                    if not negotiated.expiry_date or negotiated.expiry_date >= today:
+                        # Append negotiated terms to the list
+                        # Using a manual dict to match the terms format
+                        terms_data.append(
+                            {
+                                "id": negotiated.id,
+                                "ctc_range": negotiated.ctc_range,
+                                "service_fee": negotiated.service_fee,
+                                "service_fee_type": negotiated.service_fee_type,
+                                "replacement_clause": negotiated.replacement_clause,
+                                "invoice_after": negotiated.invoice_after,
+                                "payment_within": negotiated.payment_within,
+                                "interest_percentage": negotiated.interest_percentage,
+                                "is_negotiated": True,
+                                "description": negotiated.description,
+                                "connection_id": client_organization.id,
+                            }
+                        )
+            except Exception as neg_e:
+                print(f"Error fetching negotiated terms: {neg_e}")
+
+            return Response(
+                {"terms": terms_data},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ManagerReplacementRequestsView(APIView):
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        try:
+            user = request.user
+            replacements = ReplacementCandidates.objects.filter(
+                replacement_with__job_location__job_id__organization__manager=user,
+                status="pending_manager_approval",
+            ).select_related(
+                "replacement_with__job_location__job_id__organization",
+                "replacement_with__resume",
+                "replacement_with__selected_candidates",
+            )
+
+            replacements_list = []
+            for replacement in replacements:
+                job = replacement.replacement_with.job_location.job_id
+                replacements_list.append(
+                    {
+                        "job_title": job.job_title,
+                        "organization_name": job.organization.name,
+                        "candidate_name": replacement.replacement_with.resume.candidate_name,
+                        "agreed_ctc": getattr(
+                            replacement.replacement_with.selected_candidates,
+                            "ctc",
+                            None,
+                        ),
+                        "job_id": job.id,
+                        "job_location_id": replacement.replacement_with.job_location.id,
+                        "joining_date": getattr(
+                            replacement.replacement_with.selected_candidates,
+                            "joining_date",
+                            None,
+                        ),
+                        "replacement_id": replacement.id,
+                        "client_name": job.username.username,
+                    }
+                )
+
+            return Response(replacements_list, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ReplacementActionView(APIView):
+    permission_classes = [IsManager]
+
+    def post(self, request):
+        try:
+            replacement_id = request.data.get("replacement_id")
+            action = request.data.get("action")  # 'accept' or 'reject'
+
+            replacement = ReplacementCandidates.objects.get(id=replacement_id)
+            selected_candidate = SelectedCandidates.objects.get(
+                application=replacement.replacement_with
+            )
+            job_post = replacement.replacement_with.job_location.job_id
+            job_location = replacement.replacement_with.job_location
+
+            if action == "accept":
+                with transaction.atomic():
+                    replacement.status = "pending"
+                    replacement.save()
+
+                    selected_candidate.replacement_status = "pending"
+                    selected_candidate.save()
+
+                    job_location.status = "opened"
+                    job_location.save()
+                    job_post.status = "opened"
+                    job_post.save()
+
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=job_post.username,
+                        category=Notifications.CategoryChoices.REPLACEMENT_ACCEPTED,
+                        subject=f"Replacement Request Accepted",
+                        message=f"Agency manager has accepted your replacement request for {replacement.replacement_with.resume.candidate_name} in job: {job_post.job_title}. The job has been reopened.",
+                    )
+
+                    job_post_log(
+                        job_post.id,
+                        f"Replacement Request for the jobpost :{job_post.job_title} accepted by manager {request.user.username}",
+                    )
+
+                return Response(
+                    {"message": "Replacement request accepted"},
+                    status=status.HTTP_200_OK,
+                )
+
+            elif action == "reject":
+                with transaction.atomic():
+                    reason = request.data.get("reason", "No reason provided")
+                    replacement.status = "incomplete"
+                    replacement.save()
+
+                    selected_candidate.replacement_status = "no"
+                    selected_candidate.save()
+
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=job_post.username,
+                        category=Notifications.CategoryChoices.REPLACEMENT_REJECTED,
+                        subject=f"Replacement Request Rejected",
+                        message=f"Agency manager has rejected your replacement request for {replacement.replacement_with.resume.candidate_name} in job: {job_post.job_title}. Reason: {reason}",
+                    )
+
+                    job_post_log(
+                        job_post.id,
+                        f"Replacement Request for the jobpost :{job_post.job_title} rejected by manager {request.user.username}. Reason: {reason}",
+                    )
+
+                return Response(
+                    {"message": "Replacement request rejected"},
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        except ReplacementCandidates.DoesNotExist:
+            return Response(
+                {"error": "Replacement request not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

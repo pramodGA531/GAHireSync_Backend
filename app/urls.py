@@ -60,7 +60,7 @@ urlpatterns = [
         "accept-job-post/", AcceptJobEditRequestView.as_view(), name="accept-job-post"
     ),
     path(
-        "reject-job-post/", RejectJobEditRequestView.as_view(), name="reject-job-post"
+        "reject-job-edit/", RejectJobEditRequestView.as_view(), name="reject-job-post"
     ),
     path(
         "generatequestionary/<int:job_id>",
@@ -111,6 +111,11 @@ urlpatterns = [
     ),
     path(
         "client/job-postings/", getClientJobposts.as_view(), name="client-job-posting"
+    ),
+    path(
+        "client/job-edit-details/",
+        ClientJobEditStatusAPIView.as_view(),
+        name="client-job-edit-details",
     ),
     path(
         "client/approve-deadline/<int:job_id>/",
@@ -339,7 +344,12 @@ urlpatterns = [
     path(
         "interviewer/jobs-interviews/",
         JobsInterviews.as_view(),
-        name="reject-candidate",
+        name="interviews-of-jobs",
+    ),
+    path(
+        "interviewer/all-alerts/",
+        InterviewerAllAlerts.as_view(),
+        name="interviewer-all-alerts",
     ),
     path("fetch-skills/", JobPostSkillsView.as_view(), name="get-jobpost-skills"),
     path("negotiate-terms/", NegotiateTermsView.as_view(), name="negotiate-terms"),
@@ -503,6 +513,11 @@ urlpatterns = [
         name="get-basic-applicaiton-details",
     ),
     path("manager/clients-data/", ClientsData.as_view(), name="clients-data"),
+    path(
+        "manager/client-communications/",
+        ClientCommunicationsView.as_view(),
+        name="client-communications",
+    ),
     path("manager/get_invoices/", InvoicesAPIView.as_view(), name="get-invoices"),
     path("manager/all-alerts/", ManagerAllAlerts.as_view(), name="manager-all-alerts"),
     path("manager/job-action/", AcceptJobPostView.as_view(), name="accept-job-post"),
@@ -531,6 +546,7 @@ urlpatterns = [
     path(
         "manager/jobs/not-assigned/", NotAssignedJobs.as_view(), name="agency-job-posts"
     ),
+    path("manager/jobs/rejected/", RejectedJobs.as_view(), name="agency-job-posts"),
     path(
         "manager/jobs/closed-hold/", ClosedHoldJobs.as_view(), name="agency-job-posts"
     ),
@@ -626,6 +642,16 @@ urlpatterns = [
         "manager/job/remove-hold/<int:job_id>/",
         RemoveFromHold.as_view(),
         name="manager-remove-job-from-hold",
+    ),
+    path(
+        "manager/replacement-requests/",
+        ManagerReplacementRequestsView.as_view(),
+        name="manager-replacement-requests",
+    ),
+    path(
+        "manager/replacement-action/",
+        ReplacementActionView.as_view(),
+        name="manager-replacement-action",
     ),
     path(
         "manager/old-client-terms/",
@@ -811,6 +837,11 @@ urlpatterns = [
     path("myblogs/", MyBlogs.as_view(), name="his-blogs"),
     path("jobpost/terms/", GetJobPostTerms.as_view(), name="job-terms"),
     path("notifications/", GetNotifications.as_view(), name="all-notifications"),
+    path(
+        "notifications/mark-as-seen/",
+        MarkAllNotificationsAsSeenView.as_view(),
+        name="mark-all-notifications-seen",
+    ),
     path("check-notifications/", check_notifications, name="check-notifications"),
     path(
         "update-notification-seen/",
@@ -871,5 +902,17 @@ urlpatterns = [
         "manager/action/on-edit-job/",
         JobEditRequestActionView.as_view(),
         name="manager-action-on-edit-job",
+    ),
+    path(
+        "candidate/complete-job-details/",
+        CandidateAppliedJobs.as_view(),
+        name="candidate-applied-jobs",
+    ),
+    path("verify-sms/", send_custom_sms),
+    path("send-whatsapp/", send_custom_whatsapp),
+    path(
+        "agency/terms_with_client/",
+        AgencyTermsWithClientAgreedView.as_view(),
+        name="agency-terms-with-client",
     ),
 ]

@@ -311,10 +311,15 @@ class ScheduleInterview(APIView):
                         and application.next_interview.status != "pending"
                     ):
                         continue
-                    interviewer = InterviewerDetails.objects.get(
+                    interviewer_instance = InterviewerDetails.objects.filter(
                         job_id=application.job_location.job_id,
                         round_num=application.round_num,
-                    ).name.username
+                    ).first()
+                    interviewer = (
+                        interviewer_instance.name.username
+                        if interviewer_instance
+                        else "Not Assigned"
+                    )
                     pending_arr.append(
                         {
                             "application_id": application.id,
@@ -529,6 +534,7 @@ class ScheduleInterview(APIView):
                     f"Interviewer: {interviewer.name.username}\n"
                     f"Type of Interview: {interviewer.type_of_interview}\n"
                     f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
+                    f"Interview Link: {meet_link}\n"
                     f"Please check the details here: link::candidate/upcoming_interviews/"
                 ),
             )
@@ -545,7 +551,8 @@ class ScheduleInterview(APIView):
                     f"Round Number: {interviewer.round_num}\n"
                     f"Type of Interview: {interviewer.type_of_interview}\n"
                     f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
-                    f"Please check the interview details here: link::interviewer/interviews/"
+                    f"Interview Link: {meet_link}\n"
+                    f"Please update the status of interviewhere: link::interviewer/interviews/upcoming"
                 ),
             )
             job_profile_log(
@@ -830,6 +837,7 @@ class ReConfirmResumes(APIView):
                     "actual_ctc": job_post.ctc,
                     "recruiter_acceptance": candidate.recruiter_acceptance,
                     "candidate_acceptance": candidate.candidate_acceptance,
+                    "reconfirmed_by_recruiter": candidate.reconfirmed_by_recruiter,
                     "candidate_joining_status": candidate.joining_status,
                 }
                 candidates_list.append(selected_candidate_json)
@@ -844,22 +852,24 @@ class AcceptReconfirmResumes(APIView):
     # Here I need to generate the invoices for now monday need to send or create via celery library
     permission_classes = [IsRecruiter]
 
-    def get(self, request):
-        print("caling")
+    def post(self, request):
+        print("calling accept")
         try:
             id = request.GET.get("selected_candidate_id")
             selected_candidate = SelectedCandidates.objects.get(id=id)
             selected_candidate.recruiter_acceptance = True
+            selected_candidate.reconfirmed_by_recruiter = True
             selected_candidate.save()
             application = selected_candidate.application
             print("application", application)
-            job_posting = application.job_id
+            job_posting = application.job_location.job_id
             print("job_posting", job_posting)
 
             # here I need to fetch the application id with that id terms and conditions need and org,client details too
 
             return Response(
-                {"message": "Reconfirmed successfully"}, status=status.HTTP_200_OK
+                {"message": "Reconfirmed successfully", "ok": True},
+                status=status.HTTP_200_OK,
             )
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
@@ -868,15 +878,18 @@ class AcceptReconfirmResumes(APIView):
 class RejectReconfirmResumes(APIView):
     permission_classes = [IsRecruiter]
 
-    def get(self, request):
+    def post(self, request):
+        print("calling reject")
         try:
             id = request.GET.get("selected_candidate_id")
             selected_candidate = SelectedCandidates.objects.get(id=id)
             selected_candidate.feedback = request.data.get("feedback")
+            selected_candidate.recruiter_acceptance = False
+            selected_candidate.reconfirmed_by_recruiter = False
             selected_candidate.save()
 
             return Response(
-                {"message": "Feedback sent to client successfully"},
+                {"message": "Feedback sent to client successfully", "ok": True},
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
@@ -1194,6 +1207,53 @@ class RecruiterAllAlerts(APIView):
                 elif alert.category == Notifications.CategoryChoices.CANDIDATE_LEFT:
                     candidate_left += 1
 
+            # Job counts
+            active_jobs = AssignedJobs.objects.filter(
+                assigned_to=request.user,
+                job_id__status="Open",
+                job_id__approval_status="accepted",
+            ).count()
+            history_jobs = AssignedJobs.objects.filter(
+                assigned_to=request.user,
+                job_id__status="Closed",
+                job_id__approval_status="accepted",
+            ).count()
+
+            # Application counts
+            to_schedule = (
+                JobApplication.objects.filter(
+                    attached_to=request.user,
+                    status="processing",
+                )
+                .filter(
+                    Q(next_interview__isnull=True) | Q(next_interview__status="pending")
+                )
+                .filter(is_closed=False)
+                .count()
+            )
+            already_scheduled = (
+                JobApplication.objects.filter(
+                    attached_to=request.user,
+                    next_interview__isnull=False,
+                    is_closed=False,
+                )
+                .exclude(next_interview__status="pending")
+                .count()
+            )
+
+            # Reconfirmation counts
+            reconfirm = SelectedCandidates.objects.filter(
+                application__attached_to=request.user,
+                application__status="selected",
+                reconfirmed_by_recruiter=False,
+                application__job_location__job_id__approval_status="accepted",
+            ).count()
+
+            # Replacement counts
+            replacement = ReplacementCandidates.objects.filter(
+                replacement_with__attached_to=request.user, status="pending"
+            ).count()
+
             data = {
                 "assign_job": assign_job,
                 "shortlist_candidate": shortlist_candidate,
@@ -1207,6 +1267,12 @@ class RecruiterAllAlerts(APIView):
                 "candidate_left": candidate_left,
                 "schedule_interview": schedule_interview,
                 "total_alerts": all_alerts.count(),
+                "active_jobs": active_jobs,
+                "history_jobs": history_jobs,
+                "to_schedule": to_schedule,
+                "already_scheduled": already_scheduled,
+                "reconfirm": reconfirm,
+                "replacement": replacement,
             }
 
             return Response({"data": data}, status=status.HTTP_200_OK)
@@ -1501,7 +1567,7 @@ class ReplacementsRequestedToRecruiter(APIView):
     def get(self, request):
         try:
             replacements = ReplacementCandidates.objects.filter(
-                replacement_with__attached_to=request.user
+                replacement_with__attached_to=request.user, status="pending"
             )
             replacements_list = []
             for replacement in replacements:

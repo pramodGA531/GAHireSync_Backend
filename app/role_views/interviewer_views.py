@@ -25,6 +25,7 @@ from ..utils import *
 
 # View all the scheduled interviews
 
+
 class InterviewerDashboardView(APIView):
     permission_classes = [IsInterviewer]
 
@@ -32,118 +33,144 @@ class InterviewerDashboardView(APIView):
         try:
             user = request.user
             today = timezone.localdate()
-            interviewer_details = InterviewerDetails.objects.filter(name = user)
+            interviewer_details = InterviewerDetails.objects.filter(name=user)
             todays_interviews = InterviewSchedule.objects.filter(
-                interviewer__in=interviewer_details,
-                scheduled_date=today
-            ).select_related('candidate', 'job_location')
+                interviewer__in=interviewer_details, scheduled_date=today
+            ).select_related("candidate", "job_location")
 
             todays_interviews_list = []
             today_events = []
             for interview in todays_interviews:
-                todays_interviews_list.append({
-                    "candidate_name": interview.candidate.candidate_name,
-                    "job_title": interview.job_location.job_id.job_title,
-                    "round_num": interview.round_num,
-                    "from_time": interview.from_time.strftime("%I:%M %p"),  
-                    "to_time": interview.to_time.strftime("%I:%M %p"),
-                    "interview_id": interview.id,
-                    "status":interview.status,
-                })
+                todays_interviews_list.append(
+                    {
+                        "candidate_name": interview.candidate.candidate_name,
+                        "job_title": interview.job_location.job_id.job_title,
+                        "round_num": interview.round_num,
+                        "from_time": interview.from_time.strftime("%I:%M %p"),
+                        "to_time": interview.to_time.strftime("%I:%M %p"),
+                        "interview_id": interview.id,
+                        "status": interview.status,
+                    }
+                )
 
-                today_events.append({
-                    "id": interview.id,
-                    "title": f"Interview with {interview.candidate.candidate_name}",
-                    "startTime": interview.from_time.strftime("%I:%M %p"),
-                    "endTime": interview.to_time.strftime("%I:%M %p"),
-                    "type": "processing" if interview.status == 'pending' else 'success'
-                })
-                
+                today_events.append(
+                    {
+                        "id": interview.id,
+                        "title": f"Interview with {interview.candidate.candidate_name}",
+                        "startTime": interview.from_time.strftime("%I:%M %p"),
+                        "endTime": interview.to_time.strftime("%I:%M %p"),
+                        "type": (
+                            "processing" if interview.status == "pending" else "success"
+                        ),
+                    }
+                )
+
             missed_interviews = InterviewSchedule.objects.filter(
                 interviewer__in=interviewer_details,
                 scheduled_date__lt=today,
-                status='pending'
-            ).select_related('candidate', 'job_location')
+                status="pending",
+            ).select_related("candidate", "job_location")
 
             missed_interviews_list = []
             for interview in missed_interviews:
-                missed_interviews_list.append({
-                    "candidate_name": interview.candidate.candidate_name,
-                    "job_title": interview.job_location.job_id.job_title,
-                    "round_num": interview.round_num,
-                    "from_time": interview.from_time.strftime("%I:%M %p"),
-                    "to_time": interview.to_time.strftime("%I:%M %p"),
-                    "interview_id": interview.id,
-                })
+                missed_interviews_list.append(
+                    {
+                        "candidate_name": interview.candidate.candidate_name,
+                        "job_title": interview.job_location.job_id.job_title,
+                        "round_num": interview.round_num,
+                        "from_time": interview.from_time.strftime("%I:%M %p"),
+                        "to_time": interview.to_time.strftime("%I:%M %p"),
+                        "interview_id": interview.id,
+                    }
+                )
 
             # Total assigned and completed interviews
-            assigned_interviews = InterviewSchedule.objects.filter(interviewer__in = interviewer_details)
+            assigned_interviews = InterviewSchedule.objects.filter(
+                interviewer__in=interviewer_details
+            )
             total_assigned = assigned_interviews.count()
-            total_completed = assigned_interviews.filter(status='completed').count()
+            total_completed = assigned_interviews.filter(status="completed").count()
 
-            data = {
-                "assigned": total_assigned,
-                "completed": total_completed
-            }
+            data = {"assigned": total_assigned, "completed": total_completed}
 
             # Final response
-            return Response({
-                "data": data,
-                "missed_interviews": missed_interviews_list,
-                "today_interviews": todays_interviews_list,
-                "events": today_events
-            }, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "data": data,
+                    "missed_interviews": missed_interviews_list,
+                    "today_interviews": todays_interviews_list,
+                    "events": today_events,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             # Log the error for debugging
             return Response(
                 {"error": "Something went wrong. Please try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-   
+
 
 class ScheduledInterviewsView(APIView):
     permission_classes = [IsInterviewer]
     pagination_class = TenResultsPagination
-    
+
     def get(self, request):
         try:
-            if request.GET.get('id'):
+            if request.GET.get("id"):
                 try:
-                    interview_id = request.GET.get('id')
-                    scheduled_interview = InterviewSchedule.objects.get(id = interview_id)
+                    interview_id = request.GET.get("id")
+                    scheduled_interview = InterviewSchedule.objects.get(id=interview_id)
                     candidate = scheduled_interview.candidate
                     try:
                         interview_details_json = {
-                            "job_id" : scheduled_interview.job_location.job_id.id,
+                            "job_id": scheduled_interview.job_location.job_id.id,
                             "job_title": scheduled_interview.job_location.job_id.job_title,
                             "job_department": scheduled_interview.job_location.job_id.job_department,
-                            "interviewer_name" : scheduled_interview.interviewer.name.username,
-                            "candidate_name" : scheduled_interview.candidate.candidate_name,
-                            "candidate_resume_id": JobApplication.objects.get(next_interview = scheduled_interview).resume.id,
-                            "round_num" : scheduled_interview.round_num,
+                            "interviewer_name": scheduled_interview.interviewer.name.username,
+                            "candidate_name": scheduled_interview.candidate.candidate_name,
+                            "candidate_resume_id": JobApplication.objects.get(
+                                next_interview=scheduled_interview
+                            ).resume.id,
+                            "round_num": scheduled_interview.round_num,
                             "scheduled_date": scheduled_interview.scheduled_date,
                             "from_time": scheduled_interview.from_time,
                             "to_time": scheduled_interview.to_time,
                         }
-                        return Response(interview_details_json, status = status.HTTP_200_OK)
+                        return Response(
+                            interview_details_json, status=status.HTTP_200_OK
+                        )
                     except Exception as e:
-                        return Response({"error":str(e)}, status= status.HTTP_400_BAD_REQUEST)
+                        return Response(
+                            {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
+                        )
 
                 except InterviewSchedule.DoesNotExist:
-                    return Response({"error":"There is no interview scheduled with that id"}, status = status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"error": "There is no interview scheduled with that id"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 except Exception as e:
                     print(str(e))
-                    return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
+                    )
             else:
-               
-                interviews = InterviewSchedule.objects.filter(interviewer__name = request.user, status = 'scheduled' )
+
+                interviews = InterviewSchedule.objects.filter(
+                    interviewer__name=request.user, status="scheduled"
+                )
 
                 scheduled_list = []
                 for interview in interviews:
-                    application_by_resume = JobApplication.objects.filter(resume=interview.candidate).first()
+                    application_by_resume = JobApplication.objects.filter(
+                        resume=interview.candidate
+                    ).first()
 
-                    application_by_interview = JobApplication.objects.filter(next_interview=interview).first()
+                    application_by_interview = JobApplication.objects.filter(
+                        next_interview=interview
+                    ).first()
 
                     id = interview.id
                     scheduled_date = interview.scheduled_date
@@ -158,35 +185,38 @@ class ScheduledInterviewsView(APIView):
                         application_id = application_by_interview.id
                     elif application_by_resume:
                         candidate_name = application_by_resume.resume.candidate_name
-                        statuss = "completed"  
+                        statuss = "completed"
                         application_id = application_by_resume.id
                     else:
                         # Fallback if no application found
                         candidate_name = interview.candidate.candidate_name
                         statuss = "completed"
-                        application_id = None  
+                        application_id = None
 
-                    scheduled_list.append({
-                        "interview_id": id,
-                        "job_id": job_id,
-                        "job_title": job_title,
-                        "candidate_name": candidate_name,
-                        "round_of_interview": round_of_interview,
-                        "scheduled_date": scheduled_date,
-                        "timings": timings,
-                        "location": interview.job_location.location,
-                        "status": statuss,
-                        "application_id": application_id,
-                    })
+                    scheduled_list.append(
+                        {
+                            "interview_id": id,
+                            "job_id": job_id,
+                            "job_title": job_title,
+                            "candidate_name": candidate_name,
+                            "round_of_interview": round_of_interview,
+                            "scheduled_date": scheduled_date,
+                            "timings": timings,
+                            "location": interview.job_location.location,
+                            "status": statuss,
+                            "application_id": application_id,
+                        }
+                    )
 
                 paginator = self.pagination_class()
-                paginated_data = paginator.paginate_queryset(scheduled_list,request)
+                paginated_data = paginator.paginate_queryset(scheduled_list, request)
 
                 return paginator.get_paginated_response(paginated_data)
 
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class CompletedInterviewsView(APIView):
     permission_classes = [IsInterviewer]
@@ -195,30 +225,38 @@ class CompletedInterviewsView(APIView):
     def get(self, request):
         try:
             user = request.user
-            interviews = InterviewerDetails.objects.filter(name = user)
-            scheduled_interviews = InterviewSchedule.objects.filter(interviewer__in = interviews, status = 'completed')
-            evaluations = CandidateEvaluation.objects.filter(interview_schedule__in = scheduled_interviews)
+            interviews = InterviewerDetails.objects.filter(name=user)
+            scheduled_interviews = InterviewSchedule.objects.filter(
+                interviewer__in=interviews, status="completed"
+            )
+            evaluations = CandidateEvaluation.objects.filter(
+                interview_schedule__in=scheduled_interviews
+            )
             evaluation_list = []
             for evaluation in evaluations:
-                evaluation_list.append({
-                    "job_title": evaluation.job_location.job_id.job_title,
-                    "round_num": evaluation.interview_schedule.round_num,
-                    "mode_of_interview": evaluation.interview_schedule.interviewer.mode_of_interview,
-                    "candidate_name": evaluation.job_application.resume.candidate_name,
-                    "scheduled_date": evaluation.interview_schedule.scheduled_date,
-                    "primary_skills_rating":evaluation.primary_skills_rating,
-                    "secondary_skills_rating": evaluation.secondary_skills_ratings,
-                    "remarks": evaluation.remarks,
-                    "evaluation_id": evaluation.id
-                })
-            
+                evaluation_list.append(
+                    {
+                        "job_id": evaluation.job_location.job_id.id,
+                        "job_title": evaluation.job_location.job_id.job_title,
+                        "round_num": evaluation.interview_schedule.round_num,
+                        "mode_of_interview": evaluation.interview_schedule.interviewer.mode_of_interview,
+                        "candidate_name": evaluation.job_application.resume.candidate_name,
+                        "scheduled_date": evaluation.interview_schedule.scheduled_date,
+                        "primary_skills_rating": evaluation.primary_skills_rating,
+                        "secondary_skills_rating": evaluation.secondary_skills_ratings,
+                        "remarks": evaluation.remarks,
+                        "evaluation_id": evaluation.id,
+                    }
+                )
+
             paginator = self.pagination_class()
-            paginated_data = paginator.paginate_queryset( evaluation_list, request)
+            paginated_data = paginator.paginate_queryset(evaluation_list, request)
             return paginator.get_paginated_response(paginated_data)
-        
+
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class MissedInterviewsView(APIView):
     permission_classes = [IsInterviewer]
@@ -229,74 +267,90 @@ class MissedInterviewsView(APIView):
             today = timezone.localdate()
             time = timezone.localtime()
             user = request.user
-            interviews = InterviewerDetails.objects.filter(name = user)
-            scheduled_interviews = InterviewSchedule.objects.filter(interviewer__in = interviews, status = 'pending', scheduled_date__lte = today, to_time__lte = time )
+            interviews = InterviewerDetails.objects.filter(name=user)
+            scheduled_interviews = InterviewSchedule.objects.filter(
+                interviewer__in=interviews,
+                status="pending",
+                scheduled_date__lte=today,
+                to_time__lte=time,
+            )
             interviews_list = []
             for interview in scheduled_interviews:
-                interviews_list.append({
-                    "job_title": interview.job_id.job_title,
-                    "round_num": interview.round_num,
-                    "mode_of_interview": interview.interviewer.mode_of_interview,
-                    "candidate_name": interview.candidate.candidate_name,
-                    "scheduled_date": interview.scheduled_date,
-                    "scheduled_timings": f"{interview.from_time} - {interview.to_time}",
-                    "interview_id": interview.id
-                })
-            
+                interviews_list.append(
+                    {
+                        "job_title": interview.job_id.job_title,
+                        "round_num": interview.round_num,
+                        "mode_of_interview": interview.interviewer.mode_of_interview,
+                        "candidate_name": interview.candidate.candidate_name,
+                        "scheduled_date": interview.scheduled_date,
+                        "scheduled_timings": f"{interview.from_time} - {interview.to_time}",
+                        "interview_id": interview.id,
+                    }
+                )
+
             paginator = self.pagination_class()
-            paginated_data = paginator.paginate_queryset( interviews_list, request)
+            paginated_data = paginator.paginate_queryset(interviews_list, request)
             return paginator.get_paginated_response(paginated_data)
-        
+
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
-        
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        
+
 # Get all the primary skills, secondary skills of the job post , to give the rating
+
 
 class JobPostSkillsView(APIView):
     def get(self, request):
         try:
-            if not request.GET.get('id'):
-                return Response({"error":"Job ID is required to fetch the details"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            job_id = request.GET.get('id')
-            job = JobPostings.objects.get(id = job_id)
-            
+            if not request.GET.get("id"):
+                return Response(
+                    {"error": "Job ID is required to fetch the details"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            job_id = request.GET.get("id")
+            job = JobPostings.objects.get(id=job_id)
+
             skills = job.skills.all()
             skills_json = {
                 "primary_skills": [
                     {"skill_name": skill.skill_name, "skill_metric": skill.metric_type}
-                    for skill in job.skills.all() if skill.is_primary
+                    for skill in job.skills.all()
+                    if skill.is_primary
                 ],
                 "secondary_skills": [
                     {"skill_name": skill.skill_name, "skill_metric": skill.metric_type}
-                    for skill in job.skills.all() if not skill.is_primary
-                ]
+                    for skill in job.skills.all()
+                    if not skill.is_primary
+                ],
             }
 
+            resume_id = request.GET.get("resume_id")
 
-            resume_id = request.GET.get('resume_id')
-            
-            application = JobApplication.objects.get(resume__id = resume_id)
+            application = JobApplication.objects.get(resume__id=resume_id)
 
             application_round = application.round_num
             job_post_rounds = application.job_location.job_id.rounds_of_interview
 
-            if(application_round < job_post_rounds):
+            if application_round < job_post_rounds:
                 has_next_round = True
             else:
                 has_next_round = False
 
-            return Response({"data":skills_json, "has_next_round":has_next_round}, status=status.HTTP_200_OK)
+            return Response(
+                {"data": skills_json, "has_next_round": has_next_round},
+                status=status.HTTP_200_OK,
+            )
 
         except JobPostings.DoesNotExist:
-            return Response({"error":"Job Not found"}, status= status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Job Not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Get Previous Interview Remarks for every candidate
@@ -304,24 +358,37 @@ class PrevInterviewRemarksView(APIView):
     def get(self, request):
         try:
             if not request.user.is_authenticated:
-                return Response({"error": "User is not authenticated"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not request.user.role == 'interviewer':
-                return Response({"error":"You are not allowed to run this view"}, status = status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "User is not authenticated"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            resume_id = request.GET.get('id')
-            resume = CandidateResume.objects.get(id = resume_id)
-            application = JobApplication.objects.get(resume = resume)
-            application_id  = application.id
+            if not request.user.role == "interviewer":
+                return Response(
+                    {"error": "You are not allowed to run this view"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            resume_id = request.GET.get("id")
+            resume = CandidateResume.objects.get(id=resume_id)
+            application = JobApplication.objects.get(resume=resume)
+            application_id = application.id
             if not application_id:
-                return Response({"error":"Application ID is requrired"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            application_evaluations = CandidateEvaluation.objects.filter(job_application = application_id)
-            evaluation_serializer = CandidateEvaluationSerializer(application_evaluations, many=True)
-            
-            
-            return Response({"data":evaluation_serializer.data},status= status.HTTP_200_OK)
-        
+                return Response(
+                    {"error": "Application ID is requrired"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            application_evaluations = CandidateEvaluation.objects.filter(
+                job_application=application_id
+            )
+            evaluation_serializer = CandidateEvaluationSerializer(
+                application_evaluations, many=True
+            )
+
+            return Response(
+                {"data": evaluation_serializer.data}, status=status.HTTP_200_OK
+            )
 
         except Exception as e:
             print(str(e))
@@ -330,168 +397,228 @@ class PrevInterviewRemarksView(APIView):
 
 # Handling Candidate after completion of interview
 
+
 # Promote Candidate to next round
 class PromoteCandidateView(APIView):
     def post(self, request):
         try:
-            resume_id = int(request.GET.get('id'))
-            round_num = int(request.GET.get('round_num'))
+            resume_id = int(request.GET.get("id"))
+            round_num = int(request.GET.get("round_num"))
             remarks = request.data.get("remarks")
-            if remarks == '':
-                return Response({"error":"Please enter remarks and promote the candidate"}, status=status.HTTP_400_BAD_REQUEST)
+            if remarks == "":
+                return Response(
+                    {"error": "Please enter remarks and promote the candidate"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             try:
-                application = JobApplication.objects.get(resume__id = resume_id)
+                application = JobApplication.objects.get(resume__id=resume_id)
             except JobApplication.DoesNotExist:
-                return Response({"error":"Job application matching query doesnot exists"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if application.job_location.job_id.status == 'closed':
-                return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Job application matching query doesnot exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            primary_skills = request.data.get('primary_skills')
-            secondary_skills = request.data.get('secondary_skills')
-            remarks = request.data.get('remarks', "")
-            score = request.data.get('score', 0)
+            if application.job_location.job_id.status == "closed":
+                return Response(
+                    {
+                        "error": "Unable to promote/select the candidate, job post is closed"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            primary_skills = request.data.get("primary_skills")
+            secondary_skills = request.data.get("secondary_skills")
+            remarks = request.data.get("remarks", "")
+            score = request.data.get("score", 0)
             print(application.resume.candidate_name)
-            candidate = CandidateProfile.objects.get(name__email = application.resume.candidate_email)
-
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating = primary_skills,
-                secondary_skills_ratings = secondary_skills,
-                candidate = candidate,
-                round_num = round_num,
-                remarks = remarks,
-                status = "SELECTED",
-                job_application = application,
-                score = score,
-                job_location = application.job_location,
-                interview_schedule = application.next_interview,
+            candidate = CandidateProfile.objects.get(
+                name__email=application.resume.candidate_email
             )
 
+            remarks = CandidateEvaluation.objects.create(
+                primary_skills_rating=primary_skills,
+                secondary_skills_ratings=secondary_skills,
+                candidate=candidate,
+                round_num=round_num,
+                remarks=remarks,
+                status="SELECTED",
+                job_application=application,
+                score=score,
+                job_location=application.job_location,
+                interview_schedule=application.next_interview,
+            )
 
-            application.next_interview.status = 'completed'
+            application.next_interview.status = "completed"
             application.next_interview.save()
-            application.round_num = round_num+1 
+            application.round_num = round_num + 1
             application.next_interview = None
-            application.status = 'processing'
+            application.status = "processing"
             application.save()
-            customCand=CustomUser.objects.get(email=candidate.email)
+            customCand = CustomUser.objects.get(email=candidate.email)
 
             job = application.job_location.job_id
-            
+
             Notifications.objects.create(
-    sender=request.user,
-    category = Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
-    receiver=application.attached_to,
-    subject=f"Candidate {customCand.username} has been cleared interview {application.round_num-1} for the role {job.job_title}",
-    message=(
-        f"Candidate Promotion Notice\n\n"
-        f"Client: {request.user.username}\n"
-        f"Position: {job.job_title}\n\n"
-        f"The candidate {customCand.username} has successfully cleared round {application.round_num-1}. "
-        f"Please schedule interview {application.round_num} availability of candidate and interviewer\n\n"
-        f"link::recruiter/schedule_applications/"
-    )
-)
-            job_post_log(# need to change the function and id 
-    job.id,
-    f"Interviewer {request.user.username} conducted the interview and selected candidate {customCand.username}"
-)
+                sender=request.user,
+                category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
+                receiver=application.attached_to,
+                subject=f"Candidate {customCand.username} has been cleared interview {application.round_num-1} for the role {job.job_title}",
+                message=(
+                    f"Candidate Promotion Notice\n\n"
+                    f"Client: {request.user.username}\n"
+                    f"Position: {job.job_title}\n\n"
+                    f"The candidate {customCand.username} has successfully cleared round {application.round_num-1}. "
+                    f"Please schedule interview {application.round_num} availability of candidate and interviewer\n\n"
+                    f"link::recruiter/schedule_applications/"
+                ),
+            )
+            job_post_log(  # need to change the function and id
+                job.id,
+                f"Interviewer {request.user.username} conducted the interview and selected candidate {customCand.username}",
+            )
             Notifications.objects.create(
-    sender=request.user,
-    receiver=customCand,
-    category = Notifications.CategoryChoices.PROMOTE_CANDIDATE,
-    subject=f"Congratulations {customCand.username}! You have qualified for the next round for the role {job.job_title}",
-    message=(
-        f"Interview Progress Update\n\n"
-        f"Dear {customCand.username},\n\n"
-        f"Congratulations! You have successfully cleared round {application.round_num-1} "
-        f"for the position of {job.job_title}.\n\n"
-        f"We will be scheduling your next interview (Round {application.round_num}) soon. "
-        f"Our team will contact you regarding your availability.\n\n"
-        f"Stay tuned!\n\n"
-    )
-)
-            return Response({"message":"Candidate promoted to nexts round successfully"},status = status.HTTP_201_CREATED)
+                sender=request.user,
+                receiver=customCand,
+                category=Notifications.CategoryChoices.PROMOTE_CANDIDATE,
+                subject=f"Congratulations {customCand.username}! You have qualified for the next round for the role {job.job_title}",
+                message=(
+                    f"Interview Progress Update\n\n"
+                    f"Dear {customCand.username},\n\n"
+                    f"Congratulations! You have successfully cleared round {application.round_num-1} "
+                    f"for the position of {job.job_title}.\n\n"
+                    f"We will be scheduling your next interview (Round {application.round_num}) soon. "
+                    f"Our team will contact you regarding your availability.\n\n"
+                    f"Stay tuned!\n\n"
+                ),
+            )
+
+            # Notification to Manager (Feedback Added)
+            manager = job.organization.manager
+            if manager:
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=manager,
+                    category=Notifications.CategoryChoices.INTERVIEW_FEEDBACK_ADDED,
+                    subject=f"Interview Feedback: {customCand.username} promoted to Round {application.round_num}",
+                    message=f"Interviewer {request.user.username} has promoted candidate {customCand.username} for the role '{job.job_title}' to round {application.round_num}.\n\nRemarks: {remarks.remarks}",
+                )
+                send_custom_mail(
+                    subject=f"Interview Feedback Added - {customCand.username}",
+                    to_email=[manager.email],
+                    body=f"Hello {manager.username},\n\nInterviewer {request.user.username} has provided feedback and promoted candidate {customCand.username} to Round {application.round_num} for the position '{job.job_title}'.\n\nPlease check the dashboard for details.\n\nGA Hiresync Team",
+                )
+
+            return Response(
+                {"message": "Candidate promoted to nexts round successfully"},
+                status=status.HTTP_201_CREATED,
+            )
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-# Reject Candidate 
+
+# Reject Candidate
 class RejectCandidate(APIView):
     def post(self, request):
         try:
-            resume_id = request.GET.get('id')
-            round_num = request.data.get('round_num')
-            application = JobApplication.objects.get(resume = resume_id)
+            resume_id = request.GET.get("id")
+            round_num = request.data.get("round_num")
+            application = JobApplication.objects.get(resume=resume_id)
 
-            if application.status == 'closed':
-                return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
+            if application.status == "closed":
+                return Response(
+                    {
+                        "error": "Unable to promote/select the candidate, job post is closed"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            primary_skills = request.data.get('primary_skills', '')
-            secondary_skills = request.data.get('secondary_skills', '')
-            remarks = request.data.get('remarks', "")
-            score = request.data.get('score', 0)
+            primary_skills = request.data.get("primary_skills", "")
+            secondary_skills = request.data.get("secondary_skills", "")
+            remarks = request.data.get("remarks", "")
+            score = request.data.get("score", 0)
 
-            candidate = CandidateProfile.objects.get(name__username = application.resume.candidate_name)
+            candidate = CandidateProfile.objects.get(
+                name__username=application.resume.candidate_name
+            )
 
             remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating = primary_skills,
-                secondary_skills_ratings = secondary_skills,
-                candidate = candidate,
-                round_num = round_num,
-                remarks = remarks,
-                status = "REJECTED",
-                job_application = application,
-                score = score,
-                job_location = application.job_location,
-                interview_schedule = application.next_interview,
+                primary_skills_rating=primary_skills,
+                secondary_skills_ratings=secondary_skills,
+                candidate=candidate,
+                round_num=round_num,
+                remarks=remarks,
+                status="REJECTED",
+                job_application=application,
+                score=score,
+                job_location=application.job_location,
+                interview_schedule=application.next_interview,
             )
-            application.next_interview.status = 'completed'
+            application.next_interview.status = "completed"
             application.next_interview.save()
-            application.status = 'rejected'
+            application.status = "rejected"
             application.save()
-            
-            customCand=CustomUser.objects.get(email=candidate.email)
+
+            customCand = CustomUser.objects.get(email=candidate.email)
 
             job = application.job_location.job_id
-            
+
             Notifications.objects.create(
+                sender=request.user,
+                category=Notifications.CategoryChoices.REJECT_CANDIDATE,
+                receiver=application.attached_to,
+                subject=f"Candidate {customCand.username} is rejected for the role {job.job_title}",
+                message=(
+                    f"Candidate Rejection Notice\n\n"
+                    f"Client: {request.user.username}\n"
+                    f"Position: {job.job_title}\n\n"
+                    f"{request.user.username} has conducted the interview for round {application.next_interview.round_num} "
+                    f"with the submitted candidate {customCand.username} for the position of {job.job_title}, "
+                    f"and has decided not to move forward with them at this time.\n\n"
+                    f"link::recruiter/postings/"
+                ),
+            )
+
+            Notifications.objects.create(
+                sender=request.user,
+                receiver=customCand,
+                category=Notifications.CategoryChoices.REJECT_CANDIDATE,
+                subject=f"Update on your application for the role {job.job_title}",
+                message=(
+                    f"Application Update\n\n"
+                    f"Dear {customCand.username},\n\n"
+                    f"We appreciate your interest in the {job.job_title} position.\n\n"
+                    f"After careful consideration following your interview for round {application.next_interview.round_num}, "
+                    f"we regret to inform you that we will not be moving forward with your application at this time.\n\n"
+                ),
+            )
+
+            # Notification to Manager (Feedback Added)
+            manager = job.organization.manager
+            if manager:
+                Notifications.objects.create(
                     sender=request.user,
-                    category = Notifications.CategoryChoices.REJECT_CANDIDATE,
-                    receiver=application.attached_to,
-                    subject=f"Candidate {customCand.username} is rejected for the role {job.job_title}",
-                    message = (
-    f"Candidate Rejection Notice\n\n"
-    f"Client: {request.user.username}\n"
-    f"Position: {job.job_title}\n\n"
-    f"{request.user.username} has conducted the interview for round {application.next_interview.round_num} "
-    f"with the submitted candidate {customCand.username} for the position of {job.job_title}, "
-    f"and has decided not to move forward with them at this time.\n\n"
-    f"link::recruiter/postings/"
-)
-)
-            
-            Notifications.objects.create(
-    sender=request.user,
-    receiver=customCand,
-    category = Notifications.CategoryChoices.REJECT_CANDIDATE,
-    subject=f"Update on your application for the role {job.job_title}",
-    message=(
-        f"Application Update\n\n"
-        f"Dear {customCand.username},\n\n"
-        f"We appreciate your interest in the {job.job_title} position.\n\n"
-        f"After careful consideration following your interview for round {application.next_interview.round_num}, "
-        f"we regret to inform you that we will not be moving forward with your application at this time.\n\n"
-    )
-)
-            job_post_log(# need to change the function and id 
-    job.id,
-    f"Interviewer {request.user.username} conducted the interview and Rejected candidate {customCand.username} reson: {remarks}"
-)
-            return Response({"message":"Rejected successfully"},status = status.HTTP_201_CREATED)
+                    receiver=manager,
+                    category=Notifications.CategoryChoices.INTERVIEW_FEEDBACK_ADDED,
+                    subject=f"Interview Feedback (Rejected): {customCand.username}",
+                    message=f"Interviewer {request.user.username} has rejected candidate {customCand.username} for the role '{job.job_title}'.\n\nRemarks: {remarks.remarks}",
+                )
+                send_custom_mail(
+                    subject=f"Interview Feedback Added (Rejected) - {customCand.username}",
+                    to_email=[manager.email],
+                    body=f"Hello {manager.username},\n\nInterviewer {request.user.username} has provided feedback and rejected candidate {customCand.username} for the position '{job.job_title}'.\n\nPlease check the dashboard for details.\n\nGA Hiresync Team",
+                )
+
+            job_post_log(  # need to change the function and id
+                job.id,
+                f"Interviewer {request.user.username} conducted the interview and Rejected candidate {customCand.username} reson: {remarks}",
+            )
+            return Response(
+                {"message": "Rejected successfully"}, status=status.HTTP_201_CREATED
+            )
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SelectCandidate(APIView):
@@ -500,18 +627,21 @@ class SelectCandidate(APIView):
     def sendAlert(self, job_location_id):
         try:
             try:
-                job_location = JobLocationsModel.objects.get(id = job_location_id)
-                job_assigned = AssignedJobs.objects.get(job_location = job_location)
+                job_location = JobLocationsModel.objects.get(id=job_location_id)
+                job_assigned = AssignedJobs.objects.get(job_location=job_location)
                 job_post = job_location.job_id
             except JobPostings.DoesNotExist:
-                return Response({"error":'Job posting does not exists'},status= status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Job posting does not exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             client_email = job_post.username.email
             manager_email = job_post.organization.manager.email
-            recruiters_emails = job_assigned.assigned_to.values_list('email', flat=True)
+            recruiters_emails = job_assigned.assigned_to.values_list("email", flat=True)
 
             subject = f"JOB POST {job_post.job_title} ALL OPENINGS ARE COMPLETED"
-            client_message = '''
+            client_message = """
 All openings of the given job post are completed successfully,
 If you want to recruit more people for the same job post , please go through the below link and give the number of positions you want
 link here
@@ -520,9 +650,9 @@ Thankyou for choosing hiresync,
 Best Regards, 
 Kalki,
 HireSync.
-'''         
+"""
 
-            organization_recruiters_message = f'''
+            organization_recruiters_message = f"""
 All openings for the job post {job_post.job_title} are filled successfully
 Client will inform you if they want more job posts
 Thank you for choosing hiresync
@@ -530,161 +660,209 @@ Thank you for choosing hiresync
 Best Regards,
 Kalki,
 HireSync.
-'''
-            send_custom_mail(  subject=subject,
-                body=client_message,
-                to_email=[client_email])
-          
-            send_custom_mail(subject=subject, body = organization_recruiters_message, to_email=[manager_email, recruiters_emails])
+"""
+            send_custom_mail(
+                subject=subject, body=client_message, to_email=[client_email]
+            )
 
-            return Response({"message":"Candidate Selected Successfully"}, status=status.HTTP_200_OK)
+            send_custom_mail(
+                subject=subject,
+                body=organization_recruiters_message,
+                to_email=[manager_email, recruiters_emails],
+            )
+
+            return Response(
+                {"message": "Candidate Selected Successfully"},
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     def post(self, request):
         try:
-            resume_id = request.GET.get('id')
-            round_num = request.GET.get('round_num')
-            application = JobApplication.objects.get(resume = resume_id)
-            
-            if application.job_location.job_id.status == 'closed':
-                return Response({"error":"Unable to promote/select the candidate, job post is closed"}, status=status.HTTP_400_BAD_REQUEST)
+            resume_id = request.GET.get("id")
+            round_num = request.GET.get("round_num")
+            application = JobApplication.objects.get(resume=resume_id)
 
+            if application.job_location.job_id.status == "closed":
+                return Response(
+                    {
+                        "error": "Unable to promote/select the candidate, job post is closed"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            remarks = request.data.get('remarks')
+            remarks = request.data.get("remarks")
             if remarks == None:
-                return Response({"error":"Please enter remarks"}, status=status.HTTP_400_BAD_REQUEST)
-            
+                return Response(
+                    {"error": "Please enter remarks"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             print("entered here")
 
-            num_of_postings_completed = JobApplication.objects.filter(job_location = application.job_location.id, status = 'selected').count()
+            num_of_postings_completed = JobApplication.objects.filter(
+                job_location=application.job_location.id, status="selected"
+            ).count()
             req_postings = application.job_location.positions
 
-            if(num_of_postings_completed >= req_postings):
-                return Response({"error":"All job openings are filled"}, status=status.HTTP_400_BAD_REQUEST)
-            
+            if num_of_postings_completed >= req_postings:
+                return Response(
+                    {"error": "All job openings are filled"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            primary_skills = request.data.get('primary_skills')
-            secondary_skills = request.data.get('secondary_skills')
-            remarks = request.data.get('remarks', "")
-            score = request.data.get('score', 0)
-            
-            candidate = CandidateProfile.objects.get(name__email = application.resume.candidate_email)
+            primary_skills = request.data.get("primary_skills")
+            secondary_skills = request.data.get("secondary_skills")
+            remarks = request.data.get("remarks", "")
+            score = request.data.get("score", 0)
+
+            candidate = CandidateProfile.objects.get(
+                name__email=application.resume.candidate_email
+            )
 
             print("Entered here")
 
             with transaction.atomic():
 
                 CandidateEvaluation.objects.create(
-                    primary_skills_rating = primary_skills,
-                    secondary_skills_ratings = secondary_skills,
-                    candidate = candidate,
-                    round_num = round_num,
-                    remarks = remarks,
-                    status = "SELECTED",
-                    job_application = application,
-                    score = score,
-                    job_location = application.job_location,
-                    interview_schedule = application.next_interview,
+                    primary_skills_rating=primary_skills,
+                    secondary_skills_ratings=secondary_skills,
+                    candidate=candidate,
+                    round_num=round_num,
+                    remarks=remarks,
+                    status="SELECTED",
+                    job_application=application,
+                    score=score,
+                    job_location=application.job_location,
+                    interview_schedule=application.next_interview,
                 )
-                application.next_interview.status = 'completed'
+                application.next_interview.status = "completed"
                 application.next_interview.save()
-                application.status = 'hold'
+                application.status = "hold"
                 application.next_interview = None
                 application.save()
-                customCand=CustomUser.objects.get(email=candidate.email)
+                customCand = CustomUser.objects.get(email=candidate.email)
                 job = application.job_location.job_id
                 Notifications.objects.create(
-    sender=request.user,
-    receiver=customCand,
-    category = Notifications.CategoryChoices.ONHOLD_CANDIDATE,
-    subject=f"Update on your application for the role {job.job_title}",
-    message=(
-        f"Application Update\n\n"
-        f"Dear {customCand.username},\n\n"
-        f"We appreciate your interest in the {job.job_title} position with {request.user.username}.\n\n"
-        f"We are pleased to inform you that you have successfully cleared all rounds of the interview process.\n\n"
-        f"Your profile is now under final review for the last call.\n"
-        f"Our team will get back to you shortly with the final update.\n\n"
-        f"Thank you for your patience and continued interest.\n\n"
-        f"Best wishes,\n"
-    )
-)
+                    sender=request.user,
+                    receiver=customCand,
+                    category=Notifications.CategoryChoices.ONHOLD_CANDIDATE,
+                    subject=f"Update on your application for the role {job.job_title}",
+                    message=(
+                        f"Application Update\n\n"
+                        f"Dear {customCand.username},\n\n"
+                        f"We appreciate your interest in the {job.job_title} position with {request.user.username}.\n\n"
+                        f"We are pleased to inform you that you have successfully cleared all rounds of the interview process.\n\n"
+                        f"Your profile is now under final review for the last call.\n"
+                        f"Our team will get back to you shortly with the final update.\n\n"
+                        f"Thank you for your patience and continued interest.\n\n"
+                        f"Best wishes,\n"
+                    ),
+                )
                 Notifications.objects.create(
-    sender=request.user,
-    receiver=job.username,
-    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
-    subject=f"Profile cleared all interviews for {job.job_title} — Final Confirmation Needed",
-    message=(
-        f"Application Update\n\n"
-        f"Position: {job.job_title}\n\n"
-        f"The candidate {customCand.username} has successfully completed all rounds of interviews for the "
-        f"position of {job.job_title}.\n\n"
-        f"Please review the candidate’s profile and provide your final decision regarding their selection.\n\n"
-        f"link::client/candidates/"
-    )
-)           
-                
-                Notifications.objects.create(
-    sender=request.user,
-    category = Notifications.CategoryChoices.SELECT_CANDIDATE,
-    receiver=application.attached_to,
-    subject=f"Candidate {customCand.username} has cleared all interviews for the role {job.job_title}",
-    message=(
-        f"Candidate Progress Update\n\n"
-        f"Client: {request.user.username}\n"
-        f"Position: {job.job_title}\n\n"
-        f"{request.user.username} has completed all interview rounds with the candidate {customCand.username} "
-        f"for the position of {job.job_title}.\n\n"
-        f"The candidate has successfully cleared all interviews and their profile is now under final review by the client.\n"
-        f"Kindly follow up with the client for the final decision.\n\n"
-        f"link::recruiter/postings/"
-    )
-)
-                job_profile_log(
-    application.id,
-    f"Candidate '{customCand.username}' ({customCand.email}) has cleared all rounds of the interview process.\n"
-    f"Status: On Hold (Final Client Decision Pending)\n"
-    f"Role: {job.job_title}\n"
-    f"Recruiter: {request.user.username}"
-)
+                    sender=request.user,
+                    receiver=job.username,
+                    category=Notifications.CategoryChoices.SELECT_CANDIDATE,
+                    subject=f"Profile cleared all interviews for {job.job_title} — Final Confirmation Needed",
+                    message=(
+                        f"Application Update\n\n"
+                        f"Position: {job.job_title}\n\n"
+                        f"The candidate {customCand.username} has successfully completed all rounds of interviews for the "
+                        f"position of {job.job_title}.\n\n"
+                        f"Please review the candidate’s profile and provide your final decision regarding their selection.\n\n"
+                        f"link::client/candidates/onhold"
+                    ),
+                )
 
-                
-                applications_selected  = JobApplication.objects.filter(job_location__job_id = job).filter(status  = 'selected').count()
+                Notifications.objects.create(
+                    sender=request.user,
+                    category=Notifications.CategoryChoices.SELECT_CANDIDATE,
+                    receiver=application.attached_to,
+                    subject=f"Candidate {customCand.username} has cleared all interviews for the role {job.job_title}",
+                    message=(
+                        f"Candidate Progress Update\n\n"
+                        f"Client: {request.user.username}\n"
+                        f"Position: {job.job_title}\n\n"
+                        f"{request.user.username} has completed all interview rounds with the candidate {customCand.username} "
+                        f"for the position of {job.job_title}.\n\n"
+                        f"The candidate has successfully cleared all interviews and their profile is now under final review by the client.\n"
+                        f"Kindly follow up with the client for the final decision.\n\n"
+                        f"link::recruiter/postings/"
+                    ),
+                )
+
+                # Notification to Manager (Feedback Added - All Rounds Cleared)
+                manager = job.organization.manager
+                if manager:
+                    Notifications.objects.create(
+                        sender=request.user,
+                        receiver=manager,
+                        category=Notifications.CategoryChoices.INTERVIEW_FEEDBACK_ADDED,
+                        subject=f"Interview Feedback (All Rounds Cleared): {customCand.username}",
+                        message=f"Interviewer {request.user.username} has cleared all interview rounds for candidate {customCand.username} for the role '{job.job_title}'. Final client decision is pending.\n\nRemarks: {remarks}",
+                    )
+                    send_custom_mail(
+                        subject=f"Final Interview Feedback Added - {customCand.username}",
+                        to_email=[manager.email],
+                        body=f"Hello {manager.username},\n\nInterviewer {request.user.username} has provided final feedback and cleared all rounds for candidate {customCand.username} for the position '{job.job_title}'.\n\nThe profile is now with the client for final confirmation.\n\nGA Hiresync Team",
+                    )
+
+                job_profile_log(
+                    application.id,
+                    f"Candidate '{customCand.username}' ({customCand.email}) has cleared all rounds of the interview process.\n"
+                    f"Status: On Hold (Final Client Decision Pending)\n"
+                    f"Role: {job.job_title}\n"
+                    f"Recruiter: {request.user.username}",
+                )
+
+                applications_selected = (
+                    JobApplication.objects.filter(job_location__job_id=job)
+                    .filter(status="selected")
+                    .count()
+                )
                 job_postings_req = req_postings
 
                 if applications_selected >= job_postings_req:
                     return self.sendAlert(application.job_location)
 
-            return Response({"message":"Candidate selected"},status = status.HTTP_201_CREATED)
+            return Response(
+                {"message": "Candidate selected"}, status=status.HTTP_201_CREATED
+            )
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class InterviewerAllAlerts(APIView):
     def get(self, request):
         try:
-            all_notifications = Notifications.objects.filter(seen = False, receiver = request.user)
-            new_jobs = 0 
+            all_notifications = Notifications.objects.filter(
+                seen=False, receiver=request.user
+            )
+            new_jobs = 0
             scheduled_interviews = 0
             for notification in all_notifications:
-                if notification.category == 'assign_interviewer':
-                    new_jobs+=1
+                if notification.category == "assign_interviewer":
+                    new_jobs += 1
                 else:
-                    scheduled_interviews+=1
+                    scheduled_interviews += 1
+
+            upcoming_interviews = InterviewSchedule.objects.filter(
+                interviewer__name=request.user, status="scheduled"
+            ).count()
 
             data = {
-                "new_jobs":new_jobs,
-                "scheduled_interviews":scheduled_interviews
+                "new_jobs": new_jobs,
+                "scheduled_interviews": scheduled_interviews,
+                "upcoming_interviews": upcoming_interviews,
             }
-            return Response({"data":data}, status=status.HTTP_200_OK)
+            return Response({"data": data}, status=status.HTTP_200_OK)
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)}, status = status.HTTP_400_BAD_REQUEST)
-        
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class JobsInterviews(APIView):
@@ -698,11 +876,11 @@ class JobsInterviews(APIView):
         for interview in interviews:
             # Try to fetch the InterviewSchedule record
             interview_schedule = InterviewSchedule.objects.filter(
-                job_location__job_id=interview.job_id,
-                interviewer=interview
+                job_location__job_id=interview.job_id, interviewer=interview
             ).first()
 
             interview_data = {
+                "job_id": interview.job_id.id if interview.job_id else None,
                 "job_code": interview.job_id.jobcode if interview.job_id else None,
                 "job_title": interview.job_id.job_title if interview.job_id else None,
                 "round_num": interview.round_num,
@@ -712,20 +890,21 @@ class JobsInterviews(APIView):
 
             if interview_schedule:
                 # If schedule exists, add schedule info
-                interview_data.update({
-                    "scheduled": True,
-                    "scheduled_date": interview_schedule.scheduled_date,
-                    "from_time": interview_schedule.from_time,
-                    "to_time": interview_schedule.to_time,
-                    "meet_link": interview_schedule.meet_link,
-                    "status": interview_schedule.status,
-                })
+                interview_data.update(
+                    {
+                        "scheduled": True,
+                        "scheduled_date": interview_schedule.scheduled_date,
+                        "from_time": interview_schedule.from_time,
+                        "to_time": interview_schedule.to_time,
+                        "meet_link": interview_schedule.meet_link,
+                        "status": interview_schedule.status,
+                    }
+                )
             else:
                 # If no schedule exists
-                interview_data.update({
-                    "scheduled": False,
-                    "message": "Not scheduled yet"
-                })
+                interview_data.update(
+                    {"scheduled": False, "message": "Not scheduled yet"}
+                )
 
             data.append(interview_data)
 
@@ -734,15 +913,18 @@ class JobsInterviews(APIView):
 
 class CandidateNotJoined(APIView):
     permission_classes = [IsInterviewer]
+
     def put(self, request):
         try:
-            resume_id = request.GET.get('id')
-            application = JobApplication.objects.get(resume = resume_id)
+            resume_id = request.GET.get("id")
+            application = JobApplication.objects.get(resume=resume_id)
             application.next_interview.status = "not_joined"
             application.next_interview.save()
 
             print(application.next_interview.status)
-            return Response({"message":"Updated successfully"}, status=status.HTTP_200_OK)
+            return Response(
+                {"message": "Updated successfully"}, status=status.HTTP_200_OK
+            )
         except Exception as e:
             print(str(e))
-            return Response({"error":str(e)},status= status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

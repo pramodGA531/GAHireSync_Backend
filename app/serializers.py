@@ -18,7 +18,9 @@ class CustomUserSerializer(serializers.ModelSerializer):
             "last_name",
             "date_joined",
             "last_login",
+            "designation",
         ]
+
         extra_kwargs = {
             "email": {"required": True},
             "username": {"required": True},
@@ -73,10 +75,27 @@ class ClientOrganziationSerializer(serializers.ModelSerializer):
 
 class NegotiationSerializer(serializers.ModelSerializer):
     client_organization = ClientOrganziationSerializer()
+    original_terms = serializers.SerializerMethodField()
 
     class Meta:
         model = NegotiationRequests
         fields = "__all__"
+
+    def get_original_terms(self, obj):
+        try:
+            terms = ClientOrganizationTerms.objects.get(
+                client_organization=obj.client_organization
+            )
+            return {
+                "ctc_range": terms.ctc_range,
+                "service_fee": terms.service_fee,
+                "replacement_clause": terms.replacement_clause,
+                "invoice_after": terms.invoice_after,
+                "payment_within": terms.payment_within,
+                "interest_percentage": terms.interest_percentage,
+            }
+        except ClientOrganizationTerms.DoesNotExist:
+            return None
 
 
 class InterviewerDetailsSerializer(serializers.ModelSerializer):
@@ -224,8 +243,11 @@ class CandidateResumeSerializer(serializers.ModelSerializer):
 
 
 class JobApplicationSerializer(serializers.ModelSerializer):
-    # job_id = JobPostingsSerializer()
-    # resume = CandidateResumeWithoutContactSerializer()
+    job_details = JobPostingsSerializer(source="job_location.job_id", read_only=True)
+    resume = CandidateResumeSerializer()
+    sender = CustomUserSerializer()
+    attached_to = CustomUserSerializer()
+    receiver = CustomUserSerializer()
 
     class Meta:
         model = JobApplication
@@ -262,19 +284,6 @@ class CandidateResumeWithoutContactSerializer(serializers.ModelSerializer):
 
         del data["skills"]
         return data
-
-
-class JobApplicationSerializer(serializers.ModelSerializer):
-    job_id = JobPostingsSerializer()
-    resume = CandidateResumeSerializer()
-    # cand_id=CandidateResumeWithoutContactSerializer()
-    sender = CustomUserSerializer()
-    attached_to = CustomUserSerializer()
-    receiver = CustomUserSerializer()
-
-    class Meta:
-        model = JobApplication
-        fields = "__all__"
 
 
 class InterviewScheduleSerializer(serializers.ModelSerializer):
@@ -659,4 +668,10 @@ class JobInterviewerDetailsSerializer(serializers.ModelSerializer):
 class JobEditRequestsByClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobEditRequestsByClient
+        fields = "__all__"
+
+
+class ClientOrganizationTermsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClientOrganizationTerms
         fields = "__all__"

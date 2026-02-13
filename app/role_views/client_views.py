@@ -347,7 +347,8 @@ class GetOrganizationTermsView(APIView):
                     negotiation_request = True
 
                 elif (
-                    negotiated_terms.expiry_date > today
+                    negotiated_terms.expiry_date
+                    and negotiated_terms.expiry_date > today
                     and negotiated_terms.status == "accepted"
                 ):
                     terms_list.append(
@@ -924,14 +925,28 @@ class JobEditRequestsView(APIView):
                 try:
                     job = JobPostings.objects.get(id=id)
                     edited_job = (
-                        JobPostingsEditedVersion.objects.filter(job_id=job)
+                        JobPostingsEditedVersion.objects.filter(
+                            job_id=job, status="pending"
+                        )
                         .exclude(user=user)
                         .order_by("-created_at")
                         .first()
                     )
-                    if edited_job.status != "pending":
+                    if not edited_job:
+                        # Check if any version exists to give a better error message
+                        has_any = (
+                            JobPostingsEditedVersion.objects.filter(job_id=job)
+                            .exclude(user=user)
+                            .exists()
+                        )
                         return Response(
-                            {"error": "You have already reacted to this job post edit"},
+                            {
+                                "error": (
+                                    "No pending edit request found for this job."
+                                    if not has_any
+                                    else "You have already reacted to this job post edit"
+                                )
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
@@ -965,7 +980,7 @@ class JobEditRequestsView(APIView):
 
             else:
                 edited_jobs = JobPostingsEditedVersion.objects.filter(
-                    job_id__username=user
+                    job_id__username=user, status="pending"
                 ).exclude(user=user)
                 if not edited_jobs:
                     return Response(
@@ -1000,9 +1015,13 @@ class AcceptJobEditRequestView(APIView):
             user = request.user
 
             job_post = JobPostings.objects.get(id=job_id)
-            edited_fields_version = JobPostingsEditedVersion.objects.filter(
-                job_id=job_post
-            ).first()
+            edited_fields_version = (
+                JobPostingsEditedVersion.objects.filter(
+                    job_id=job_post, status="pending"
+                )
+                .order_by("-created_at")
+                .first()
+            )
             if not edited_fields_version:
                 return Response(
                     {"error": "Edited job post not found"},
@@ -1111,18 +1130,22 @@ The Recruitment Team
 class RejectJobEditRequestView(APIView):
     permission_classes = [IsClient]
 
-    def get(self, request):
+    def post(self, request):
         try:
-
             job_id = request.GET.get("job_id")
             job = JobPostings.objects.get(id=job_id)
             manager_mail = job.organization.manager.email
 
             edited_job = (
-                JobPostingsEditedVersion.objects.filter(id=job)
+                JobPostingsEditedVersion.objects.filter(job_id=job, status="pending")
                 .order_by("-created_at")
                 .first()
             )
+            if not edited_job:
+                return Response(
+                    {"error": "No pending edit request found for this job."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             edited_job_fields = JobPostEditFields.objects.filter(edit_id=edited_job)
 
             for field in edited_job_fields:
@@ -1150,7 +1173,7 @@ The Recruitment Team
             Notifications.objects.create(
                 sender=request.user,
                 receiver=job.organization.manager,
-                category=Notifications.CategoryChoices.ACCEPT_JOB_EDIT,
+                category=Notifications.CategoryChoices.REJECT_JOB_EDIT,
                 subject=f"Client has taken action on your job request for the position: {job.job_title}",
                 message=(
                     f" Job Post Update\n\n"
@@ -1219,6 +1242,7 @@ class InterviewersView(APIView):
                             {
                                 "interviewer_name": user.username,
                                 "interviewer_email": user.email,
+                                "designation": user.designation,
                                 "alloted": interviews.count(),
                                 "scheduled": scheduled_interviews.count(),
                                 "completed": count,
@@ -1255,6 +1279,7 @@ class InterviewersView(APIView):
                     "rounds_alloted": rounds_alloted_count,
                     "scheduled_interviews": scheduled_count,
                     "rounds_completed": rounds_completed,
+                    "designation": interviewer.designation,
                     "id": interviewer.id,
                 }
 
@@ -1272,6 +1297,7 @@ class InterviewersView(APIView):
 
             username = request.data.get("username")
             email = request.data.get("email")
+            designation = request.data.get("designation")
 
             password = generate_random_password()
 
@@ -1279,6 +1305,7 @@ class InterviewersView(APIView):
                 data={
                     "email": email,
                     "username": username,
+                    "designation": designation,
                     "role": CustomUser.INTERVIEWER,
                     "credit": 0,
                     "password": password,
@@ -1615,6 +1642,10 @@ class AcceptApplicationView(APIView):
                 clientCompanyDetails = ClientDetails.objects.get(user=request.user)
                 job_title = job_application.job_location.job_id.job_title
                 job_id = job_application.job_location.job_id.id
+                user = candidate.name
+                token = email_verification_token.make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                Verification_link = f"{frontend_url}/verify-email/{uid}/{token}/"
                 link = f"{frontend_url}/candidate/applications"
                 message = f"""
 
@@ -1627,6 +1658,9 @@ Login Credentials:
 email: {candidate.name.email}
 password : {password}
 
+🔗 Verify your account: {Verification_link}
+
+For the application and other details please click the below link
 🔗 {link}
 Good luck!
 
@@ -1692,6 +1726,19 @@ class SelectApplicationView(APIView):
     permission_classes = [IsClient]
 
     def create_user_and_profile(self, candidate_name, candidate_email):
+        # Check if user already exists
+        existing_user = CustomUser.objects.filter(email=candidate_email).first()
+        if existing_user:
+            try:
+                candidate_profile = CandidateProfile.objects.get(name=existing_user)
+                return candidate_profile, existing_user
+            except CandidateProfile.DoesNotExist:
+                # User exists but profile doesn't (should be rare for candidates, but possible)
+                candidate_profile = CandidateProfile.objects.create(
+                    name=existing_user,
+                    email=candidate_email,
+                )
+                return candidate_profile, existing_user
 
         password = generate_random_password()
 
@@ -1754,13 +1801,13 @@ HireSync Team
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            applications = JobApplication.objects.filter(job_id=job_application.job_id)
+            applications = JobApplication.objects.filter(
+                job_location__job_id=job_application.job_location.job_id
+            )
             num_of_postings_completed = SelectedCandidates.objects.filter(
                 application__in=applications, joining_status="joined"
             ).count()
-            req_postings = JobPostings.objects.get(
-                id=job_application.job_location
-            ).num_of_positions
+            req_postings = job_application.job_location.job_id.num_of_positions
 
             if num_of_postings_completed >= req_postings:
                 return Response(
@@ -1944,7 +1991,8 @@ class CandidatesOnHold(APIView):
                 )
                 applications_on_hold = JobApplication.objects.filter(
                     job_location__in=location_ids, status="hold"
-                ).select_related("resume")
+                )
+                # .select_related("resume")
                 application_list = []
                 for application in applications_on_hold:
                     job = application.job_location.job_id
@@ -3051,24 +3099,41 @@ class ReplacementsView(APIView):
             ).get(id=selected_candidate_id)
 
             with transaction.atomic():
-                selected_candidate.replacement_status = "pending"
+                selected_candidate.replacement_status = "pending_manager_approval"
                 selected_candidate.save()
 
                 ReplacementCandidates.objects.create(
-                    replacement_with=selected_candidate.application
+                    replacement_with=selected_candidate.application,
+                    status="pending_manager_approval",
                 )
 
                 job_post = selected_candidate.application.job_location.job_id
-                job_location = selected_candidate.application.job_location
-                job_location.status = "opened"
-                job_location.save()
-                job_post.status = "opened"
-                job_post.save()
+
+                # Notify Manager
+                manager = job_post.organization.manager
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=manager,
+                    category=Notifications.CategoryChoices.REPLACEMENT_REQUEST,
+                    subject=f"New Replacement Request for {job_post.job_title}",
+                    message=f"Client {request.user.username} has requested a replacement for {selected_candidate.application.resume.candidate_name} in job: {job_post.job_title}. Please review and approve.",
+                )
 
                 job_post_log(
                     job_post.id,
-                    f"Replacement Request for the jobpost :{job_post.job_title} to the agency",
+                    f"Replacement Request for the jobpost :{job_post.job_title} initiated by client, pending manager approval",
                 )
+
+                # Free up the position for the new replacement candidate
+                old_application = selected_candidate.application
+                if old_application.status != "left":
+                    old_application.status = "left"
+                    old_application.save()
+
+                    job_location = old_application.job_location
+                    if job_location.positions_closed > 0:
+                        job_location.positions_closed -= 1
+                        job_location.save()
 
             return Response(
                 {"message": "Replacement applied successfully"},
@@ -3588,6 +3653,10 @@ class ClientAllAlerts(APIView):
             candidate_accepted = 0
             candidate_rejected = 0
 
+            accept_job_edit = 0
+            reject_job_edit = 0
+            partial_edit = 0
+
             for alert in all_alerts:
                 if alert.category == Notifications.CategoryChoices.REJECT_TERMS:
                     reject_terms += 1
@@ -3597,6 +3666,12 @@ class ClientAllAlerts(APIView):
                     accept_job += 1
                 elif alert.category == Notifications.CategoryChoices.EDIT_JOB:
                     edit_job += 1
+                elif alert.category == Notifications.CategoryChoices.ACCEPT_JOB_EDIT:
+                    accept_job_edit += 1
+                elif alert.category == Notifications.CategoryChoices.REJECT_JOB_EDIT:
+                    reject_job_edit += 1
+                elif alert.category == Notifications.CategoryChoices.PARTIAL_EDIT:
+                    partial_edit += 1
                 elif alert.category == Notifications.CategoryChoices.REJECT_JOB:
                     reject_job += 1
                 elif alert.category == Notifications.CategoryChoices.SEND_APPLICATION:
@@ -3617,6 +3692,9 @@ class ClientAllAlerts(APIView):
                 "accept_terms": accept_terms,
                 "accept_job": accept_job,
                 "edit_job": edit_job,
+                "accept_job_edit": accept_job_edit,
+                "reject_job_edit": reject_job_edit,
+                "partial_edit": partial_edit,
                 "reject_job": reject_job,
                 "send_application": send_application,
                 "candidate_accepted": candidate_accepted,
@@ -4104,25 +4182,31 @@ class ClientNegotiations(APIView):
             negotiations = NegotiationRequests.objects.filter(
                 client_organization__client__username=request.user
             )
+
             negotiations_list = []
+
             for negotiation in negotiations:
-                negotiations_list.append(
-                    {
-                        "organization_name": negotiation.client_organization.organization.name,
-                        "ctc_range": negotiation.ctc_range,
-                        "service_fee": negotiation.service_fee,
-                        "replacement_clause": negotiation.replacement_clause,
-                        "interest_percentage": negotiation.interest_percentage,
-                        "invoice_after": negotiation.invoice_after,
-                        "payment_within": negotiation.payment_within,
-                        "requested_date": negotiation.requested_date,
-                        "status": negotiation.status,
-                    }
-                )
+                data = {
+                    "organization_name": negotiation.client_organization.organization.name,
+                    "ctc_range": negotiation.ctc_range,
+                    "service_fee": negotiation.service_fee,
+                    "replacement_clause": negotiation.replacement_clause,
+                    "interest_percentage": negotiation.interest_percentage,
+                    "invoice_after": negotiation.invoice_after,
+                    "payment_within": negotiation.payment_within,
+                    "requested_date": negotiation.requested_date,
+                    "status": negotiation.status,
+                }
+
+                if negotiation.reason:
+                    data["reason"] = negotiation.reason
+
+                negotiations_list.append(data)
 
             return Response(
                 {"negotiations": negotiations_list}, status=status.HTTP_200_OK
             )
+
         except Exception as e:
             print("Error:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -4410,6 +4494,7 @@ class JobInterviewerDetailsView(APIView):
                     "id": i.id,
                     "user_id": i.id,  # Redundant but safe for frontend
                     "username": i.username,
+                    "designation": i.designation,
                     "name": i.id,  # Legacy field just in case
                 }
                 for i in interviewers
@@ -4531,20 +4616,91 @@ class JobPostingIsEdittedByClient(APIView):
 
             changes = request.data.get("changes", {})
 
-            data = changes.copy()
-            data["job_id"] = job.id
-            data["edited_by"] = request.user.id
-            data["organization"] = job.organization.id
-            data["edit_status"] = "pending"
-            data["edit_reason"] = "Client Edit"
+            with transaction.atomic():
+                # Create the new audit trail entries
+                edit_version = JobPostingsEditedVersion.objects.create(
+                    job_id=job,
+                    user=request.user,
+                )
 
-            # Ensure job_locations is passed if present in changes
-            if "job_locations" in changes:
-                data["job_locations"] = changes["job_locations"]
+                for field_name, field_value in changes.items():
+                    if field_name == "job_locations":
+                        # Comparison logic for locations
+                        existing_locs = list(
+                            JobLocationsModel.objects.filter(job_id=job)
+                            .values("location", "job_type", "positions")
+                            .order_by("id")
+                        )
+                        incoming_locs = []
+                        for loc in field_value:
+                            # Map frontend job_type to backend choices if necessary
+                            # Frontend uses: WFO, WFH, Hybrid
+                            # Backend uses: office, remote, hybrid
+                            jt_map = {
+                                "WFO": "office",
+                                "WFH": "remote",
+                                "Hybrid": "hybrid",
+                            }
+                            in_jt = loc.get("job_type")
+                            jt = jt_map.get(in_jt, in_jt)
 
-            serializer = JobEditRequestsByClientSerializer(data=data)
-            if serializer.is_valid():
-                instance = serializer.save()
+                            incoming_locs.append(
+                                {
+                                    "location": loc.get("location"),
+                                    "job_type": jt,
+                                    "positions": int(loc.get("positions", 0)),
+                                }
+                            )
+
+                        # Sort both to ensure order doesn't trigger false positive
+                        existing_locs = sorted(
+                            existing_locs, key=lambda x: x["location"]
+                        )
+                        incoming_locs = sorted(
+                            incoming_locs, key=lambda x: x["location"]
+                        )
+
+                        if existing_locs != incoming_locs:
+                            JobPostEditFields.objects.create(
+                                edit_id=edit_version,
+                                field_name=field_name,
+                                field_value=str(field_value),
+                            )
+                    else:
+                        # Standard field comparison
+                        if hasattr(job, field_name):
+                            original_value = getattr(job, field_name)
+
+                            # Convert to string for comparison as TextField stores string anyway
+                            if str(field_value) != str(original_value):
+                                JobPostEditFields.objects.create(
+                                    edit_id=edit_version,
+                                    field_name=field_name,
+                                    field_value=str(field_value),
+                                )
+                        else:
+                            # If for some reason the field name inherited doesn't exist on job,
+                            # we still track it as it might be a valid virtual field intended for audit
+                            JobPostEditFields.objects.create(
+                                edit_id=edit_version,
+                                field_name=field_name,
+                                field_value=str(field_value),
+                            )
+
+                # Maintain legacy model creation for backward compatibility and other possible dependencies
+                data = changes.copy()
+                data["job_id"] = job.id
+                data["edited_by"] = request.user.id
+                data["organization"] = job.organization.id
+                data["edit_status"] = "pending"
+                data["edit_reason"] = "Client Edit"
+
+                if "job_locations" in changes:
+                    data["job_locations"] = changes["job_locations"]
+
+                serializer = JobEditRequestsByClientSerializer(data=data)
+                if serializer.is_valid():
+                    instance = serializer.save()
 
                 # Send Notifications
                 try:
@@ -4553,12 +4709,10 @@ class JobPostingIsEdittedByClient(APIView):
                     message = f"Client {request.user.username} has requested edits for the job '{job.job_title}'."
                     category = Notifications.CategoryChoices.EDIT_JOB
 
-                    # 1. Notify Manager
                     create_notification(
                         request.user, manager, subject, message, category
                     )
 
-                    # 2. Notify Recruiters
                     recruiters = (
                         AssignedJobs.objects.filter(job_id=job)
                         .values_list("assigned_to", flat=True)
@@ -4571,7 +4725,6 @@ class JobPostingIsEdittedByClient(APIView):
                                 request.user, recruiter, subject, message, category
                             )
 
-                    # 3. Notify Interviewers
                     interviewers = (
                         InterviewerDetails.objects.filter(job_id=job)
                         .values_list("name", flat=True)
@@ -4589,13 +4742,10 @@ class JobPostingIsEdittedByClient(APIView):
                 return Response(
                     {
                         "message": "Job edit request created successfully",
-                        "id": instance.id,
+                        "edit_id": edit_version.id,
                     },
                     status=status.HTTP_200_OK,
                 )
-            else:
-                print("Serializer Errors:", serializer.errors)
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except JobPostings.DoesNotExist:
             return Response(
@@ -4604,4 +4754,62 @@ class JobPostingIsEdittedByClient(APIView):
         except Exception as e:
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ClientJobEditStatusAPIView(APIView):
+    permission_classes = [IsClient]
+
+    def get(self, request):
+        try:
+            job_id = request.GET.get("id")
+            if not job_id:
+                return Response(
+                    {"error": "Job ID is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            job = JobPostings.objects.get(id=job_id)
+
+            all_versions = JobPostingsEditedVersion.objects.filter(job_id=job).order_by(
+                "-created_at"
+            )
+
+            edit_history = []
+            for version in all_versions:
+                fields = JobPostEditFields.objects.filter(edit_id=version)
+                fields_json = [
+                    {
+                        "field_name": f.field_name,
+                        "field_value": f.field_value,
+                        "status": f.status,
+                    }
+                    for f in fields
+                ]
+                edit_history.append(
+                    {
+                        "edit_id": version.id,
+                        "status": version.status,
+                        "edited_by": (
+                            version.user.username if version.user else "Unknown"
+                        ),
+                        "created_at": version.created_at,
+                        "fields": fields_json,
+                    }
+                )
+
+            return Response(
+                {"job_id": job.id, "edit_history": edit_history},
+                status=status.HTTP_200_OK,
+            )
+
+        except JobPostings.DoesNotExist:
+            return Response(
+                {"error": "Job not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
