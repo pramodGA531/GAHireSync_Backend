@@ -424,6 +424,78 @@ Best regards,
         logger.error("Error in activate_job_post:", str(e))
 
 
+def process_hold_reminder_notifications():
+    """
+    Identifies candidates on hold for 3+ days and notifies both Manager and Client.
+    """
+    try:
+        three_days_ago = today - timedelta(days=3)
+        candidates_on_hold = JobApplication.objects.filter(
+            status="hold",
+            job_location__status="opened",
+            updated_at__date__lte=three_days_ago,
+        )
+        grouped_applications = defaultdict(list)
+        for application in candidates_on_hold:
+            manager = (
+                application.job_location.job_id.organization.manager
+                if application.job_location.job_id.organization
+                else None
+            )
+            grouped_applications[(application.receiver, manager)].append(application)
+
+        for (client, manager), apps in grouped_applications.items():
+            candidate_names = [
+                f"- {app.resume.candidate_name} (Job: {app.job_location.job_id.job_title})"
+                for app in apps
+            ]
+            candidate_list = "\n".join(candidate_names)
+
+            subject = "Action Required: Candidates on Hold for More Than 3 Days"
+            body = f"""
+Dear {client.username},
+
+The following candidates have been on hold for more than 3 days:
+
+{candidate_list}
+
+Please review and take necessary action to proceed with the hiring process.
+
+Best regards,  
+GA HireSync Team
+"""
+            # Email and Dashboard Notification to Client
+            send_custom_mail(subject=subject, body=body, to_email=[client.email])
+            Notifications.objects.create(
+                sender=None,
+                receiver=client,
+                category=Notifications.CategoryChoices.ONHOLD_CANDIDATE,
+                subject=subject,
+                message=f"Candidates on hold for >3 days: {', '.join([app.resume.candidate_name for app in apps])}",
+            )
+
+            if manager:
+                # Email and Dashboard Notification to Manager
+                manager_body = body.replace(
+                    f"Dear {client.username}", f"Dear {manager.username}"
+                )
+                send_custom_mail(
+                    subject=subject, body=manager_body, to_email=[manager.email]
+                )
+                Notifications.objects.create(
+                    sender=None,
+                    receiver=manager,
+                    category=Notifications.CategoryChoices.ONHOLD_CANDIDATE,
+                    subject=subject,
+                    message=f"Candidates on hold for >3 days (Client: {client.username}): {', '.join([app.resume.candidate_name for app in apps])}",
+                )
+
+        return True
+    except Exception as e:
+        logger.error("Error in process_hold_reminder_notifications:", str(e))
+        return False
+
+
 # Job post acceptance reminders to candidates
 def process_job_offer_candidate():
     try:
@@ -495,85 +567,123 @@ Thank you,
 def process_job_deadline():
     try:
         five_days = now().date() + timedelta(days=5)
+        three_days_reminder = now().date() + timedelta(days=3)
         today = now().date()
 
-        jobs = JobPostings.objects.filter(
-            status="opened", job_close_duration__lt=five_days
-        )
+        # Fetch jobs that are opened and either expired or near deadline
+        # We check both job_close_duration and extended_deadline
+        jobs = JobPostings.objects.filter(status="opened")
 
         grouped_postings = defaultdict(list)
         grouped_recruiters = defaultdict(list)
 
         for job in jobs:
-            is_expired = job.job_close_duration <= today
-            category = (
-                Notifications.CategoryChoices.JOB_EXPIRED
-                if is_expired
-                else Notifications.CategoryChoices.JOB_NEAR_DEADLINE
-            )
-            status_text = "expired" if is_expired else "approaching its deadline"
+            # Effective deadline is the maximum of job_close_duration and extended_deadline
+            effective_deadline = job.job_close_duration
+            if job.extended_deadline and (
+                not effective_deadline or job.extended_deadline > effective_deadline
+            ):
+                effective_deadline = job.extended_deadline
 
-            # Dashboard notification to Client
-            Notifications.objects.create(
-                sender=(
-                    job.organization.manager
-                    if job.organization and job.organization.manager
-                    else None
-                ),
-                receiver=job.username,
-                category=category,
-                subject=f"Job {status_text.capitalize()}: {job.job_title}",
-                message=f"The job post '{job.job_title}' is {status_text} (Deadline: {job.job_close_duration}).",
-            )
+            if not effective_deadline:
+                continue
 
-            # Dashboard notification to Manager
-            if job.organization and job.organization.manager:
-                Notifications.objects.create(
-                    sender=None,
-                    receiver=job.organization.manager,
-                    category=category,
-                    subject=f"Job {status_text.capitalize()}: {job.job_title}",
-                    message=f"The job post '{job.job_title}' for client {job.username.username} is {status_text}.",
+            is_expired = effective_deadline < today
+            is_three_day_reminder = effective_deadline == three_days_reminder
+
+            if is_expired:
+                # Automate shifting to history (expired)
+                job.status = "expired"
+                job.save()
+
+                # Also update JobLocationsModel status
+                JobLocationsModel.objects.filter(job_id=job).update(status="expired")
+
+                job_profile_log(
+                    job.id, f"Job automatically shifted to history (expired) on {today}"
                 )
 
-            grouped_postings[job.organization].append(job)
+            if is_expired or is_three_day_reminder or (effective_deadline < five_days):
+                category = (
+                    Notifications.CategoryChoices.JOB_EXPIRED
+                    if is_expired
+                    else Notifications.CategoryChoices.JOB_NEAR_DEADLINE
+                )
 
-            assigned_jobs = AssignedJobs.objects.filter(
-                job_id=job,
-                job_location__status="opened",
-            ).prefetch_related("assigned_to")
+                if is_expired:
+                    status_text = "expired"
+                elif is_three_day_reminder:
+                    status_text = "approaching its deadline in 3 days"
+                else:
+                    status_text = "approaching its deadline"
 
-            for assign in assigned_jobs:
-                for recruiter in assign.assigned_to.all():
-                    grouped_recruiters[recruiter].append(
-                        (assign.job_id, assign.job_location)
-                    )
+                # Dashboard notification to Client
+                Notifications.objects.create(
+                    sender=(
+                        job.organization.manager
+                        if job.organization and job.organization.manager
+                        else None
+                    ),
+                    receiver=job.username,
+                    category=category,
+                    subject=f"Job {status_text.capitalize()}: {job.job_title}",
+                    message=f"The job post '{job.job_title}' is {status_text} (Deadline: {effective_deadline}).",
+                )
 
-                    # Dashboard notification to Recruiter
+                # Dashboard notification to Manager
+                if job.organization and job.organization.manager:
                     Notifications.objects.create(
                         sender=None,
-                        receiver=recruiter,
+                        receiver=job.organization.manager,
                         category=category,
-                        subject=f"Deadline {status_text}: {job.job_title}",
-                        message=f"Your assigned job '{job.job_title}' at {assign.job_location.location} is {status_text}.",
+                        subject=f"Job {status_text.capitalize()}: {job.job_title}",
+                        message=f"The job post '{job.job_title}' for client {job.username.username} is {status_text}.",
                     )
 
-        # Notify Organizations (Email)
-        for organization, job_list in grouped_postings.items():
+                grouped_postings[job.organization].append(
+                    (job, status_text, effective_deadline)
+                )
+
+                assigned_jobs = AssignedJobs.objects.filter(
+                    job_id=job,
+                ).prefetch_related("assigned_to")
+
+                for assign in assigned_jobs:
+                    for recruiter in assign.assigned_to.all():
+                        grouped_recruiters[recruiter].append(
+                            (
+                                assign.job_id,
+                                assign.job_location,
+                                status_text,
+                                effective_deadline,
+                            )
+                        )
+
+                        # Dashboard notification to Recruiter
+                        Notifications.objects.create(
+                            sender=None,
+                            receiver=recruiter,
+                            category=category,
+                            subject=f"Deadline {status_text}: {job.job_title}",
+                            message=f"Your assigned job '{job.job_title}' at {assign.job_location.location} is {status_text}.",
+                        )
+
+        # Notify Organizations/Managers (Email)
+        for organization, job_info_list in grouped_postings.items():
             jobs_text = "\n".join(
-                f"- {job.job_title} (Deadline: {job.job_close_duration.strftime('%Y-%m-%d')})"
-                for job in job_list
+                f"- {job.job_title} ({status_text.capitalize()}, Deadline: {effective_deadline.strftime('%Y-%m-%d')})"
+                for job, status_text, effective_deadline in job_info_list
             )
 
-            subject = "Upcoming Job Post Deadlines"
+            subject = "Job Post Deadline Notifications"
             body = f"""
 Dear {organization.manager.username},
 
-The following job posts are approaching their deadlines or have expired:
+The following job posts have status updates regarding their deadlines:
 
 {jobs_text}
 
-Please ensure that all necessary actions are completed.
+Please ensure that all necessary actions are completed or extend the deadline if needed.
 
 Thank you,  
 GA Hiresync Team
@@ -583,22 +693,35 @@ GA Hiresync Team
                 subject=subject, body=body, to_email=[organization.manager.email]
             )
 
+            # Notify Client via email
+            client_emails = list(
+                set(
+                    [
+                        job.username.email
+                        for job, _, _ in job_info_list
+                        if job.username.email
+                    ]
+                )
+            )
+            if client_emails:
+                send_custom_mail(subject=subject, body=body, to_email=client_emails)
+
         # Notify Recruiters (Email)
-        for recruiter, job_locations in grouped_recruiters.items():
+        for recruiter, job_locations_info in grouped_recruiters.items():
             jobs_text = "\n".join(
-                f"- {job.job_title} (Location: {location.location}, Deadline: {job.job_close_duration.strftime('%Y-%m-%d')})"
-                for job, location in job_locations
+                f"- {job.job_title} (Location: {location.location}, {status_text.capitalize()}, Deadline: {effective_deadline.strftime('%Y-%m-%d')})"
+                for job, location, status_text, effective_deadline in job_locations_info
             )
 
-            subject = "Jobs Nearing Deadline Assigned to You"
+            subject = "Assigned Jobs Deadline Notifications"
             body = f"""
 Dear {recruiter.username},
 
-The following job assignments allocated to you are approaching their deadlines:
+The following job assignments allocated to you have status updates regarding their deadlines:
 
 {jobs_text}
 
-Please take prompt actions to ensure closure before the deadline.
+Please take prompt actions to ensure closure or discuss extensions with the manager.
 
 Regards,  
 GA Hiresync Team

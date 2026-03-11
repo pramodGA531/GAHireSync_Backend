@@ -11,9 +11,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
 from rest_framework.parsers import MultiPartParser, FormParser
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.utils import generate_invoice
-from django.db.models import Q
+from django.db.models import Q, Sum
 from ..utils import *
 from django.http import JsonResponse
 from django.core.files.base import File
@@ -75,11 +75,40 @@ class CandidateResumeView(APIView):
             job_assigned = AssignedJobs.objects.get(id=job_id)
             job = job_assigned.job_id
 
-            if job.status == "closed":
+            replacement_id = request.data.get("replacement_id")
+            is_replacement_submission = bool(replacement_id) or (
+                request.data.get("is_replacement") == "true"
+                or request.data.get("is_replacement") is True
+            )
+
+            if (
+                job.status in ["closed", "expired"]
+                or job_assigned.job_location.status in ["closed", "expired"]
+            ) and not is_replacement_submission:
                 return Response(
-                    {"error": "Job post is closed, unable to share the applications"},
+                    {
+                        "error": "Job location is closed or expired, unable to share applications."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # For replacement submissions on closed/expired jobs,
+            # verify there is actually an active replacement request
+            if (
+                job.status in ["closed", "expired"]
+                or job_assigned.job_location.status in ["closed", "expired"]
+            ) and is_replacement_submission:
+                active_replacement_exists = ReplacementCandidates.objects.filter(
+                    replacement_with__job_location=job_assigned.job_location,
+                    status__in=["pending", "pending_manager_approval"],
+                ).exists()
+                if not active_replacement_exists:
+                    return Response(
+                        {
+                            "error": "No active replacement request found for this job. Cannot submit profile."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             receiver = job.username
 
@@ -198,6 +227,12 @@ class CandidateResumeView(APIView):
 
                     skill_metric.save()
 
+                is_replacement_flag = (
+                    data.get("is_replacement") == "true"
+                    or data.get("is_replacement") is True
+                )
+                replacement_id = data.get("replacement_id")
+
                 job_application = JobApplication.objects.create(
                     resume=candidate_resume,
                     job_location=job_assigned.job_location,
@@ -205,7 +240,42 @@ class CandidateResumeView(APIView):
                     sender=user,
                     attached_to=user,
                     receiver=receiver,
+                    is_replacement=is_replacement_flag or bool(replacement_id),
                 )
+
+                # Create login account for replacement candidates immediately
+                if replacement_id:
+                    try:
+                        create_candidate_account(
+                            candidate_resume.candidate_name,
+                            candidate_resume.candidate_email,
+                        )
+                    except Exception as e:
+                        print(f"Error creating candidate account: {e}")
+
+                # Link to active replacement request ONLY if replacement_id is provided
+                if replacement_id:
+                    try:
+                        # Find the replacement request - be more lenient with status during linking
+                        active_replacement = ReplacementCandidates.objects.filter(
+                            id=replacement_id
+                        ).first()
+
+                        if active_replacement:
+                            if not active_replacement.suggested_candidates:
+                                active_replacement.suggested_candidates = []
+
+                            if (
+                                job_application.id
+                                not in active_replacement.suggested_candidates
+                            ):
+                                active_replacement.suggested_candidates.append(
+                                    job_application.id
+                                )
+                                active_replacement.save()
+
+                    except Exception as ex:
+                        print(f"Error linking to replacement: {str(ex)}")
 
                 link = f"{frontend_url}/client/get-resumes/{job.id}"
                 message = f"""
@@ -244,6 +314,35 @@ HireSync Team
                     ),
                 )
 
+                # Candidate Notification & Email
+                candidate_subject = (
+                    f"Application Received: {job.job_title} at {job.organization.name}"
+                )
+                candidate_body = f"""
+                <html>
+                <body>
+                    <p>Dear {candidate_resume.candidate_name},</p>
+                    <p>Your profile has been successfully submitted for the position of <strong>{job.job_title}</strong> at <strong>{job.organization.name}</strong>.</p>
+                    <p>We will notify you once there is an update from the client.</p>
+                    <p>Best Regards,<br>HireSync Team</p>
+                </body>
+                </html>
+                """
+                send_custom_mail(
+                    subject=candidate_subject,
+                    body=candidate_body,
+                    to_email=[candidate_resume.candidate_email],
+                )
+
+                # Notify Recruiter
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=request.user,
+                    category=Notifications.CategoryChoices.SEND_APPLICATION,
+                    subject=f"Application Submitted: {candidate_resume.candidate_name}",
+                    message=f"You have successfully submitted the profile of {candidate_resume.candidate_name} for the job {job.job_title}.",
+                )
+
                 return Response(
                     {"message": "Resume added successfully"},
                     status=status.HTTP_201_CREATED,
@@ -266,12 +365,17 @@ class AllScheduledInterviews(APIView):
             all_interviews = (
                 InterviewSchedule.objects.filter(rctr__in=[request.user])
                 .exclude(status__in=["pending"])
-                .select_related("interviewer", "candidate")
+                .select_related("interviewer", "candidate", "job_location__job_id")
+                .prefetch_related("jobapplication_set")
             )
 
             interviews_list = []
 
             for interview in all_interviews:
+                # Optimized way to check for replacement from prefetched set
+                app = interview.jobapplication_set.first()
+                is_replacement = app.is_replacement if app else False
+
                 interviews_list.append(
                     {
                         "interviewer_name": interview.interviewer.name.username,
@@ -284,6 +388,7 @@ class AllScheduledInterviews(APIView):
                         "round_num": interview.round_num,
                         "job_title": interview.job_location.job_id.job_title,
                         "job_id": interview.job_location.job_id.id,
+                        "is_replacement": is_replacement,
                     }
                 )
 
@@ -303,22 +408,44 @@ class ScheduleInterview(APIView):
                 user = request.user
                 pending_arr = []
                 applications = JobApplication.objects.filter(
-                    attached_to=user, status="processing"
+                    attached_to=user, status__in=["processing", "hold", "shortlisted"]
                 )
+                # Fetch pending replacements for this recruiter once
+                replacements = ReplacementCandidates.objects.filter(
+                    replacement_with__attached_to=user, status="pending"
+                )
+                suggested_app_ids = set()
+                for r in replacements:
+                    if r.suggested_candidates:
+                        suggested_app_ids.update(r.suggested_candidates)
+
                 for application in applications:
                     if (
                         application.next_interview
                         and application.next_interview.status != "pending"
                     ):
                         continue
-                    interviewer_instance = InterviewerDetails.objects.filter(
-                        job_id=application.job_location.job_id,
-                        round_num=application.round_num,
-                    ).first()
+                    if (
+                        application.next_interview
+                        and application.next_interview.interviewer
+                    ):
+                        interviewer_instance = application.next_interview.interviewer
+                    else:
+                        interviewer_instance = InterviewerDetails.objects.filter(
+                            job_id=application.job_location.job_id,
+                            round_num=application.round_num,
+                        ).first()
+
                     interviewer = (
                         interviewer_instance.name.username
                         if interviewer_instance
                         else "Not Assigned"
+                    )
+
+                    # Check if this application is for a replacement
+                    is_replacement = (
+                        application.is_replacement
+                        or application.id in suggested_app_ids
                     )
                     pending_arr.append(
                         {
@@ -355,6 +482,7 @@ class ScheduleInterview(APIView):
                             "location_status": application.job_location.status,
                             "interviewer_name": interviewer,
                             "job_id": application.job_location.job_id.id,
+                            "is_replacement": is_replacement,
                         }
                     )
 
@@ -376,19 +504,24 @@ class ScheduleInterview(APIView):
                         {"error": "Client is'nt shortlisted this application"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                try:
-                    next_interview_details = InterviewerDetails.objects.get(
-                        job_id=application.job_location.job_id.id,
-                        round_num=application.round_num,
-                    )
-
-                except InterviewerDetails.DoesNotExist:
-                    return Response(
-                        {
-                            "error": f"{application.round_num} Interviewer Details for this round Does not exist"
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                if (
+                    application.next_interview
+                    and application.next_interview.interviewer
+                ):
+                    next_interview_details = application.next_interview.interviewer
+                else:
+                    try:
+                        next_interview_details = InterviewerDetails.objects.get(
+                            job_id=application.job_location.job_id.id,
+                            round_num=application.round_num,
+                        )
+                    except InterviewerDetails.DoesNotExist:
+                        return Response(
+                            {
+                                "error": f"{application.round_num} Interviewer Details for this round Does not exist"
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
                 application_details = {
                     "interviewer_name": next_interview_details.name.username,
@@ -400,6 +533,13 @@ class ScheduleInterview(APIView):
                     "job_title": application.job_location.job_id.job_title,
                     "job_ctc": application.job_location.job_id.ctc,
                     "application_id": application.id,
+                    "is_replacement": any(
+                        application.id in (r.suggested_candidates or [])
+                        for r in ReplacementCandidates.objects.filter(
+                            status="pending",
+                            replacement_with__attached_to=application.attached_to,
+                        )
+                    ),
                     "interview_type": next_interview_details.type_of_interview,
                     "interview_mode": next_interview_details.mode_of_interview,
                 }
@@ -419,9 +559,18 @@ class ScheduleInterview(APIView):
             rctr = request.user
             application_id = request.GET.get("application_id")
             application = JobApplication.objects.get(id=application_id)
-            interviewer = InterviewerDetails.objects.get(
-                job_id=application.job_location.job_id, round_num=application.round_num
-            )
+            if application.next_interview and application.next_interview.interviewer:
+                interviewer = application.next_interview.interviewer
+            else:
+                interviewer = InterviewerDetails.objects.filter(
+                    job_id=application.job_location.job_id,
+                    round_num=application.round_num,
+                ).first()
+                if not interviewer:
+                    return Response(
+                        {"error": "Interviewer details not found for this round"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
             scheduled_date = request.data.get("scheduled_date")
             from_time = request.data.get("from_time")
             to_time = request.data.get("to_time")
@@ -459,20 +608,34 @@ class ScheduleInterview(APIView):
                 )
 
             with transaction.atomic():
-                next_scheduled_interview = InterviewSchedule.objects.create(
-                    # rctr=rctr,
-                    candidate=application.resume,
-                    interviewer=interviewer,
-                    scheduled_date=scheduled_date,
-                    job_location=application.job_location,
-                    meet_link=meet_link,
-                    from_time=from_time,
-                    to_time=to_time,
-                    round_num=application.round_num,
-                    status="scheduled",
-                )
+                if (
+                    application.next_interview
+                    and application.next_interview.status == "pending"
+                ):
+                    next_scheduled_interview = application.next_interview
+                    next_scheduled_interview.interviewer = interviewer
+                    next_scheduled_interview.scheduled_date = scheduled_date
+                    next_scheduled_interview.meet_link = meet_link
+                    next_scheduled_interview.from_time = from_time
+                    next_scheduled_interview.to_time = to_time
+                    next_scheduled_interview.status = "scheduled"
+                    next_scheduled_interview.save()
+                else:
+                    next_scheduled_interview = InterviewSchedule.objects.create(
+                        candidate=application.resume,
+                        interviewer=interviewer,
+                        scheduled_date=scheduled_date,
+                        job_location=application.job_location,
+                        meet_link=meet_link,
+                        from_time=from_time,
+                        to_time=to_time,
+                        round_num=application.round_num,
+                        status="scheduled",
+                    )
+
                 next_scheduled_interview.rctr.set([rctr])
                 application.next_interview = next_scheduled_interview
+                application.status = "processing"
                 application.save()
                 start_datetime = f"{scheduled_date}T{from_time}Z"
                 end_datetime = f"{scheduled_date}T{to_time}Z"
@@ -518,34 +681,39 @@ class ScheduleInterview(APIView):
                 user=application.job_location.job_id.username
             )
 
-            customCand = CustomUser.objects.get(
-                email=application.resume.candidate_email
-            )
-            Notifications.objects.create(
-                sender=request.user,
-                receiver=customCand,
-                category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
-                subject=f"Interview Scheduled for {application.job_location.job_id.job_title} ",
-                message=(
-                    f"Interview Scheduled\n\n"
-                    f"Your interview has been scheduled on {scheduled_date}.\n"
-                    f"Round Number: {interviewer.round_num}\n"
-                    f"Role: {application.job_location.job_id.job_title}\n"
-                    f"Interviewer: {interviewer.name.username}\n"
-                    f"Type of Interview: {interviewer.type_of_interview}\n"
-                    f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
-                    f"Interview Link: {meet_link}\n"
-                    f"Please check the details here: link::candidate/upcoming_interviews/"
-                ),
-            )
+            candidate_email = application.resume.candidate_email
+            candidate_display_name = application.resume.candidate_name
+
+            try:
+                customCand = CustomUser.objects.get(email=candidate_email)
+                candidate_display_name = customCand.username
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=customCand,
+                    category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
+                    subject=f"Interview Scheduled for {application.job_location.job_id.job_title} ",
+                    message=(
+                        f"Interview Scheduled\n\n"
+                        f"Your interview has been scheduled on {scheduled_date}.\n"
+                        f"Round Number: {interviewer.round_num}\n"
+                        f"Role: {application.job_location.job_id.job_title}\n"
+                        f"Interviewer: {interviewer.name.username}\n"
+                        f"Type of Interview: {interviewer.type_of_interview}\n"
+                        f"Mode of Interview: {interviewer.mode_of_interview}\n\n"
+                        f"Interview Link: {meet_link}\n"
+                        f"Please check the details here: link::candidate/upcoming_interviews/"
+                    ),
+                )
+            except CustomUser.DoesNotExist:
+                pass
             Notifications.objects.create(
                 sender=request.user,
                 receiver=interviewer.name,
                 category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
-                subject=f"Interview Scheduled with {customCand.username}",
+                subject=f"Interview Scheduled with {candidate_display_name}",
                 message=(
                     f"Interview Assignment\n\n"
-                    f"You have been scheduled to conduct an interview with {customCand.username}.\n"
+                    f"You have been scheduled to conduct an interview with {candidate_display_name}.\n"
                     f"Scheduled Date: {scheduled_date}\n"
                     f"Role: {application.job_location.job_id.job_title}\n"
                     f"Round Number: {interviewer.round_num}\n"
@@ -557,7 +725,7 @@ class ScheduleInterview(APIView):
             )
             job_profile_log(
                 application.id,
-                f"Interview scheduled for candidate '{customCand.username}' ({customCand.email}) "
+                f"Interview scheduled for candidate '{candidate_display_name}' ({candidate_email}) "
                 f"by recruiter '{request.user.username}'.\n"
                 f"Interviewer: {interviewer.name.username}\n"
                 f"Round: {interviewer.round_num}\n"
@@ -593,6 +761,60 @@ class ScheduleInterview(APIView):
             app.meet_link = meet_link
             app.status = "scheduled"
             app.save()
+
+            # Notifications & Emails for Rescheduling
+            candidate_email = app.candidate.candidate_email
+            interviewer_email = app.interviewer.name.email
+            recruiter_emails = [r.email for r in app.rctr.all()]
+
+            subject = f"Interview Rescheduled: {app.candidate.candidate_name}"
+            html_message = f"""
+            <html>
+            <body>
+                <p>The interview for <strong>{app.candidate.candidate_name}</strong> has been rescheduled.</p>
+                <p><strong>New Time:</strong> {scheduled_date} from {from_time} to {to_time}</p>
+                <p><strong>Meet Link:</strong> <a href="{meet_link}">{meet_link}</a></p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+
+            # Send Emails
+            all_emails = list(
+                set([candidate_email, interviewer_email] + recruiter_emails)
+            )
+            send_custom_mail(subject=subject, body=html_message, to_email=all_emails)
+
+            # Dashboard Notifications
+            # Candidate
+            cand_user = CustomUser.objects.filter(email=candidate_email).first()
+            if cand_user:
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=cand_user,
+                    category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
+                    subject=subject,
+                    message=f"Your interview has been rescheduled to {scheduled_date} at {from_time}.",
+                )
+
+            # Interviewer
+            Notifications.objects.create(
+                sender=request.user,
+                receiver=app.interviewer.name,
+                category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
+                subject=subject,
+                message=f"The interview with {app.candidate.candidate_name} has been rescheduled to {scheduled_date} at {from_time}.",
+            )
+
+            # Recruiters
+            for r in app.rctr.all():
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=r,
+                    category=Notifications.CategoryChoices.SCHEDULE_INTERVIEW,
+                    subject=subject,
+                    message=f"The interview for {app.candidate.candidate_name} has been rescheduled to {scheduled_date} at {from_time}.",
+                )
 
             return Response(
                 {"message": "Interview rescheduled successfully."},
@@ -912,10 +1134,22 @@ class RecAssignedJobsView(APIView):
                 applications = JobApplication.objects.filter(
                     job_location=job_assigned.job_location, attached_to=user
                 )
+                # 8-Stage Workflow Logic
+                profiles_sent = applications.count()
+                shortlisted_r1 = applications.filter(round_num=1).count()
+                processing_r2_plus = applications.filter(round_num__gt=1).count()
                 onhold = applications.filter(status="hold").count()
                 rejected = applications.filter(status="rejected").count()
-                pending = applications.filter(status="pending").count()
                 selected = applications.filter(status="selected").count()
+
+                # Logic for Joined and Replaced
+                joined = SelectedCandidates.objects.filter(
+                    application__in=applications, joining_status="joined"
+                ).count()
+
+                replaced = SelectedCandidates.objects.filter(
+                    application__in=applications, is_replaced=True
+                ).count()
 
                 incoming_applications = JobApplication.objects.filter(
                     job_location=job_assigned.job_location,
@@ -933,12 +1167,17 @@ class RecAssignedJobsView(APIView):
                         "status": job.status,
                         "location_status": job_assigned.job_location.status,
                         "num_of_positions": job_assigned.job_location.positions,
+                        "profiles_sent": profiles_sent,
+                        "shortlisted_r1": shortlisted_r1,
+                        "processing_r2_plus": processing_r2_plus,
                         "onhold": onhold,
                         "rejected": rejected,
-                        "pending": pending,
                         "selected": selected,
+                        "replaced": replaced,
+                        "joined": joined,
                         "incoming": incoming_applications,
                         "deadline": job.job_close_duration,
+                        "extended_deadline": job.extended_deadline,
                         "assigned_id": job_assigned.id,
                         "job_id": job_assigned.job_id.id,
                         "location": job_assigned.job_location.location,
@@ -1167,7 +1406,9 @@ class ResumesSent(APIView):
 class RecruiterAllAlerts(APIView):
     def get(self, request):
         try:
-            all_alerts = Notifications.objects.filter(seen=False, receiver=request.user)
+            all_alerts = Notifications.objects.filter(
+                visited=False, receiver=request.user
+            )
             assign_job = 0
             shortlist_candidate = 0
             promote_candidate = 0
@@ -1576,9 +1817,13 @@ class ReplacementsRequestedToRecruiter(APIView):
                 selected_candidate = SelectedCandidates.objects.get(
                     application=application
                 )
+                assigned_job = AssignedJobs.objects.filter(
+                    assigned_to=request.user, job_id=job
+                ).first()
                 replacements_list.append(
                     {
                         "job_id": job.id,
+                        "assigned_job_id": assigned_job.id if assigned_job else None,
                         "job_title": job.job_title,
                         "candidate_name": application.resume.candidate_name,
                         "accepted_ctc": selected_candidate.ctc,
@@ -1588,6 +1833,17 @@ class ReplacementsRequestedToRecruiter(APIView):
                         "application_id": application.id,
                         "replacement_id": replacement.id,
                         "replacement_status": replacement.status,
+                        "suggested_candidates": [
+                            {
+                                "id": app.id,
+                                "candidate_name": app.resume.candidate_name,
+                                "status": app.status,
+                                "round_num": app.round_num,
+                            }
+                            for app in JobApplication.objects.filter(
+                                id__in=replacement.suggested_candidates or []
+                            )
+                        ],
                     }
                 )
 
@@ -1598,3 +1854,444 @@ class ReplacementsRequestedToRecruiter(APIView):
                 {"error": "Error in fetching replacements"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class RecruiterDashboardStatsAPI(APIView):
+    permission_classes = [IsRecruiter]
+
+    def get(self, request):
+        try:
+            user = request.user
+            today = datetime.now().date()
+            job_id = request.query_params.get("job_id")
+            period = request.query_params.get("period", "Month")
+
+            # Helper for period filter
+            def get_date_filter(period_str):
+                if period_str == "Today":
+                    return Q(created_at__date=today)
+                elif period_str == "Week":
+                    # Last 7 days including today
+                    return Q(created_at__date__gte=today - timedelta(days=6))
+                elif period_str == "Month":
+                    # Last 30 days
+                    return Q(created_at__date__gte=today - timedelta(days=30))
+                elif period_str == "Year":
+                    # Last 365 days
+                    return Q(created_at__date__gte=today - timedelta(days=365))
+                return Q()  # "All" or unknown
+
+            period_filter = get_date_filter(period)
+            job_filter = Q(job_location__job_id=job_id) if job_id else Q()
+
+            today_interviews_count = (
+                InterviewSchedule.objects.filter(rctr=user, scheduled_date=today)
+                .exclude(status__in=["pending"])
+                .count()
+            )
+
+            replacements_count = ReplacementCandidates.objects.filter(
+                replacement_with__attached_to=user, status="pending"
+            ).count()
+
+            # --- Automatic Status Management Logic ---
+            # 1. Update based on recruitment progress & candidate status
+            all_relevant_locations = JobLocationsModel.objects.filter(
+                assignedjobs__assigned_to=user
+            ).distinct()
+
+            for loc in all_relevant_locations:
+                # Count current joined candidates
+                joined_count = SelectedCandidates.objects.filter(
+                    application__job_location=loc, joining_status="joined"
+                ).count()
+
+                # Update positions_closed in location
+                if loc.positions_closed != joined_count:
+                    loc.positions_closed = joined_count
+
+                # Rule: if filled, mark as closed. If not, mark as opened (if not expired)
+                if loc.positions_closed >= loc.positions:
+                    loc.status = "closed"
+                elif loc.status == "closed" and loc.positions_closed < loc.positions:
+                    # If someone left and we now have vacancy, re-open it
+                    loc.status = "opened"
+
+                # Rule: Check for replacement completed
+                has_pending_replacement = SelectedCandidates.objects.filter(
+                    application__job_location=loc, replacement_status="pending"
+                ).exists()
+                if (
+                    not has_pending_replacement
+                    and loc.positions_closed >= loc.positions
+                ):
+                    loc.status = "closed"
+
+                # Rule: Check for expired deadline
+                job = loc.job_id
+                deadline = job.extended_deadline or job.job_close_duration
+                if deadline and deadline < today and loc.status != "closed":
+                    loc.status = "expired"
+                    # Also update main job status if all locations are closed/expired
+                    if (
+                        not JobLocationsModel.objects.filter(job_id=job)
+                        .exclude(status__in=["closed", "expired"])
+                        .exists()
+                    ):
+                        job.status = "expired"
+                        job.save()
+
+                loc.save()
+
+                # Sync main JobPostings status
+                # If all locations for a job are closed, mark the job as closed
+                parent_job = loc.job_id
+                if (
+                    not JobLocationsModel.objects.filter(job_id=parent_job)
+                    .exclude(status="closed")
+                    .exists()
+                ):
+                    parent_job.status = "closed"
+                    parent_job.save()
+                elif (
+                    parent_job.status == "closed"
+                    and JobLocationsModel.objects.filter(
+                        job_id=parent_job, status="opened"
+                    ).exists()
+                ):
+                    parent_job.status = "opened"
+                    parent_job.save()
+            # -------------------------------------------
+
+            archived_positions_count = AssignedJobs.objects.filter(
+                assigned_to=user, job_location__job_id__status__in=["closed", "expired"]
+            ).count()
+
+            new_citations = JobApplication.objects.filter(
+                attached_to=user, created_at__date=today
+            ).count()
+
+            # Fetch targets and other info from RecruiterProfile based on name=user
+            profile = RecruiterProfile.objects.filter(name=user).first()
+            target_amount = profile.target_in_rupees if profile else 0
+            target_positions = profile.target_in_positions if profile else 0
+
+            # Calculate achieved amount for the current month
+            # We filter by applications attached to the user and invoiced candidates this month
+            current_month = today.month
+            current_year = today.year
+            achieved_amount = (
+                InvoiceGenerated.objects.filter(
+                    selected_candidate__application__attached_to=user,
+                    is_canceled=False,
+                    created_at__month=current_month,
+                    created_at__year=current_year,
+                ).aggregate(total=Sum("invoice_calculated"))["total"]
+                or 0
+            )
+
+            # Fetch Latest Job Stocks (Top 5 active assigned jobs)
+            active_jobs_assigned = (
+                AssignedJobs.objects.filter(
+                    assigned_to=user,
+                    job_id__status="opened",
+                    job_location__status="opened",
+                )
+                .select_related("job_id", "job_id__username", "job_location")
+                .order_by("-job_id__created_at")[:5]
+            )
+
+            job_stocks = []
+            for aj in active_jobs_assigned:
+                job = aj.job_id
+                # Calculate status counts for this specific job_location & recruiter
+                apps = JobApplication.all_objects.filter(
+                    job_location=aj.job_location, attached_to=user
+                )
+
+                # Cumulative logic for status counts (following agency_views.py)
+                status_counts = {
+                    "sent": apps.count(),
+                    "shortlisted_r1": apps.filter(
+                        Q(status="processing")
+                        | Q(status="selected")
+                        | Q(selected_candidates__joining_status="joined")
+                    ).count(),
+                    "processing_r2_plus": apps.filter(
+                        (Q(status="processing") & Q(round_num__gt=1))
+                        | Q(status="selected")
+                        | Q(selected_candidates__joining_status="joined")
+                    ).count(),
+                    "on_hold": apps.filter(status="hold").count(),
+                    "rejected": apps.filter(status="rejected").count(),
+                    "selected": apps.filter(
+                        Q(status="selected")
+                        | Q(selected_candidates__joining_status="joined")
+                    ).count(),
+                    "joined": apps.filter(
+                        selected_candidates__joining_status="joined"
+                    ).count(),
+                    "replaced": apps.filter(
+                        selected_candidates__is_replaced=True
+                    ).count(),
+                }
+
+                job_stocks.append(
+                    {
+                        "id": job.id,
+                        "role": job.job_title,
+                        "client": job.username.username if job.username else "N/A",
+                        "positions": str(aj.job_location.positions).zfill(2),
+                        "status": job.status.capitalize(),
+                        "date": (
+                            job.job_close_duration.strftime("%Y-%m-%d")
+                            if job.job_close_duration
+                            else "N/A"
+                        ),
+                        "status_counts": status_counts,
+                    }
+                )
+
+            # Leaderboard & Summary Ranking
+            all_recruiters = CustomUser.objects.filter(role="recruiter")
+            current_month = today.month
+            current_year = today.year
+
+            # Simple ranking based on achieved_amount this month (GST inclusive)
+            rankings = []
+            for r in all_recruiters:
+                r_achieved_base = (
+                    InvoiceGenerated.objects.filter(
+                        selected_candidate__application__attached_to=r,
+                        is_canceled=False,
+                        created_at__month=current_month,
+                        created_at__year=current_year,
+                    ).aggregate(total=Sum("invoice_calculated"))["total"]
+                    or 0
+                )
+                r_achieved = float(r_achieved_base) * 1.18
+                rankings.append({"user_id": r.id, "achieved": r_achieved})
+
+            rankings.sort(key=lambda x: x["achieved"], reverse=True)
+
+            user_rank = 0
+            for idx, r in enumerate(rankings):
+                if r["user_id"] == user.id:
+                    user_rank = idx + 1
+                    break
+
+            new_jobs_today = AssignedJobs.objects.filter(
+                assigned_to=user, job_id__created_at__date=today
+            ).count()
+
+            total_new_items = new_citations + today_interviews_count + new_jobs_today
+
+            # Follow ups: Unique job roles and clients with interviews scheduled tomorrow
+            tomorrow = today + timedelta(days=1)
+            tomorrow_interviews = InterviewSchedule.objects.filter(
+                rctr=user, scheduled_date=tomorrow
+            ).select_related("interviewer__job_id", "interviewer__job_id__username")
+
+            # Use a dictionary to keep unique job entries
+            unique_follow_ups = {}
+            colors = ["#1681FF", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444"]
+
+            for i in tomorrow_interviews:
+                job = i.interviewer.job_id
+                job_id = job.id
+                if job_id not in unique_follow_ups:
+                    # Find the application associated with this interview to get its ID
+                    # We take the first one found for this job and recruiter
+                    app = JobApplication.objects.filter(
+                        job_location__job_id=job,
+                        attached_to=user,
+                        next_interview__scheduled_date=tomorrow,
+                    ).first()
+
+                    unique_follow_ups[job_id] = {
+                        "name": job.job_title,
+                        "client": job.username.username if job.username else "N/A",
+                        "color": colors[len(unique_follow_ups) % len(colors)],
+                        "application_id": app.id if app else None,
+                        "candidate_id": i.candidate.id if i.candidate else None,
+                    }
+
+            # Outcomes Delivered: Aggregate stats across jobs for this recruiter
+            all_apps = (
+                JobApplication.all_objects.filter(attached_to=user)
+                .filter(period_filter)
+                .filter(job_filter)
+            )
+            outcomes = {
+                "sent": all_apps.count(),
+                "shortlisted_r1": all_apps.filter(
+                    Q(status="processing")
+                    | Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                ).count(),
+                "processing_r2_plus": all_apps.filter(
+                    (Q(status="processing") & Q(round_num__gt=1))
+                    | Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                ).count(),
+                "on_hold": all_apps.filter(status="hold").count(),
+                "rejected": all_apps.filter(status="rejected").count(),
+                "selected": all_apps.filter(
+                    (
+                        Q(status="selected")
+                        | Q(selected_candidates__joining_status="joined")
+                    )
+                    & Q(is_replacement=False)
+                ).count(),
+                "replaced": all_apps.filter(
+                    is_replacement=True, status="selected"
+                ).count(),
+                "joined": all_apps.filter(
+                    selected_candidates__joining_status="joined"
+                ).count(),
+            }
+            total_outcomes = outcomes["sent"]
+
+            data = {
+                "today_interviews": today_interviews_count,
+                "target_amount": int(target_amount),
+                "target_closed_positions": (
+                    f"{target_positions}" if target_positions > 0 else "0"
+                ),
+                "new_citations": f"{new_citations}" if new_citations > 0 else "0",
+                "replacements": replacements_count,
+                "achieved_amount": int(achieved_amount),
+                "archived_positions": archived_positions_count,
+                "archived_sub": "+12 small this month",
+                "job_stocks": job_stocks,
+                "follow_ups": list(unique_follow_ups.values()),
+                "leaderboard_position": user_rank,
+                "leaderboard_total": all_recruiters.count(),
+                "new_items_today": total_new_items,
+                "outcomes": outcomes,
+                "total_outcomes": total_outcomes,
+                "allocated_positions": [
+                    {
+                        "name": aj.job_id.job_title,
+                        "client": (
+                            aj.job_id.username.username if aj.job_id.username else "N/A"
+                        ),
+                        "time": (
+                            formatTimeAgo(aj.job_id.created_at)
+                            if "formatTimeAgo" in globals()
+                            else "Recently"
+                        ),
+                        "color": colors[idx % len(colors)],
+                    }
+                    for idx, aj in enumerate(
+                        AssignedJobs.objects.filter(assigned_to=user)
+                        .select_related("job_id", "job_id__username")
+                        .order_by("-job_id__created_at")[:5]
+                    )
+                ],
+                "priorities": [
+                    {
+                        "role": aj.job_id.job_title,
+                        "client": (
+                            aj.job_id.username.username if aj.job_id.username else "N/A"
+                        ),
+                        "pos": str(aj.job_location.positions).zfill(2),
+                        "date": (
+                            aj.job_id.job_close_duration.strftime("%Y-%m-%d")
+                            if aj.job_id.job_close_duration
+                            else "No Deadline"
+                        ),
+                    }
+                    for aj in AssignedJobs.objects.filter(
+                        assigned_to=user, job_id__status="opened"
+                    )
+                    .select_related("job_id", "job_id__username", "job_location")
+                    .order_by("job_id__job_close_duration")[:6]
+                ],
+            }
+            return Response({"data": data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error in fetching stats: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RecruiterInterviewSchedulingAPI(APIView):
+    permission_classes = [IsRecruiter]
+
+    def get(self, request):
+        try:
+            user = request.user
+            date_str = request.GET.get("date")  # Expected format: YYYY-MM-DD
+            job_id = request.GET.get("job_id")
+
+            if date_str:
+                selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            else:
+                selected_date = datetime.now().date()
+
+            # Since rctr is ManyToMany, we use rctr=user
+            interviews = InterviewSchedule.objects.filter(
+                rctr=user, scheduled_date=selected_date
+            )
+
+            if job_id:
+                interviews = interviews.filter(interviewer__job_id=job_id)
+
+            interviews = interviews.select_related(
+                "candidate", "interviewer", "interviewer__job_id", "interviewer__name"
+            ).order_by("from_time")
+
+            data = []
+            for interview in interviews:
+                data.append(
+                    {
+                        "id": interview.id,
+                        "title": f"{interview.candidate.candidate_name if interview.candidate else 'NA'} Interview",
+                        "job_title": (
+                            interview.interviewer.job_id.job_title
+                            if interview.interviewer and interview.interviewer.job_id
+                            else "NA"
+                        ),
+                        "interviewer_name": (
+                            interview.interviewer.name.username
+                            if interview.interviewer and interview.interviewer.name
+                            else "NA"
+                        ),
+                        "from_time": (
+                            interview.from_time.strftime("%H:%M")
+                            if interview.from_time
+                            else "00:00"
+                        ),
+                        "to_time": (
+                            interview.to_time.strftime("%H:%M")
+                            if interview.to_time
+                            else "00:00"
+                        ),
+                        "status": interview.status,
+                        "mode": (
+                            interview.interviewer.mode_of_interview
+                            if interview.interviewer
+                            else "NA"
+                        ),
+                        "application_id": (
+                            JobApplication.objects.filter(next_interview=interview)
+                            .first()
+                            .id
+                            if JobApplication.objects.filter(
+                                next_interview=interview
+                            ).exists()
+                            else None
+                        ),
+                        "candidate_id": (
+                            interview.candidate.id if interview.candidate else None
+                        ),
+                        "meet_link": (
+                            interview.meet_link if interview.meet_link else "NA"
+                        ),
+                    }
+                )
+
+            return Response({"data": data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error in fetching interview scheduling: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

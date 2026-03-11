@@ -83,9 +83,14 @@ class NegotiationSerializer(serializers.ModelSerializer):
 
     def get_original_terms(self, obj):
         try:
-            terms = ClientOrganizationTerms.objects.get(
-                client_organization=obj.client_organization
-            )
+            terms = obj.original_term
+            if not terms:
+                # Fallback to current first term if no link exists (for old records)
+                terms = ClientOrganizationTerms.objects.filter(
+                    client_organization=obj.client_organization
+                ).first()
+            if not terms:
+                return None
             return {
                 "ctc_range": terms.ctc_range,
                 "service_fee": terms.service_fee,
@@ -94,7 +99,7 @@ class NegotiationSerializer(serializers.ModelSerializer):
                 "payment_within": terms.payment_within,
                 "interest_percentage": terms.interest_percentage,
             }
-        except ClientOrganizationTerms.DoesNotExist:
+        except Exception:
             return None
 
 
@@ -399,9 +404,14 @@ class JobPostUpdateSerializer(serializers.ModelSerializer):
 class CandidateProfileSerializer(serializers.ModelSerializer):
     name = CustomUserSerializer()
 
+    skills = serializers.SerializerMethodField()
+
     class Meta:
         model = CandidateProfile
         fields = "__all__"
+
+    def get_skills(self, obj):
+        return [skill.skill_name for skill in obj.candidate_profile_skills.all()]
 
     def create(self, validated_data):
         custom_user_data = validated_data.pop("name")

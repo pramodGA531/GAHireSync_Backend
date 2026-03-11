@@ -3,8 +3,26 @@ from .role_views import *
 from .authentication_views import *
 from .views import *
 from .role_views import *
+from .role_views.ai_views import (
+    AIJobProcessorView,
+    AIJobSummaryView,
+    AISkillGenerationView,
+    CandidateProfileMatchingSearchView,
+)
+
+from .payment_views import RazorpayOrderView, RazorpayVerificationView
 
 urlpatterns = [
+    path(
+        "razorpay/create-order/",
+        RazorpayOrderView.as_view(),
+        name="razorpay-create-order",
+    ),
+    path(
+        "razorpay/verify-payment/",
+        RazorpayVerificationView.as_view(),
+        name="razorpay-verify-payment",
+    ),
     path("signup/client/", ClientSignupView.as_view(), name="client_signup"),
     path("signup/agency/", AgencySignupView.as_view(), name="agency_signup"),
     path("get-plans/", FetchPlans.as_view(), name="agency_signup"),
@@ -236,6 +254,11 @@ urlpatterns = [
         name="candidate-replacing",
     ),
     path(
+        "client/replacement-action/",
+        ReplacementLifecycleView.as_view(),
+        name="replacement-candidate-actions",
+    ),
+    path(
         "client/compare-list-view/",
         CompareListView.as_view(),
         name="candidate-replacing",
@@ -290,11 +313,26 @@ urlpatterns = [
     path("client/jobpost/terms/", GetJobPostTerms.as_view(), name="job-terms"),
     path("client/negotiations/", ClientNegotiations.as_view(), name="job-terms"),
     path("client/parse-jd/", ParseJDAPI.as_view(), name="parse-jd"),
+    path(
+        "ai/process-job-description/",
+        AIJobProcessorView.as_view(),
+        name="ai-job-processor",
+    ),
+    path(
+        "ai/job-summary/<int:job_id>/",
+        AIJobSummaryView.as_view(),
+        name="ai-job-summary",
+    ),
     # path('client/get-next-interviewer-details/',NextInterviewerDetails.as_view(),name='get-interviewer-details'),
     path(
         "interviewer/interviewer-dashboard/",
         InterviewerDashboardView.as_view(),
         name="dashboard-of-interviewer",
+    ),
+    path(
+        "interviewer/new-dashboard/",
+        NewInterviewerDashboardView.as_view(),
+        name="new-dashboard-of-interviewer",
     ),
     path(
         "interviewer/get-next-interviewer-details/",
@@ -466,6 +504,16 @@ urlpatterns = [
     ),
     path("recruiter/resumesent/", ResumesSent.as_view(), name="resumes-sent"),
     path(
+        "recruiter/dashboard/stats/",
+        RecruiterDashboardStatsAPI.as_view(),
+        name="recruiter-dashboard-stats",
+    ),
+    path(
+        "recruiter/interview-scheduling/",
+        RecruiterInterviewSchedulingAPI.as_view(),
+        name="recruiter-interview-scheduling",
+    ),
+    path(
         "recruiter/all-scheduled-interviews/",
         AllScheduledInterviews.as_view(),
         name="all-scheduled-interviews",
@@ -524,6 +572,33 @@ urlpatterns = [
     path("manager/information/", OrganizationView.as_view(), name="org-info"),
     path("manager/close-job/", CloseJobView.as_view(), name="close-job-by-manager"),
     path("manager/dashboard/", AgencyDashboardAPI.as_view(), name="agency-dashboard"),
+    path("manager/client-stats/", ClientStatsAPI.as_view(), name="client-stats"),
+    path(
+        "manager/negotiation-stats/",
+        NegotiationStatsAPI.as_view(),
+        name="negotiation-stats",
+    ),
+    path(
+        "manager/job-negotiation-stats/",
+        JobNegotiationStatsAPI.as_view(),
+        name="job-negotiation-stats",
+    ),
+    path("manager/revenue-stats/", RevenueStatsAPI.as_view(), name="revenue-stats"),
+    path(
+        "manager/invoice-summary/",
+        ManagerInvoiceSummaryAPI.as_view(),
+        name="manager-invoice-summary",
+    ),
+    path(
+        "manager/recruiter-job-stats/",
+        RecruiterJobStatsAPI.as_view(),
+        name="recruiter-job-stats",
+    ),
+    path(
+        "manager/interview-scheduling/",
+        InterviewSchedulingDetailsAPI.as_view(),
+        name="interview-scheduling-details",
+    ),
     path(
         "manager/create_accountant/", AccountantsView.as_view(), name="create-acountant"
     ),
@@ -533,11 +608,36 @@ urlpatterns = [
         JobEditActionView.as_view(),
         name="handle-job-edit-request",
     ),
-    path("manger/applications/", AgencyJobApplications.as_view()),
+    path("manager/applications/", AgencyJobApplications.as_view()),
+    path(
+        "manager/recruiter-summary-stats/",
+        ManagerRecruiterSummaryStatsAPI.as_view(),
+        name="manager-recruiter-summary-stats",
+    ),
+    path(
+        "manager/job-stack-stats/",
+        ManagerJobStackStatsAPI.as_view(),
+        name="manager-job-stack-stats",
+    ),
+    path(
+        "manager/filter-data/",
+        ManagerFilterDataAPI.as_view(),
+        name="manager-filter-data",
+    ),
+    path(
+        "manager/job-applicants-details/",
+        JobApplicantsDetailsView.as_view(),
+        name="job-applicants-details",
+    ),
     path(
         "manager/job-edit-details/",
         JobEditStatusAPIView.as_view(),
         name="to-check-job-edit-status",
+    ),
+    path(
+        "manager/perfect-stats/",
+        ManagerDashboardPerfectStatsAPI.as_view(),
+        name="manager-perfect-stats",
     ),
     path("manager/job-posts/", AgencyJobPosts.as_view(), name="agency-job-posts"),
     path(
@@ -649,6 +749,11 @@ urlpatterns = [
         name="manager-replacement-requests",
     ),
     path(
+        "manager/assign-replacement-candidate/",
+        AssignReplacementCandidateView.as_view(),
+        name="manager-assign-replacement-candidate",
+    ),
+    path(
         "manager/replacement-action/",
         ReplacementActionView.as_view(),
         name="manager-replacement-action",
@@ -669,6 +774,16 @@ urlpatterns = [
         name="linkedin callback view",
     ),
     path("change-password/", ChangePassword.as_view(), name="change-password"),
+    path(
+        "job-interview-calendar/",
+        JobInterviewCalendarAPI.as_view(),
+        name="job-interview-calendar",
+    ),
+    path(
+        "job-interview-calendar/<int:job_id>/",
+        JobInterviewCalendarAPI.as_view(),
+        name="job-interview-calendar-specific",
+    ),
     path(
         "view-applications/",
         AllApplicationsForJob.as_view(),
@@ -716,6 +831,11 @@ urlpatterns = [
         "update-notification-seen/",
         NotificationStatusChange.as_view(),
         name="notification-viewed",
+    ),
+    path(
+        "update-notification-visited/",
+        NotificationVisitedChange.as_view(),
+        name="notification-visited",
     ),
     path(
         "complete-application/",
@@ -914,5 +1034,15 @@ urlpatterns = [
         "agency/terms_with_client/",
         AgencyTermsWithClientAgreedView.as_view(),
         name="agency-terms-with-client",
+    ),
+    path(
+        "ai/generate-skills/",
+        AISkillGenerationView.as_view(),
+        name="ai-generate-skills",
+    ),
+    path(
+        "candidates/ai-search/",
+        CandidateProfileMatchingSearchView.as_view(),
+        name="candidate-ai-search",
     ),
 ]

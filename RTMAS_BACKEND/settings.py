@@ -322,6 +322,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "app.tasks.confirm_joining_client",
         "schedule": crontab(minute=17, hour=15, day_of_week="mon-fri"),
     },
+    "hold_reminder_notifications": {
+        "task": "app.tasks.hold_reminder_notifications",
+        "schedule": crontab(minute=30, hour=10),
+    },
 }
 
 
@@ -334,7 +338,6 @@ X_FRAME_OPTIONS = "SAMEORIGIN"
 
 FAST2SMS_API_KEY = os.getenv("FAST2SMS_API_KEY")
 FAST2SMS_SENDER_ID = "FSTSMS"  # or your approved sender ID
-
 
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")

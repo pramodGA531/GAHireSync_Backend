@@ -7,12 +7,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from datetime import datetime
-from datetime import date
+from datetime import datetime, date, timedelta
 from django.db.utils import IntegrityError
 from django.shortcuts import get_object_or_404
 from ..utils import *
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
 from collections import defaultdict
 from django.utils.timesince import timesince
 from django.shortcuts import render
@@ -37,17 +36,19 @@ class ClientDashboard(APIView):
             now = timezone.now()
             seven_days_ago = now - timedelta(days=7)
 
-            all_jobs = (
-                JobPostings.objects.filter(username=request.user)
-                .exclude(approval_status="rejected")
-                .exclude(status="closed")
+            all_jobs_total = JobPostings.objects.filter(username=request.user).exclude(
+                approval_status="rejected"
             )
-            job_posts = all_jobs.order_by("-created_at")[:4]
+            all_active_jobs = all_jobs_total.exclude(status="closed")
+            all_closed_jobs = all_jobs_total.filter(status="closed")
 
-            all_applications = JobApplication.objects.filter(
-                job_location__job_id__in=all_jobs
+            job_posts = all_active_jobs.order_by("-created_at")
+
+            all_applications_total = JobApplication.all_objects.filter(
+                job_location__job_id__in=all_jobs_total
             )
-            application_counts = all_applications.values(
+
+            application_counts = all_applications_total.values(
                 "job_location__job_id"
             ).annotate(total=Count("id"))
             application_counts_dict = {
@@ -56,7 +57,7 @@ class ClientDashboard(APIView):
             }
 
             recent_applications = (
-                all_applications.filter(created_at__gte=seven_days_ago)
+                all_applications_total.filter(created_at__gte=seven_days_ago)
                 .values("job_location__job_id")
                 .annotate(total=Count("id"))
             )
@@ -76,6 +77,13 @@ class ClientDashboard(APIView):
                 if edit_request:
                     edit_status = edit_request.status
 
+                total_positions = (
+                    JobLocationsModel.objects.filter(job_id=post).aggregate(
+                        total=Sum("positions")
+                    )["total"]
+                    or 0
+                )
+
                 jobs_list.append(
                     {
                         "job_title": post.job_title,
@@ -89,22 +97,84 @@ class ClientDashboard(APIView):
                         "years_of_experience": post.years_of_experience,
                         "approval_status": post.approval_status,
                         "edit_request_status": edit_status,
+                        "agency": (
+                            post.organization.name if post.organization else "N/A"
+                        ),
+                        "num_of_postings": total_positions,
                     }
                 )
 
-            resumes_received = all_applications.count()
-            on_process = all_applications.filter(status="processing").count()
-            no_of_roles = all_jobs.count()
-            closed = SelectedCandidates.objects.filter(
-                application__in=all_applications, joining_status="joined"
+            resumes_received = all_applications_total.count()
+
+            # Efficient & Cumulative logic for Active Candidates
+            # On-Process = candidates who have progressed beyond "applied" (e.g., shortlisted/processing/hold/selected/joined)
+            active_candidates_qs = all_applications_total.filter(
+                Q(
+                    status__in=[
+                        "shortlisted",
+                        "processing",
+                        "hold",
+                        "selected",
+                        "joined",
+                    ]
+                )
+                | Q(selected_candidates__joining_status="joined")
+            ).distinct()
+
+            # Selected = Reached selection stage or Joined
+            selected_candidates_qs = all_applications_total.filter(
+                Q(status__in=["selected", "joined"])
+                | Q(selected_candidates__joining_status="joined")
+            ).distinct()
+
+            on_process = active_candidates_qs.count()
+            selected_candidates_count = selected_candidates_qs.count()
+
+            no_of_roles_positions = (
+                JobLocationsModel.objects.filter(job_id__in=all_jobs_total).aggregate(
+                    total=Sum("positions")
+                )["total"]
+                or 0
+            )
+            no_of_roles = no_of_roles_positions
+            closed_candidates = SelectedCandidates.objects.filter(
+                application__in=all_applications_total, joining_status="joined"
             ).count()
+
+            completed_jobs_count = all_closed_jobs.count()
+
+            payment_overdue_qs = InvoiceGenerated.objects.filter(
+                client__user=request.user, payment_status="Pending"
+            )
+            payment_overdue_count = payment_overdue_qs.count()
+            payment_overdue_amount = (
+                payment_overdue_qs.aggregate(total=Sum("final_price"))["total"] or 0
+            )
+
+            under_negotiation_qs = all_active_jobs.filter(approval_status="pending")
+            under_negotiation_count = under_negotiation_qs.count()
+            under_negotiations_list = []
+            for job in under_negotiation_qs[:6]:  # Limit to 6 for the dashboard
+                under_negotiations_list.append(
+                    {
+                        "id": job.id,
+                        "job_title": job.job_title,
+                        "date": job.created_at.strftime("%d/%m/%Y"),
+                        "status": "Under Negotiation",
+                    }
+                )
 
             data_json = {
                 "resumes_received": resumes_received,
                 "on_process": on_process,
                 "no_of_roles": no_of_roles,
-                "closed": closed,
+                "closed": closed_candidates,
+                "selected": selected_candidates_count,
+                "completed_jobs": completed_jobs_count,
                 "vacancies": 0,
+                "payment_overdue_count": payment_overdue_count,
+                "payment_overdue_amount": float(payment_overdue_amount),
+                "under_negotiation": under_negotiation_count,
             }
 
             # interviewer name, interviewer email, num_of_jobs_alloted, num_of_round_alloted, rounds_completed, rounds_pending
@@ -120,9 +190,9 @@ class ClientDashboard(APIView):
                 interviewer.id: interviewer.email for interviewer in interviewers
             }
 
-            interviews = InterviewerDetails.objects.filter(job_id__in=all_jobs).values(
-                "job_id", "name"
-            )
+            interviews = InterviewerDetails.objects.filter(
+                job_id__in=all_jobs_total
+            ).values("job_id", "name")
 
             jobs_alloted_dict = defaultdict(set)
             for interview in interviews:
@@ -161,9 +231,19 @@ class ClientDashboard(APIView):
                 }
                 interviewers_data.append(interviewer_json)
 
-            today_interviews_list = []
+            selected_date_str = request.query_params.get("date")
+            if selected_date_str:
+                try:
+                    selected_date = datetime.strptime(
+                        selected_date_str, "%Y-%m-%d"
+                    ).date()
+                except ValueError:
+                    selected_date = now.date()
+            else:
+                selected_date = now.date()
+
             today_interviews = InterviewSchedule.objects.filter(
-                job_location__job_id__in=all_jobs, scheduled_date=now.date()
+                job_location__job_id__in=all_jobs_total, scheduled_date=selected_date
             ).select_related("interviewer__name", "candidate", "job_location__job_id")
             today_interviews_list = []
             for interview in today_interviews:
@@ -171,18 +251,215 @@ class ClientDashboard(APIView):
                     {
                         "interviewer_name": interview.interviewer.name.username,
                         "candidate_name": interview.candidate.candidate_name,
-                        "from_time": interview.from_time,
+                        "from_time": (
+                            interview.from_time.strftime("%H:%M")
+                            if interview.from_time
+                            else ""
+                        ),
+                        "to_time": (
+                            interview.to_time.strftime("%H:%M")
+                            if interview.to_time
+                            else ""
+                        ),
                         "round": interview.round_num,
                         "job_title": interview.job_location.job_id.job_title,
+                        "meet_link": interview.meet_link,
+                        "status": interview.status,
+                    }
+                )
+
+            # --- Funnel / Legend Stats (Job post profile stacks) ---
+            profile_filter = request.query_params.get("profile_filter", "last_30_days")
+            profile_apps = all_applications_total
+
+            if profile_filter == "last_7_days":
+                profile_apps = all_applications_total.filter(
+                    created_at__gte=now - timedelta(days=7)
+                )
+            elif profile_filter == "last_30_days":
+                profile_apps = all_applications_total.filter(
+                    created_at__gte=now - timedelta(days=30)
+                )
+            elif profile_filter == "last_3_months":
+                profile_apps = all_applications_total.filter(
+                    created_at__gte=now - timedelta(days=90)
+                )
+
+            # Cumulative funnel logic for Profile Stacks:
+            # Shortlisted = everyone who reached R1+ (processing, selected, or joined)
+            # Processing  = everyone who reached R2+ (round > 1 in processing, or selected, or joined)
+            profile_shortlisted = (
+                profile_apps.filter(
+                    Q(status="processing")
+                    | Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                )
+                .distinct()
+                .count()
+            )
+
+            profile_processing = (
+                profile_apps.filter(
+                    (Q(status="processing") & Q(round_num__gt=1))
+                    | Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                )
+                .distinct()
+                .count()
+            )
+
+            profile_funnel_stats = [
+                profile_apps.count(),
+                profile_shortlisted,
+                profile_processing,
+                profile_apps.filter(status="hold").count(),
+                profile_apps.filter(status="rejected").count(),
+                profile_apps.filter(
+                    Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                )
+                .distinct()
+                .count(),
+                # Replaced = replacement candidates who were SELECTED (not just in process)
+                profile_apps.filter(is_replacement=True, status="selected").count(),
+                SelectedCandidates.objects.filter(
+                    application__in=profile_apps, joining_status="joined"
+                ).count(),
+            ]
+
+            # --- Agency Funnel Stats ---
+            agency_org = request.query_params.get("agency_org", "all_agencies")
+            agency_role = request.query_params.get("agency_role", "all_roles")
+            agency_month = request.query_params.get("agency_month", "this_month")
+
+            agency_apps = all_applications_total
+            if agency_org != "all_agencies":
+                agency_apps = agency_apps.filter(
+                    job_location__job_id__organization__id=agency_org
+                )
+            if agency_role != "all_roles":
+                agency_apps = agency_apps.filter(job_location__job_id__id=agency_role)
+            if agency_month != "this_month":
+                if agency_month == "last_month":
+                    last_month_date = now - timedelta(days=30)
+                    agency_apps = agency_apps.filter(
+                        created_at__month=last_month_date.month,
+                        created_at__year=last_month_date.year,
+                    )
+                elif agency_month == "last_3_months":
+                    agency_apps = agency_apps.filter(
+                        created_at__gte=now - timedelta(days=90)
+                    )
+
+            # Cumulative funnel logic for Agency Outcomes:
+            # Shortlisted = everyone who reached R1+ (processing, selected, or joined)
+            # Processing  = everyone who reached R2+ (round > 1, selected, or joined)
+            agency_shortlisted = (
+                agency_apps.filter(
+                    Q(status="processing")
+                    | Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                )
+                .distinct()
+                .count()
+            )
+
+            agency_processing = (
+                agency_apps.filter(
+                    (Q(status="processing") & Q(round_num__gt=1))
+                    | Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                )
+                .distinct()
+                .count()
+            )
+
+            agency_funnel_stats = [
+                agency_apps.count(),
+                agency_shortlisted,
+                agency_processing,
+                agency_apps.filter(status="hold").count(),
+                agency_apps.filter(status="rejected").count(),
+                agency_apps.filter(
+                    Q(status="selected")
+                    | Q(selected_candidates__joining_status="joined")
+                )
+                .distinct()
+                .count(),
+                # Replaced = replacement candidates who were SELECTED (not just in process)
+                agency_apps.filter(is_replacement=True, status="selected").count(),
+                SelectedCandidates.objects.filter(
+                    application__in=agency_apps, joining_status="joined"
+                ).count(),
+            ]
+
+            # --- Notifications Data ---
+            notifications_qs = Notifications.objects.filter(
+                receiver=request.user, seen=False
+            ).order_by("-created_at")[:5]
+            notification_list = []
+            for n in notifications_qs:
+                icon = "users"
+                if "Accepted" in n.message:
+                    icon = "check"
+                elif "Job" in n.message:
+                    icon = "job"
+                elif "Promotion" in n.message:
+                    icon = "promote"
+
+                notification_list.append(
+                    {
+                        "icon": icon,
+                        "title": n.subject,
+                        "sub": (
+                            n.message[:60] + "..." if len(n.message) > 60 else n.message
+                        ),
+                        "time": timesince(n.created_at) + " ago",
+                    }
+                )
+
+            # --- Invoices Data ---
+            three_days_ago = now - timedelta(days=3)
+            new_invoices_qs = InvoiceGenerated.objects.filter(
+                client__user=request.user, created_at__gte=three_days_ago
+            ).order_by("-created_at")
+            new_invoices = []
+            for inv in new_invoices_qs:
+                new_invoices.append(
+                    {
+                        "id": inv.invoice_code,
+                        "company": inv.organization.name,
+                        "due": inv.scheduled_date.strftime("%d-%m-%Y"),
+                        "amount": f"₹{inv.final_price}",
+                    }
+                )
+
+            overdue_invoices_qs = InvoiceGenerated.objects.filter(
+                client__user=request.user, payment_status="Pending"
+            ).order_by("-created_at")[:5]
+            overdue_invoices = []
+            for inv in overdue_invoices_qs:
+                overdue_invoices.append(
+                    {
+                        "id": inv.invoice_code,
+                        "company": inv.organization.name,
+                        "due": inv.scheduled_date.strftime("%d-%m-%Y"),
+                        "amount": f"₹{inv.final_price}",
                     }
                 )
 
             return Response(
                 {
                     "data": data_json,
+                    "funnel_stats": profile_funnel_stats,
+                    "agency_funnel_stats": agency_funnel_stats,
                     "interviewers_data": interviewers_data,
                     "today_interviews": today_interviews_list,
                     "job_posts": jobs_list,
+                    "notifications": notification_list,
+                    "new_invoices": new_invoices,
+                    "overdue_invoices": overdue_invoices,
+                    "under_negotiations_list": under_negotiations_list,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -235,6 +512,14 @@ class ConnectedOrganizations(APIView):
             connections = ClientOrganizations.objects.filter(client__user=client)
             connection_list = []
             for connection in connections:
+                total_positions = (
+                    JobLocationsModel.objects.filter(
+                        job_id__organization=connection.organization,
+                        job_id__username=client,
+                    ).aggregate(total=Sum("positions"))["total"]
+                    or 0
+                )
+
                 connection_list.append(
                     {
                         "organization": connection.organization.name,
@@ -244,6 +529,7 @@ class ConnectedOrganizations(APIView):
                         "id": connection.id,
                         "organization_code": connection.organization.org_code,
                         "approval_status": connection.approval_status,
+                        "num_of_postings": total_positions,
                         "can_add_new": self.get_job_post_limit(
                             connection.organization.id
                         ),
@@ -332,37 +618,50 @@ class GetOrganizationTermsView(APIView):
                         "invoice_after": terms.invoice_after,
                         "payment_within": terms.payment_within,
                         "interest_percentage": terms.interest_percentage,
+                        "id": terms.id,
                         "connection_id": connection.id,
                         "is_negotiated": False,
                     }
                 )
             negotiation_request = False
             try:
-                negotiated_terms = NegotiationRequests.objects.get(
+                # Use .filter().last() instead of .get() to handle multiple requests
+                negotiated_terms = NegotiationRequests.objects.filter(
                     client_organization=connection
-                )
-                today = date.today()
+                ).last()
+                if negotiated_terms:
+                    today = date.today()
+                    # Add negotiated terms if they are pending, accepted (and not expired), or rejected
+                    if (
+                        negotiated_terms.status == "pending"
+                        or (
+                            negotiated_terms.status == "accepted"
+                            and (
+                                not negotiated_terms.expiry_date
+                                or negotiated_terms.expiry_date > today
+                            )
+                        )
+                        or negotiated_terms.status == "rejected"
+                    ):
+                        terms_list.append(
+                            {
+                                "ctc_range": negotiated_terms.ctc_range,
+                                "service_fee": negotiated_terms.service_fee,
+                                "service_fee_type": negotiated_terms.service_fee_type,
+                                "replacement_clause": negotiated_terms.replacement_clause,
+                                "invoice_after": negotiated_terms.invoice_after,
+                                "payment_within": negotiated_terms.payment_within,
+                                "interest_percentage": negotiated_terms.interest_percentage,
+                                "id": negotiated_terms.id,
+                                "connection_id": connection.id,
+                                "is_negotiated": True,
+                                "status": negotiated_terms.status,
+                                "reason": negotiated_terms.reason,
+                            }
+                        )
 
-                if negotiated_terms.status == "pending":
-                    negotiation_request = True
-
-                elif (
-                    negotiated_terms.expiry_date
-                    and negotiated_terms.expiry_date > today
-                    and negotiated_terms.status == "accepted"
-                ):
-                    terms_list.append(
-                        {
-                            "ctc_range": negotiated_terms.ctc_range,
-                            "service_fee": negotiated_terms.service_fee,
-                            "replacement_clause": negotiated_terms.replacement_clause,
-                            "invoice_after": negotiated_terms.invoice_after,
-                            "payment_within": negotiated_terms.payment_within,
-                            "interest_percentage": negotiated_terms.interest_percentage,
-                            "connection_id": connection.id,
-                            "is_negotiated": True,
-                        }
-                    )
+                    if negotiated_terms.status == "pending":
+                        negotiation_request = True
             except NegotiationRequests.DoesNotExist:
                 pass
 
@@ -837,7 +1136,7 @@ class getClientJobposts(APIView):
                 jobs = []
                 for job in jobposts:
                     applications = JobApplication.objects.filter(
-                        job_location__job_id=job
+                        job_location__job_id=job, is_replacement=False
                     )
                     applications_count = applications.count()
                     positions = 0
@@ -861,6 +1160,18 @@ class getClientJobposts(APIView):
                                 "closed": joined,
                             }
                         )
+
+                    # Determine job status
+                    if positions > 0 and closed >= positions:
+                        if job.status != "closed":
+                            job.status = "closed"
+                            job.save()
+                    elif (
+                        job.job_close_duration and job.job_close_duration < date.today()
+                    ):
+                        if job.status != "expired" and job.status != "closed":
+                            job.status = "expired"
+                            job.save()
 
                     job_details = {
                         "id": job.id,
@@ -1417,7 +1728,7 @@ class InterviewersView(APIView):
 
 # Get all the applicaitons
 class GetResumeView(APIView):
-    pagination_class = TenResultsPagination
+    pagination_class = LargeResultsPagination
 
     def get(self, request):
         try:
@@ -1430,21 +1741,34 @@ class GetResumeView(APIView):
 
             if request.GET.get("jobid"):
                 location_id = request.GET.get("jobid")
-                applications_all = JobApplication.objects.filter(
-                    job_location=location_id
-                )
+                try:
+                    location = JobLocationsModel.objects.get(id=location_id)
+                except JobLocationsModel.DoesNotExist:
+                    return Response(
+                        {"error": f"Job location with id {location_id} not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                job = location.job_id
+
+                is_replacement = request.GET.get("is_replacement") == "true"
+
+                applications_all = JobApplication.all_objects.filter(
+                    job_location=location_id, is_replacement=is_replacement
+                ).select_related("resume")
 
                 candidates = []
                 for application in applications_all:
-                    # if application.status == 'pending':
-                    candidates.append(application.resume)
+                    pass
 
-                candidates_serializer = CandidateResumeWithoutContactSerializer(
-                    candidates, many=True
-                )
+                    resume = application.resume
+                    resume_data = CandidateResumeWithoutContactSerializer(resume).data
+                    # Attach job_application context that the frontend reads
+                    resume_data["job_application"] = {
+                        "id": application.id,
+                        "status": application.status,
+                    }
+                    candidates.append(resume_data)
 
-                location = JobLocationsModel.objects.get(id=location_id)
-                job = location.job_id
                 job_data = {
                     "job_id": location_id,
                     "job_title": job.job_title,
@@ -1455,23 +1779,23 @@ class GetResumeView(APIView):
                 }
 
                 return Response(
-                    {"data": candidates_serializer.data, "job_data": job_data},
+                    {"data": candidates, "job_data": job_data},
                     status=status.HTTP_200_OK,
                 )
 
             else:
-                job_postings = JobPostings.objects.filter(username=user).exclude(
-                    status="closed"
-                )
+                job_postings = JobPostings.objects.filter(username=user)
                 job_locations = JobLocationsModel.objects.filter(
                     job_id__in=job_postings
                 )
                 job_applications_list = []
 
                 for job_location in job_locations:
-                    total_applications = JobApplication.objects.filter(
+                    total_applications_qs = JobApplication.all_objects.filter(
                         job_location=job_location
-                    ).count()
+                    )
+
+                    total_applications = total_applications_qs.count()
 
                     job_applications_list.append(
                         {
@@ -1539,6 +1863,58 @@ class RejectApplicationView(APIView):
                     f"id::\n"
                     f"link::recruiter/postings/"
                 ),
+            )
+
+            # Candidate Notification & Email
+            subject = f"Application Status Update: {job_title}"
+            candidate_body = f"""
+            <html>
+            <body>
+                <p>Dear {candidate_resume.candidate_name},</p>
+                <p>Thank you for your interest in the position of <strong>{job_title}</strong> at <strong>{clientCompanyDetails.name_of_organization}</strong>.</p>
+                <p>After careful consideration, we regret to inform you that we will not be moving forward with your application at this time.</p>
+                <p><strong>Feedback from client:</strong> {job_application.feedback}</p>
+                <p>We wish you the best in your job search.</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=subject,
+                body=candidate_body,
+                to_email=[candidate_resume.candidate_email],
+            )
+
+            cand_user = CustomUser.objects.filter(
+                email=candidate_resume.candidate_email
+            ).first()
+            if cand_user:
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=cand_user,
+                    category=Notifications.CategoryChoices.REJECT_CANDIDATE,
+                    subject=subject,
+                    message=f"Update on your application for {job_title}: Regret to inform you that we are not moving forward at this time.",
+                )
+
+            # Recruiter Email
+            recruiter_subject = (
+                f"Candidate Rejected: {candidate_resume.candidate_name} for {job_title}"
+            )
+            recruiter_body = f"""
+            <html>
+            <body>
+                <p>Hello,</p>
+                <p>The candidate <strong>{candidate_resume.candidate_name}</strong> you submitted for <strong>{job_title}</strong> has been rejected by the client.</p>
+                <p><strong>Feedback:</strong> {job_application.feedback}</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=recruiter_subject,
+                body=recruiter_body,
+                to_email=[job_application.sender.email],
             )
             job_profile_log(
                 job_application.id,
@@ -1708,7 +2084,7 @@ HireSync Team
                         f"Client: {clientCompanyDetails.name_of_organization}\n\n"
                         f"Schedule interview as per candidate and interviewer availability.\n\n"
                         f"id::\n"
-                        f"link::recruiter/schedule_applications/"
+                        f"link::recruiter/applications/to-schedule/"
                     ),
                 )
 
@@ -1726,67 +2102,7 @@ class SelectApplicationView(APIView):
     permission_classes = [IsClient]
 
     def create_user_and_profile(self, candidate_name, candidate_email):
-        # Check if user already exists
-        existing_user = CustomUser.objects.filter(email=candidate_email).first()
-        if existing_user:
-            try:
-                candidate_profile = CandidateProfile.objects.get(name=existing_user)
-                return candidate_profile, existing_user
-            except CandidateProfile.DoesNotExist:
-                # User exists but profile doesn't (should be rare for candidates, but possible)
-                candidate_profile = CandidateProfile.objects.create(
-                    name=existing_user,
-                    email=candidate_email,
-                )
-                return candidate_profile, existing_user
-
-        password = generate_random_password()
-
-        # Serialize and create the user
-        user_serializer = CustomUserSerializer(
-            data={
-                "email": candidate_email,
-                "username": candidate_name,
-                "role": CustomUser.CANDIDATE,
-                "credit": 0,
-                "password": password,
-            }
-        )
-
-        if user_serializer.is_valid(raise_exception=True):
-            new_user = user_serializer.save()
-            new_user.set_password(password)
-            new_user.save()
-
-            candidate_profile = CandidateProfile.objects.create(
-                name=new_user,
-                email=candidate_email,
-            )
-            subject = "Account Created on HireSync"
-            message = f"""
-Dear {candidate_name},
-
-Welcome to HireSync! Your Candidate account has been successfully created.
-
-Here are your account details:
-Username: {candidate_name}
-Email: {candidate_email}
-Password: {password}
-
-Please log in to your account and change your password for security purposes.
-
-Login Link: https://hiresync.com/login
-
-If you have any questions, feel free to contact our support team.
-
-Regards,
-HireSync Team
-                """
-            send_custom_mail(subject=subject, body=message, to_email=[candidate_email])
-
-            return candidate_profile, new_user
-        else:
-            raise serializers.ValidationError(user_serializer.errors)
+        return create_candidate_account(candidate_name, candidate_email)
 
     def post(self, request):
         try:
@@ -1823,6 +2139,49 @@ HireSync Team
                     candidate_name=resume.candidate_name,
                 )
                 job_application.save()
+
+                # Notify Candidate
+                subject = f"Application Update: {job_application.job_location.job_id.job_title} - On Hold"
+                candidate_body = f"""
+                <html>
+                <body>
+                    <p>Dear {resume.candidate_name},</p>
+                    <p>Your application for <strong>{job_application.job_location.job_id.job_title}</strong> is currently <strong>On Hold</strong>.</p>
+                    <p>This means you have cleared the initial rounds and your profile is being considered for future steps. We will notify you once there is a further update.</p>
+                    <p>Best Regards,<br>HireSync Team</p>
+                </body>
+                </html>
+                """
+                send_custom_mail(
+                    subject=subject,
+                    body=candidate_body,
+                    to_email=[resume.candidate_email],
+                )
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=customCand,
+                    category=Notifications.CategoryChoices.SHORTLIST_APPLICATION,
+                    subject=subject,
+                    message=f"Your profile for {job_application.job_location.job_id.job_title} has been placed on hold after initial review.",
+                )
+
+                # Notify Recruiter
+                recruiter_subject = (
+                    f"Candidate Update (On Hold): {resume.candidate_name}"
+                )
+                recruiter_message = f"Candidate {resume.candidate_name} has been placed 'On Hold' for the role {job_application.job_location.job_id.job_title} after client review."
+                Notifications.objects.create(
+                    sender=request.user,
+                    receiver=job_application.sender,
+                    category=Notifications.CategoryChoices.SHORTLIST_APPLICATION,
+                    subject=recruiter_subject,
+                    message=recruiter_message,
+                )
+                send_custom_mail(
+                    subject=recruiter_subject,
+                    body=f"<html><body><p>{recruiter_message}</p></body></html>",
+                    to_email=[job_application.sender.email],
+                )
 
             return Response(
                 {"message": "Candidate successfully selected to next round"},
@@ -1990,11 +2349,22 @@ class CandidatesOnHold(APIView):
                     )
                 )
                 applications_on_hold = JobApplication.objects.filter(
-                    job_location__in=location_ids, status="hold"
+                    job_location__in=location_ids, status="hold", is_replacement=False
                 )
                 # .select_related("resume")
                 application_list = []
                 for application in applications_on_hold:
+                    # Restrict access for closed/expired jobs
+                    if application.job_location.status in [
+                        "closed",
+                        "expired",
+                    ] or application.job_location.job_id.status in [
+                        "closed",
+                        "expired",
+                    ]:
+                        # Candidates on hold haven't joined this job, so hide them
+                        continue
+
                     job = application.job_location.job_id
                     application_list.append(
                         {
@@ -2005,7 +2375,11 @@ class CandidatesOnHold(APIView):
                             "application_id": application.id,
                             "location": application.job_location.location,
                             "job_department": job.job_department,
-                            "job_status": job.status,
+                            "job_status": (
+                                "closed"
+                                if application.job_location.status == "closed"
+                                else job.status
+                            ),
                             "job_id": job.id,
                             "location_status": application.job_location.status,
                         }
@@ -2014,7 +2388,7 @@ class CandidatesOnHold(APIView):
             user = request.user
             job_posts = JobPostings.objects.filter(username=user)
             candidates_on_hold = JobApplication.objects.filter(
-                job_location__job_id__in=job_posts, status="hold"
+                job_location__job_id__in=job_posts, status="hold", is_replacement=False
             )
 
             candidate_list = []
@@ -2028,7 +2402,11 @@ class CandidatesOnHold(APIView):
                     "application_id": candidate.id,
                     "job_department": job.job_department,
                     "location": candidate.job_location.location,
-                    "job_status": job.status,
+                    "job_status": (
+                        "closed"
+                        if candidate.job_location.status == "closed"
+                        else job.status
+                    ),
                     "job_id": job.id,
                     "location_status": candidate.job_location.status,
                 }
@@ -2075,6 +2453,7 @@ class HandleSelect(APIView):
                 joining_date=data.get("joining_date"),
                 joining_status="pending",
                 other_benefits=data.get("other_benefits", ""),
+                is_replacement_eligible=True,
             )
 
             application.status = "selected"
@@ -2113,6 +2492,48 @@ class HandleSelect(APIView):
                     f"Agreed CTC: {selectedCand.ctc}\n\n"
                     f"Please proceed with the onboarding formalities and coordinate further as needed.\n\n"
                 ),
+            )
+
+            # Emails for Candidate and Recruiter
+            selection_subject = (
+                f"Congratulations! You've been Selected for {job.job_title}"
+            )
+            candidate_email_body = f"""
+            <html>
+            <body>
+                <p>Dear {customCand.username},</p>
+                <p>Congratulations! We are excited to inform you that you have been <strong>Selected</strong> for the position of <strong>{job.job_title}</strong>.</p>
+                <p><strong>Joining Date:</strong> {selectedCand.joining_date}</p>
+                <p><strong>Agreed CTC:</strong> {selectedCand.ctc}</p>
+                <p>Please log in to your dashboard to view and accept the offer.</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=selection_subject,
+                body=candidate_email_body,
+                to_email=[customCand.email],
+            )
+
+            recruiter_selection_subject = (
+                f"Candidate Selected: {customCand.username} for {job.job_title}"
+            )
+            recruiter_email_body = f"""
+            <html>
+            <body>
+                <p>Hello,</p>
+                <p>Great news! Your candidate <strong>{customCand.username}</strong> has been selected for the position of <strong>{job.job_title}</strong>.</p>
+                <p><strong>Joining Date:</strong> {selectedCand.joining_date}</p>
+                <p><strong>Agreed CTC:</strong> {selectedCand.ctc}</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=recruiter_selection_subject,
+                body=recruiter_email_body,
+                to_email=[application.sender.email],
             )
             job_post_log(
                 job.id,
@@ -2222,11 +2643,11 @@ class ReopenJob(APIView):
     def get(self, request):
         try:
             user = request.user
-            job_id = request.GET.get("id")
+            job_id = request.GET.get("job_id") or request.GET.get("id")
 
             if not job_id:
                 return Response(
-                    {"error": "JobId is not sent"}, status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Job ID is not sent"}, status=status.HTTP_400_BAD_REQUEST
                 )
 
             job_post = JobPostings.objects.get(id=job_id)
@@ -2317,16 +2738,21 @@ class ReopenJob(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            new_positions = request.data.get(
-                "num_of_positions", job_post.num_of_positions
+            # Since JobPostings doesn't have num_of_positions, we aggregate from JobLocationsModel
+            total_positions = (
+                JobLocationsModel.objects.filter(job_id=job_post).aggregate(
+                    total=Sum("positions")
+                )["total"]
+                or 0
             )
+
+            new_positions = request.data.get("num_of_positions", total_positions)
             new_ctc_range = request.data.get("ctc", job_post.ctc)
             new_job_close_duration = request.data.get(
                 "job_close_duration", job_post.job_close_duration
             )
-            locations = JobLocationsModel.objects.filter(job_id=job_post).values_list(
-                "location", "positions"
-            )
+            # Fetch existing locations to replicate them
+            old_locations = JobLocationsModel.objects.filter(job_id=job_post)
             generated_job_code = self.generate_unique_jobcode(request.user)
 
             if not generated_job_code:
@@ -2340,7 +2766,6 @@ class ReopenJob(APIView):
                 try:
                     new_job_post = JobPostings.objects.create(
                         ctc=new_ctc_range,
-                        num_of_positions=new_positions,
                         job_close_duration=new_job_close_duration,
                         status="opened",
                         jobcode=generated_job_code,
@@ -2348,7 +2773,6 @@ class ReopenJob(APIView):
                         organization=job_post.organization,
                         job_title=job_post.job_title,
                         job_department=job_post.job_department,
-                        job_locations=locations,
                         job_description=job_post.job_description,
                         years_of_experience=job_post.years_of_experience,
                         rounds_of_interview=job_post.rounds_of_interview,
@@ -2375,6 +2799,26 @@ class ReopenJob(APIView):
                         languages=job_post.languages,
                         approval_status="pending",
                     )
+
+                    # Replicate Job Locations
+                    if old_locations.exists():
+                        for loc in old_locations:
+                            JobLocationsModel.objects.create(
+                                job_id=new_job_post,
+                                location=loc.location,
+                                positions=loc.positions,
+                                job_type=loc.job_type,
+                                status="opened",
+                            )
+                    else:
+                        # Fallback if no locations existed
+                        JobLocationsModel.objects.create(
+                            job_id=new_job_post,
+                            location="Not Specified",
+                            positions=new_positions,
+                            job_type="office",
+                            status="opened",
+                        )
 
                 except IntegrityError:
                     return Response(
@@ -2473,6 +2917,7 @@ class TodayJoingings(APIView):
                 joining_date__gte=today,
                 joining_date__lt=today + timedelta(days=1),
                 application__job_id__username=client_user,
+                application__is_replacement=False,
             ).select_related("application__job_id")
 
             # Prepare response data
@@ -2535,7 +2980,15 @@ class UpdateJoiningStatus(APIView):
                 application__id=application_id
             )
 
-            selected_application.status = new_status
+            selected_application.joining_status = new_status
+
+            # When a candidate joins, mark their replacement eligibility
+            if new_status == "joined":
+                is_replacement_hire = ReplacementCandidates.objects.filter(
+                    replaced_by=selected_application.application
+                ).exists()
+                selected_application.is_replacement_eligible = not is_replacement_hire
+
             selected_application.save()
             # if new_status=="joined":
             # here call the invoice function here so, do it
@@ -2584,42 +3037,40 @@ class UpdateJoiningStatus(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class CandidateLeftView(APIView):
-    def post(self, request):
-        try:
-            reason = request.data.get("reason")
-            candidate_id = request.GET.get("candidate_id")
-            candidate = SelectedCandidates.objects.get(id=candidate_id)
-            invoice = InvoiceGenerated.objects.get(selected_candidate=candidate)
-            candidate.joining_status = "left"
-            candidate.resigned_date = date.today()
-            if invoice.payment_status == "Paid":
-                pass
-            if reason == "performance_issues":
-                candidate.is_replacement_eligible = False
-            else:
-                candidate.is_replacement_eligible = True
-            candidate.left_reason = request.data.get("reason")
-            candidate.save()
-            application = candidate.application
-            application.status = "left"
-            application.save()
-            return Response(
-                {"message": "Candidate status updated successfully"},
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
+# class CandidateLeftView(APIView):
+#     def post(self, request):
+#         try:
+#             reason = request.data.get("reason")
+#             candidate_id = request.GET.get("candidate_id")
+#             candidate = SelectedCandidates.objects.get(id=candidate_id)
+#             invoice = InvoiceGenerated.objects.get(selected_candidate=candidate)
+#             candidate.joining_status = "left"
+#             candidate.resigned_date = date.today()
+#             if invoice.payment_status == "Paid":
+#                 pass
+#             if reason == "performance_issues":
+#                 candidate.is_replacement_eligible = False
+#             else:
+#                 candidate.is_replacement_eligible = True
+#             candidate.left_reason = request.data.get("reason")
+#             candidate.save()
+#             application = candidate.application
+#             application.status = "left"
+#             application.save()
+#             return Response(
+#                 {"message": "Candidate status updated successfully"},
+#                 status=status.HTTP_200_OK,
+#             )
+#         except Exception as e:
+#             print(str(e))
+#             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class AllSelectedCandidates(APIView):
     permission_classes = [IsClient]
 
     def get(self, request):
         try:
             applications = JobApplication.objects.filter(
-                job_id__username=request.user
+                job_id__username=request.user, is_replacement=False
             ).prefetch_related("selected_candidates")
 
             candidates_list = []
@@ -2672,27 +3123,42 @@ class SelectedCandidatesView(APIView):
             if job_id and job_id.isdigit():
                 job_id = int(job_id)
                 applications = JobApplication.objects.filter(
-                    job_location__job_id=request.GET.get("job_id"), status="selected"
+                    job_location__job_id=request.GET.get("job_id"),
+                    status="selected",
+                    is_replacement=False,
                 ).select_related("selected_candidates")
 
             else:
                 applications = JobApplication.objects.filter(
-                    job_location__job_id__username=request.user, status="selected"
+                    job_location__job_id__username=request.user,
+                    status="selected",
+                    is_replacement=False,
                 ).select_related("selected_candidates")
             candidates_list = []
             for application in applications:
+                # Ensure all selected candidates are visible irrespective of job status
+                # if application.job_location.status in [
+                #     "closed",
+                #     "expired",
+                # ] or application.job_location.job_id.status in ["closed", "expired"]:
+                #     is_joined = SelectedCandidates.objects.filter(
+                #         application=application, joining_status="joined"
+                #     ).exists()
+                #     if not is_joined:
+                #         continue
+
                 selected_candidate = SelectedCandidates.objects.get(
                     application=application
                 )
                 candidate = application.resume
-                job = job_id
+                job_id_value = application.job_location.job_id.id
                 if candidate is not None:
 
                     candidates_list.append(
                         {
                             "candidate_name": candidate.candidate_name,
                             "application_id": application.id,
-                            "job_id": job_id,
+                            "job_id": job_id_value,
                             "selected_candidate_id": selected_candidate.id,
                             "job_title": application.job_location.job_id.job_title,
                             "joining_status": selected_candidate.joining_status,
@@ -2721,14 +3187,29 @@ class ShortlistedCandidatesView(APIView):
             if job_id and job_id.isdigit():
                 job_id = int(job_id)
                 applications = JobApplication.objects.filter(
-                    job_location__job_id=request.GET.get("job_id"), status="processing"
+                    job_location__job_id=request.GET.get("job_id"),
+                    status="processing",
+                    is_replacement=False,
                 )
             else:
                 applications = JobApplication.objects.filter(
-                    job_location__job_id__username=request.user, status="processing"
+                    job_location__job_id__username=request.user,
+                    status="processing",
+                    is_replacement=False,
                 )
             applications_list = []
             for application in applications:
+                # Restrict access for closed/expired jobs unless candidate has joined
+                if application.job_location.status in [
+                    "closed",
+                    "expired",
+                ] or application.job_location.job_id.status in ["closed", "expired"]:
+                    is_joined = SelectedCandidates.objects.filter(
+                        application=application, joining_status="joined"
+                    ).exists()
+                    if not is_joined:
+                        continue
+
                 applications_list.append(
                     {
                         "application_id": application.id,
@@ -2765,11 +3246,13 @@ class AllJoinedCandidates(APIView):
             if job_id and job_id.isdigit():
                 job_id = int(job_id)
                 applications = JobApplication.objects.filter(
-                    job_location__job_id=request.GET.get("job_id")
+                    job_location__job_id=request.GET.get("job_id"),
+                    is_replacement=False,
                 ).select_related("selected_candidates")
             else:
                 applications = JobApplication.objects.filter(
-                    job_location__job_id__username=request.user
+                    job_location__job_id__username=request.user,
+                    is_replacement=False,
                 ).select_related("selected_candidates")
 
             candidates_list = []
@@ -2821,11 +3304,13 @@ class CandidateLeftView(APIView):
             if job_id and job_id.isdigit():
                 job_id = int(job_id)
                 applications = JobApplication.objects.filter(
-                    job_location__job_id=request.GET.get("job_id")
+                    job_location__job_id=request.GET.get("job_id"),
+                    is_replacement=False,
                 )
             else:
                 applications = JobApplication.objects.filter(
-                    job_location__job_id__username=request.user
+                    job_location__job_id__username=request.user,
+                    is_replacement=False,
                 )
             selected_candidates_list = []
             for application in applications:
@@ -2834,16 +3319,35 @@ class CandidateLeftView(APIView):
                 ).first()
                 if selected_candidate and selected_candidate.joining_status == "left":
                     job = application.job_location.job_id
+
+                    # Fetch replacement clause days
+                    terms = JobPostTerms.objects.filter(job_id=job).first()
+                    if terms:
+                        replacement_clause_days = terms.replacement_clause
+                    else:
+                        replacement_clause_days = 0
+
+                    # check if this candidate was a replacement
+                    is_this_a_replacement = ReplacementCandidates.objects.filter(
+                        replaced_by=application
+                    ).exists()
+
+                    is_replacement_eligible = selected_candidate.is_replacement_eligible
+                    if is_this_a_replacement:
+                        is_replacement_eligible = False
+
                     selected_candidates_list.append(
                         {
                             "candidate_name": application.resume.candidate_name,
                             "job_title": job.job_title,
                             "joining_date": selected_candidate.joining_date,
                             "left_reason": selected_candidate.left_reason,
-                            "is_replacement_eligible": selected_candidate.is_replacement_eligible,
+                            "is_replacement_eligible": is_replacement_eligible,
                             "left_date": selected_candidate.resigned_date,
                             "replacement_status": selected_candidate.replacement_status,
                             "id": selected_candidate.id,
+                            "replacement_clause_days": replacement_clause_days,
+                            "job_id": job.id,
                         }
                     )
             return Response(selected_candidates_list, status=status.HTTP_200_OK)
@@ -2864,14 +3368,22 @@ class CandidateLeftView(APIView):
             candidate.left_reason = reason
             candidate.save()
 
+            # Sync JobApplication status
+            application = candidate.application
+            application.status = "left"
+            application.save()
+
             if reason == "performance_issues":
                 candidate.is_replacement_eligible = False
             else:
                 job_post_terms = JobPostTerms.objects.filter(
                     job_id=candidate.application.job_location.job_id
-                )
+                ).first()
 
-                replacement_clause = 30  # change here
+                if job_post_terms:
+                    replacement_clause = job_post_terms.replacement_clause
+                else:
+                    replacement_clause = 30  # fallback to 30 if terms not found
 
                 resigned_date = candidate.resigned_date
                 candidate_joining_date = candidate.joining_date
@@ -2879,9 +3391,17 @@ class CandidateLeftView(APIView):
                 if candidate_joining_date and resigned_date:
                     days_worked = (resigned_date - candidate_joining_date).days
 
-                    candidate.is_replacement_eligible = (
-                        days_worked <= replacement_clause
-                    )
+                    # Check if this candidate was a replacement
+                    is_replacement = ReplacementCandidates.objects.filter(
+                        replaced_by=candidate.application
+                    ).exists()
+
+                    if is_replacement:
+                        candidate.is_replacement_eligible = False
+                    else:
+                        candidate.is_replacement_eligible = (
+                            days_worked <= replacement_clause
+                        )
 
             candidate.save()
 
@@ -3003,6 +3523,16 @@ class CandidateJoined(APIView):
                 candidate_id = request.GET.get("candidate_id")
                 candidate = SelectedCandidates.objects.get(id=candidate_id)
                 candidate.joining_status = "joined"
+
+                # Mark as replacement-eligible unless the candidate is themselves a replacement
+                is_replacement_hire = ReplacementCandidates.objects.filter(
+                    replaced_by=candidate.application
+                ).exists()
+                if not is_replacement_hire:
+                    candidate.is_replacement_eligible = True
+                else:
+                    candidate.is_replacement_eligible = False
+
                 candidate.save()
 
                 self.generateInvoice(candidate_id)
@@ -3054,34 +3584,124 @@ class ReplacementsView(APIView):
         try:
             user = request.user
             replacements = ReplacementCandidates.objects.filter(
-                replacement_with__job_location__job_id__username=user, status="pending"
+                replacement_with__job_location__job_id__username=user
             ).select_related(
                 "replacement_with__job_location__job_id__organization",
                 "replacement_with__resume",
                 "replacement_with__selected_candidates",
+                "replaced_by__resume",
             )
 
             replacements_list = []
 
             for replacement in replacements:
                 job = replacement.replacement_with.job_location.job_id
+
+                # Fetch suggested candidates details
+                suggested_profiles = []
+                if replacement.suggested_candidates:
+                    suggested_apps = JobApplication.objects.filter(
+                        id__in=replacement.suggested_candidates
+                    ).select_related("resume")
+                    for app in suggested_apps:
+                        # Restrict access for closed/expired jobs unless candidate has joined
+                        if app.job_location.status in [
+                            "closed",
+                            "expired",
+                        ] or app.job_location.job_id.status in ["closed", "expired"]:
+                            is_joined = SelectedCandidates.objects.filter(
+                                application=app, joining_status="joined"
+                            ).exists()
+                            if not is_joined:
+                                continue
+
+                        # Fetch latest interview evaluation.
+                        # First try the direct FK match (fast path), then fall back to
+                        # matching by resume — necessary when the interviewer submitted marks
+                        # against the original application record rather than the replacement one.
+                        evaluation = (
+                            CandidateEvaluation.objects.filter(job_application=app)
+                            .order_by("-round_num")
+                            .first()
+                        )
+                        if not evaluation:
+                            evaluation = (
+                                CandidateEvaluation.objects.filter(
+                                    job_application__resume=app.resume
+                                )
+                                .order_by("-round_num")
+                                .first()
+                            )
+                        interview_feedback = None
+                        if evaluation:
+                            interview_feedback = {
+                                "round_num": evaluation.round_num,
+                                "score": evaluation.score,
+                                "remarks": evaluation.remarks,
+                                # Normalize to lowercase so frontend badge colors work
+                                "status": (evaluation.status or "").lower(),
+                                "comments": evaluation.comments,
+                                "primary_skills_rating": evaluation.primary_skills_rating,
+                                "secondary_skills_rating": evaluation.secondary_skills_ratings,
+                            }
+                        # Fetch joining status if selected
+                        joining_status = None
+                        joining_date = None
+                        try:
+                            sc = SelectedCandidates.objects.get(application=app)
+                            joining_status = sc.joining_status
+                            joining_date = (
+                                str(sc.joining_date) if sc.joining_date else None
+                            )
+                        except SelectedCandidates.DoesNotExist:
+                            pass
+
+                        suggested_profiles.append(
+                            {
+                                "application_id": app.id,
+                                "candidate_name": app.resume.candidate_name,
+                                "email": app.resume.candidate_email,
+                                "status": app.status,
+                                "experience": app.resume.experience,
+                                "expected_ctc": app.resume.expected_ctc,
+                                "interview_feedback": interview_feedback,
+                                "joining_status": joining_status,
+                                "joining_date": joining_date,
+                            }
+                        )
+
                 replacements_list.append(
                     {
+                        "job_id": job.id,
+                        "location_id": replacement.replacement_with.job_location.id,
+                        "job_code": getattr(job, "jobcode", job.id),
                         "job_title": job.job_title,
                         "organization_name": job.organization.name,
-                        "candidate_name": replacement.replacement_with.resume.candidate_name,
-                        "agreed_ctc": getattr(
+                        "original_candidate_name": replacement.replacement_with.resume.candidate_name,
+                        "original_application_id": replacement.replacement_with.id,
+                        "reason_for_leaving": getattr(
                             replacement.replacement_with.selected_candidates,
-                            "ctc",
+                            "left_reason",
                             None,
-                        ),  # Direct access
-                        "job_id": replacement.replacement_with.job_location.id,
+                        ),
+                        "status": replacement.status,
+                        "replacement_id": replacement.id,
+                        "suggested_profiles": suggested_profiles,
+                        "replaced_by": (
+                            replacement.replaced_by.resume.candidate_name
+                            if replacement.replaced_by
+                            else None
+                        ),
                         "joining_date": getattr(
                             replacement.replacement_with.selected_candidates,
                             "joining_date",
                             None,
-                        ),  # Direct access
-                        "replacement_id": replacement.id,
+                        ),
+                        "agreed_ctc": getattr(
+                            replacement.replacement_with.selected_candidates,
+                            "ctc",
+                            None,
+                        ),
                     }
                 )
 
@@ -3094,29 +3714,119 @@ class ReplacementsView(APIView):
     def post(self, request):
         try:
             selected_candidate_id = request.GET.get("candidate_id")
+            suggested_candidates = request.data.get("suggested_candidates", [])
+
             selected_candidate = SelectedCandidates.objects.select_related(
                 "application__job_location__job_id"
             ).get(id=selected_candidate_id)
+
+            # Block if this candidate is itself a replacement hire (no chains)
+            if ReplacementCandidates.objects.filter(
+                replaced_by=selected_candidate.application
+            ).exists():
+                return Response(
+                    {
+                        "error": "This candidate was hired as a replacement and cannot be replaced again."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Check if an active replacement request already exists for this candidate on this particular job
+            existing_replacement = ReplacementCandidates.objects.filter(
+                replacement_with__resume=selected_candidate.application.resume,
+                replacement_with__job_location__job_id=selected_candidate.application.job_location.job_id,
+                status__in=["pending_manager_approval", "pending"],
+            ).first()
+
+            if existing_replacement:
+                with transaction.atomic():
+                    # Update suggested candidates if any new ones provided
+                    if suggested_candidates:
+                        current_suggestions = (
+                            existing_replacement.suggested_candidates or []
+                        )
+                        updated = False
+                        for app_id in suggested_candidates:
+                            if app_id not in current_suggestions:
+                                current_suggestions.append(app_id)
+                                updated = True
+
+                        if updated:
+                            existing_replacement.suggested_candidates = (
+                                current_suggestions
+                            )
+                            existing_replacement.save()
+                            return Response(
+                                {
+                                    "message": "Existing replacement request updated with new suggestions."
+                                },
+                                status=status.HTTP_200_OK,
+                            )
+
+                    return Response(
+                        {
+                            "message": "Replacement request for this candidate is already active."
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+            # Block if replacement already completed for this job
+            if ReplacementCandidates.objects.filter(
+                replacement_with__job_location__job_id=selected_candidate.application.job_location.job_id,
+                status="completed",
+            ).exists():
+                return Response(
+                    {
+                        "error": "A replacement has already been completed for this job post."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             with transaction.atomic():
                 selected_candidate.replacement_status = "pending_manager_approval"
                 selected_candidate.save()
 
+                # Fetch suggested candidates details for notification
+                suggested_names = []
+                if suggested_candidates:
+                    on_hold_apps = JobApplication.objects.filter(
+                        id__in=suggested_candidates
+                    )
+                    suggested_names = [
+                        app.resume.candidate_name for app in on_hold_apps
+                    ]
+
+                # Calculate deadline: joining_date + replacement_clause days
+                joining_date = selected_candidate.joining_date
+                job_post = selected_candidate.application.job_location.job_id
+                job_terms = JobPostTerms.objects.filter(job_id=job_post).first()
+                clause_days = job_terms.replacement_clause if job_terms else 90
+                replacement_deadline = (
+                    joining_date + timedelta(days=clause_days) if joining_date else None
+                )
+
                 ReplacementCandidates.objects.create(
                     replacement_with=selected_candidate.application,
                     status="pending_manager_approval",
+                    suggested_candidates=suggested_candidates,
+                    replacement_within=replacement_deadline,
                 )
 
                 job_post = selected_candidate.application.job_location.job_id
 
                 # Notify Manager
                 manager = job_post.organization.manager
+
+                message = f"Client {request.user.username} has requested a replacement for {selected_candidate.application.resume.candidate_name} in job: {job_post.job_title}. Please review and approve."
+                if suggested_names:
+                    message += f" Suggested Candidates: {', '.join(suggested_names)}"
+
                 Notifications.objects.create(
                     sender=request.user,
                     receiver=manager,
                     category=Notifications.CategoryChoices.REPLACEMENT_REQUEST,
                     subject=f"New Replacement Request for {job_post.job_title}",
-                    message=f"Client {request.user.username} has requested a replacement for {selected_candidate.application.resume.candidate_name} in job: {job_post.job_title}. Please review and approve.",
+                    message=message,
                 )
 
                 job_post_log(
@@ -3130,10 +3840,7 @@ class ReplacementsView(APIView):
                     old_application.status = "left"
                     old_application.save()
 
-                    job_location = old_application.job_location
-                    if job_location.positions_closed > 0:
-                        job_location.positions_closed -= 1
-                        job_location.save()
+                    reopen_joblocation(old_application.job_location.id)
 
             return Response(
                 {"message": "Replacement applied successfully"},
@@ -3167,30 +3874,48 @@ class ReplaceCandidate(APIView):
             replacement_instance.save()
 
             # handling old candidate status
-            old_candidate = SelectedCandidates.objects.get(
-                application=replacement_instance.replacement_with
-            )
-            old_candidate.replacement_status = "completed"
-            old_candidate.save()
+            try:
+                old_candidate = SelectedCandidates.objects.get(
+                    application=replacement_instance.replacement_with
+                )
+                old_candidate.replacement_status = "completed"
+                old_candidate.is_replaced = True
+                old_candidate.save()
 
-            # creating instance for new candidate with agreed CTC and joining date
+                # Cancel old candidate's invoice
+                InvoiceGenerated.objects.filter(
+                    selected_candidate=old_candidate, is_canceled=False
+                ).update(is_canceled=True)
+            except SelectedCandidates.DoesNotExist:
+                pass
+
+            # creating/updating instance for new candidate
             new_candidate_profile = CandidateProfile.objects.get(
                 email=new_application.resume.candidate_email
             )
-            SelectedCandidates.objects.create(
+            SelectedCandidates.objects.update_or_create(
                 application=new_application,
-                ctc=data.get("accepted_ctc"),
-                joining_date=data.get("joining_date"),
-                other_benefits=data.get("other_benefits"),
-                joining_status="pending",
-                candidate=new_candidate_profile,
+                defaults={
+                    "ctc": data.get("accepted_ctc"),
+                    "joining_date": data.get("joining_date"),
+                    "other_benefits": data.get("other_benefits", ""),
+                    "joining_status": "pending",
+                    "candidate": new_candidate_profile,
+                    "is_replacement_eligible": False,
+                    "is_replaced": False,
+                },
             )
 
             new_application.status = "selected"
             new_application.save()
 
+            update_location_status(new_application.job_location.id)
+
             return Response(
-                {"message": "Candidate Replaced Successfully"},
+                {
+                    "success": True,
+                    "message": "Candidate Replaced Successfully",
+                },
                 status=status.HTTP_200_OK,
             )
 
@@ -3303,6 +4028,242 @@ class CompareListView(APIView):
             )
 
 
+class ReplacementLifecycleView(APIView):
+    permission_classes = [IsClient]
+
+    def post(self, request):
+        try:
+            action = request.data.get("action")
+            application_id = request.data.get("application_id")
+            replacement_id = request.data.get("replacement_id")
+
+            if not action or not application_id or not replacement_id:
+                return Response(
+                    {"error": "action, application_id and replacement_id are required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            application = JobApplication.objects.get(id=application_id)
+            replacement = ReplacementCandidates.objects.get(id=replacement_id)
+
+            if action == "shortlist":
+                interviewer_id = request.data.get("interviewer_id")
+                with transaction.atomic():
+                    if interviewer_id:
+                        # Find InterviewerDetails for this job and next round
+                        # Assuming application.round_num is the current completed round or 0 if none
+                        target_round = application.round_num
+                        if target_round == 0:
+                            target_round = 1
+
+                        interviewer_details = InterviewerDetails.objects.filter(
+                            job_id=application.job_location.job_id,
+                            round_num=target_round,
+                            name_id=interviewer_id,
+                        ).first()
+
+                        if not interviewer_details:
+                            # Create InterviewerDetails on the fly if not found
+                            interviewer_user = CustomUser.objects.get(id=interviewer_id)
+                            interviewer_details = InterviewerDetails.objects.create(
+                                job_id=application.job_location.job_id,
+                                round_num=target_round,
+                                name=interviewer_user,
+                                mode_of_interview="online",  # default
+                                type_of_interview="technical",  # default
+                            )
+
+                        # Create a PENDING interview schedule
+                        interview = InterviewSchedule.objects.create(
+                            candidate=application.resume,
+                            interviewer=interviewer_details,
+                            status="pending",
+                            job_location=application.job_location,
+                            round_num=target_round,
+                        )
+                        application.next_interview = interview
+                        if application.round_num == 0:
+                            application.round_num = target_round
+
+                    application.status = "shortlisted"
+                    application.save()
+
+                # Notify recruiter
+                try:
+                    if application.attached_to:
+                        Notifications.objects.create(
+                            sender=request.user,
+                            receiver=application.attached_to,
+                            category=Notifications.CategoryChoices.GENERAL,
+                            subject=f"Replacement Candidate Shortlisted",
+                            message=f"Client has shortlisted {application.resume.candidate_name} as a potential replacement candidate.",
+                        )
+                except Exception:
+                    pass
+                return Response(
+                    {"message": "Candidate shortlisted successfully"},
+                    status=status.HTTP_200_OK,
+                )
+
+            elif action == "select":
+                data = request.data.get("selection_details", {})
+                with transaction.atomic():
+                    # Create SelectedCandidates record
+                    candidate_profile = CandidateProfile.objects.get(
+                        email=application.resume.candidate_email
+                    )
+                    SelectedCandidates.objects.update_or_create(
+                        application=application,
+                        defaults={
+                            "ctc": data.get("accepted_ctc"),
+                            "joining_date": data.get("joining_date"),
+                            "other_benefits": data.get("other_benefits", ""),
+                            "joining_status": "pending",
+                            "candidate": candidate_profile,
+                            "is_replacement_eligible": False,
+                            "is_replaced": False,
+                        },
+                    )
+                    application.status = "selected"
+                    application.save()
+
+                    # Notify recruiter
+                    try:
+                        if application.attached_to:
+                            Notifications.objects.create(
+                                sender=request.user,
+                                receiver=application.attached_to,
+                                category=Notifications.CategoryChoices.GENERAL,
+                                subject=f"Replacement Candidate Selected",
+                                message=f"Client has selected {application.resume.candidate_name} as a replacement candidate. Please follow up on the joining process.",
+                            )
+                    except Exception:
+                        pass
+
+                return Response(
+                    {"message": "Candidate selected for replacement successfully"},
+                    status=status.HTTP_200_OK,
+                )
+
+            elif action == "reject":
+                application.status = "rejected"
+                application.save()
+                # Notify recruiter
+                try:
+                    if application.attached_to:
+                        Notifications.objects.create(
+                            sender=request.user,
+                            receiver=application.attached_to,
+                            category=Notifications.CategoryChoices.GENERAL,
+                            subject=f"Replacement Candidate Rejected",
+                            message=f"Client has rejected {application.resume.candidate_name} as a replacement candidate for the job.",
+                        )
+                except Exception:
+                    pass
+                return Response(
+                    {"message": "Candidate rejected successfully"},
+                    status=status.HTTP_200_OK,
+                )
+
+            elif action == "joined":
+                with transaction.atomic():
+                    candidate = SelectedCandidates.objects.get(application=application)
+                    candidate.joining_status = "joined"
+                    candidate.save()
+
+                    # Update replaced_by on replacement
+                    replacement.replaced_by = application
+                    if replacement.status != "completed":
+                        replacement.status = "completed"
+                    replacement.save()
+
+                    # Update old candidate
+                    try:
+                        old_sc = SelectedCandidates.objects.get(
+                            application=replacement.replacement_with
+                        )
+                        old_sc.replacement_status = "completed"
+                        old_sc.is_replaced = True
+                        old_sc.save()
+
+                        # Cancel old candidate's invoice
+                        InvoiceGenerated.objects.filter(
+                            selected_candidate=old_sc, is_canceled=False
+                        ).update(is_canceled=True)
+                    except SelectedCandidates.DoesNotExist:
+                        pass
+
+                    # Generate invoice
+                    joined_view = CandidateJoined()
+                    joined_view.generateInvoice(candidate.id)
+
+                    # Notify recruiter
+                    try:
+                        if application.attached_to:
+                            Notifications.objects.create(
+                                sender=request.user,
+                                receiver=application.attached_to,
+                                category=Notifications.CategoryChoices.GENERAL,
+                                subject=f"Replacement Candidate Joined",
+                                message=f"{application.resume.candidate_name} has been marked as joined for the replacement position.",
+                            )
+                        # Notify manager
+                        job_post = application.job_location.job_id
+                        manager = job_post.organization.manager
+                        if manager:
+                            Notifications.objects.create(
+                                sender=request.user,
+                                receiver=manager,
+                                category=Notifications.CategoryChoices.GENERAL,
+                                subject=f"Replacement Candidate Joined",
+                                message=f"{application.resume.candidate_name} has joined as a replacement for {replacement.replacement_with.resume.candidate_name} in {job_post.job_title}.",
+                            )
+                    except Exception:
+                        pass
+
+                    return Response(
+                        {"message": "Candidate marked as joined successfully"},
+                        status=status.HTTP_200_OK,
+                    )
+
+            elif action == "update_joining_date":
+                with transaction.atomic():
+                    new_date = request.data.get("joining_date")
+                    if not new_date:
+                        return Response(
+                            {"error": "joining_date is required"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    candidate = SelectedCandidates.objects.get(application=application)
+                    candidate.joining_date = new_date
+                    candidate.save()
+
+                    # Notify recruiter
+                    try:
+                        if application.attached_to:
+                            Notifications.objects.create(
+                                sender=request.user,
+                                receiver=application.attached_to,
+                                category=Notifications.CategoryChoices.GENERAL,
+                                subject=f"Joining Date Updated",
+                                message=f"The joining date for {application.resume.candidate_name} has been updated to {new_date}.",
+                            )
+                    except Exception:
+                        pass
+
+                    return Response(
+                        {"message": "Joining date updated successfully"},
+                        status=status.HTTP_200_OK,
+                    )
+
+            return Response(
+                {"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class ViewCompleteResume(APIView):
     permission_classes = [IsClient]
 
@@ -3313,6 +4274,22 @@ class ViewCompleteResume(APIView):
                 return Response({"error": "Id is required"}, status=status.HTTP_200_OK)
             try:
                 application = JobApplication.objects.get(id=id)
+                # Check for closed/expired job restriction
+                if application.job_location.status in [
+                    "closed",
+                    "expired",
+                ] or application.job_location.job_id.status in ["closed", "expired"]:
+                    is_joined = SelectedCandidates.objects.filter(
+                        application=application, joining_status="joined"
+                    ).exists()
+                    if not is_joined:
+                        return Response(
+                            {
+                                "error": "Profile access is restricted for closed or expired jobs."
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+
                 interviews = InterviewerDetails.objects.filter(
                     job_id=application.job_location.job_id
                 ).count()
@@ -3393,6 +4370,22 @@ class ViewCandidateDetails(APIView):
         try:
             application_id = request.GET.get("application_id")
             application = JobApplication.objects.get(id=application_id)
+
+            # Check for closed/expired job restriction
+            if application.job_location.status in [
+                "closed",
+                "expired",
+            ] or application.job_location.job_id.status in ["closed", "expired"]:
+                is_joined = SelectedCandidates.objects.filter(
+                    application=application, joining_status="joined"
+                ).exists()
+                if not is_joined:
+                    return Response(
+                        {
+                            "error": "Profile access is restricted for closed or expired jobs."
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             try:
                 candidate_profile = CandidateProfile.objects.get(
                     email=application.resume.candidate_email
@@ -3640,7 +4633,9 @@ class OrgsData(APIView):
 class ClientAllAlerts(APIView):
     def get(self, request):
         try:
-            all_alerts = Notifications.objects.filter(seen=False, receiver=request.user)
+            all_alerts = Notifications.objects.filter(
+                visited=False, receiver=request.user
+            )
             reject_terms = 0
             accept_terms = 0
             accept_job = 0
@@ -3788,17 +4783,25 @@ class CandidatesRequestedDate(APIView):
                 applications_on_hold = JobApplication.objects.filter(
                     job_id=job_id, status="hold"
                 ).select_related("resume")
-                print("caaling this function it is good to call this function ok ")
-                application_list = [
-                    {
-                        "candidate_name": application.resume.candidate_name,
-                        "candidate_email": application.resume.candidate_email,
-                        "application_id": application.id,
-                        "expected_ctc": application.resume.expected_ctc,
-                        "experience": application.resume.experience,
-                    }
-                    for application in applications_on_hold
-                ]
+
+                application_list = []
+                for application in applications_on_hold:
+                    # Restrict access for closed/expired jobs
+                    if (
+                        application.job_location.status in ["closed", "expired"]
+                        or application.job_location.job_id.status == "closed"
+                    ):
+                        continue
+
+                    application_list.append(
+                        {
+                            "candidate_name": application.resume.candidate_name,
+                            "candidate_email": application.resume.candidate_email,
+                            "application_id": application.id,
+                            "expected_ctc": application.resume.expected_ctc,
+                            "experience": application.resume.experience,
+                        }
+                    )
                 return Response(application_list, status=status.HTTP_200_OK)
             user = request.user
             job_posts = JobPostings.objects.filter(username=user)

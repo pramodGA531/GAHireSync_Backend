@@ -7,3 +7,5 @@ from .admin_views import *
 from .sms_views import *
 from .whatsapp_views import *
 from .celery_views import *
+from .ai_views import *
+from .general_views import *

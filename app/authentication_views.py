@@ -16,6 +16,8 @@ from .permissions import *
 import jwt
 import string
 import random
+import os
+import razorpay
 from django.contrib.auth.tokens import default_token_generator
 from django.template import Template, Context
 from django.shortcuts import get_object_or_404
@@ -32,6 +34,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
+
 
 class VerifyEmailView(APIView):
 
@@ -95,7 +98,7 @@ class VerifyEmailView(APIView):
         try:
             print(f"[VERIFY-POST] Sending verification email to {email}")
 
-            send_email_verification_link(user,False,"all")
+            send_email_verification_link(user, False, "all")
 
             print(f"[VERIFY-POST] Email SENT to {email}")
 
@@ -385,14 +388,41 @@ class AgencySignupView(APIView):
 
                     if org_serializer.is_valid(raise_exception=True):
                         organization = org_serializer.save()
+
+                        payment_status = (
+                            "pending" if selected_plan.price > 0 else "paid"
+                        )
+                        is_active = False if selected_plan.price > 0 else True
+
                         organization_plan = OrganizationPlan.objects.create(
                             organization=organization,
                             plan=selected_plan,
+                            payment_status=payment_status,
+                            is_active=is_active,
                             expiry_date=timezone.now()
                             + timedelta(days=selected_plan.duration_days),
                         )
                         user.organization = organization
                         user.save()
+
+                        razorpay_order = None
+                        if selected_plan.price > 0:
+                            try:
+                                client = razorpay.Client(
+                                    auth=(
+                                        os.getenv("RAZORPAY_KEY_ID"),
+                                        os.getenv("RAZORPAY_KEY_SECRET"),
+                                    )
+                                )
+                                data = {
+                                    "amount": int(selected_plan.price * 100),
+                                    "currency": "INR",
+                                    "receipt": f"receipt_org_{organization.id}",
+                                    "payment_capture": 1,
+                                }
+                                razorpay_order = client.order.create(data=data)
+                            except Exception as e:
+                                print(f"Razorpay Order Creation Failed: {str(e)}")
 
                     try:
                         send_email_verification_link(user, True, "manager")
@@ -401,8 +431,19 @@ class AgencySignupView(APIView):
                         print(str(e))
                         print(f"Error sending verification link: {str(e)}")
 
+                    response_data = {
+                        "message": "Verification link successfully sent to your mail",
+                        "organization_id": organization.id,
+                        "plan_id": selected_plan.id,
+                    }
+                    if razorpay_order:
+                        response_data["razorpay_order"] = razorpay_order
+                        response_data["message"] = (
+                            "Registration successful. Please complete the payment."
+                        )
+
                     return Response(
-                        {"message": "Verification link successfully sent to your mail"},
+                        response_data,
                         status=status.HTTP_201_CREATED,
                     )
 
@@ -460,6 +501,30 @@ class AgencySignupView(APIView):
                 if org_serializer.is_valid(raise_exception=True):
                     org_serializer.save()
 
+                # Update or create ManagerProfile
+                if (
+                    "target_in_amount" in combined_values
+                    or "target_in_positions" in combined_values
+                ):
+                    manager_profile, created = ManagerProfile.objects.get_or_create(
+                        user=user
+                    )
+                    if (
+                        "target_in_amount" in combined_values
+                        and combined_values["target_in_amount"] != ""
+                    ):
+                        manager_profile.target_in_amount = combined_values[
+                            "target_in_amount"
+                        ]
+                    if (
+                        "target_in_positions" in combined_values
+                        and combined_values["target_in_positions"] != ""
+                    ):
+                        manager_profile.target_in_positions = combined_values[
+                            "target_in_positions"
+                        ]
+                    manager_profile.save()
+
                 return Response(
                     {
                         "message": "Organization and manager details updated successfully"
@@ -516,6 +581,17 @@ class LoginView(APIView):
                     first_login_flag if user.role == CustomUser.MANAGER else None
                 ),
             }
+
+            if user.role == CustomUser.MANAGER:
+                try:
+                    manager_profile = ManagerProfile.objects.get(user=user)
+                    user_details["target_in_amount"] = manager_profile.target_in_amount
+                    user_details["target_in_positions"] = (
+                        manager_profile.target_in_positions
+                    )
+                except ManagerProfile.DoesNotExist:
+                    user_details["target_in_amount"] = 0
+                    user_details["target_in_positions"] = 0
 
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)

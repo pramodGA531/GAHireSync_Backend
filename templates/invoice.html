@@ -1,4 +1,3 @@
-
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
@@ -6,28 +5,141 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Invoice</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        background-color: #f3f4f6; /* bg-gray-100 */
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* font-sans */
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 56rem; /* max-w-4xl */
+        margin-left: auto;
+        margin-right: auto;
+        background-color: white; /* bg-white */
+        margin-top: 1.5rem; /* mt-6 */
+        margin-bottom: 0.5rem; /* m-2 (bottom) */
+        padding: 1.5rem; /* Added some padding to container */
+      }
+      .header {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        margin-left: 2.25rem; /* ml-9 */
+        margin-bottom: 1.25rem; /* mb-5 */
+      }
+      .text-sm {
+        font-size: 0.875rem; /* text-sm */
+        line-height: 1.25rem;
+      }
+      .font-bold {
+        font-weight: 700; /* font-bold */
+      }
+      .details-container {
+        display: flex;
+        flex-direction: row; /* md:flex-row */
+        max-width: 48rem; /* max-w-3xl */
+        margin-left: auto;
+        margin-right: auto;
+        font-size: 0.875rem; /* text-sm */
+        gap: 1rem; /* spacing between boxes */
+      }
+      .box {
+        border: 1px solid black; /* border border-black */
+        flex: 1; /* flex-1 */
+        max-width: 48%; /* md:max-w-[48%] */
+        padding: 0.75rem; /* p-3 */
+        background-color: white; /* bg-white */
+        color: #1f2937; /* text-gray-800 */
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* shadow-sm */
+      }
+      .box-left {
+        border-top-left-radius: 0.5rem; /* rounded-l-lg */
+        border-bottom-left-radius: 0.5rem;
+      }
+      .box-right {
+        border-top-right-radius: 0.5rem; /* rounded-r-lg */
+        border-bottom-right-radius: 0.5rem;
+      }
+      .box-header {
+        font-size: 1rem; /* text-base */
+        font-weight: 600; /* font-semibold */
+        margin-bottom: 0.5rem; /* mb-2 */
+        border-bottom: 1px solid #d1d5db; /* border-b border-gray-300 */
+        padding-bottom: 0.25rem; /* pb-1 */
+      }
+      .leading-snug {
+        line-height: 1.375;
+      }
+      .text-gray-900 {
+        color: #111827;
+      }
+      .font-semibold {
+        font-weight: 600;
+      }
+      .text-xs {
+        font-size: 0.75rem;
+        line-height: 1rem;
+      }
+      .text-gray-600 {
+        color: #4b5563;
+      }
+      .mb-2 {
+        margin-bottom: 0.5rem;
+      }
+      .mb-1 {
+        margin-bottom: 0.25rem;
+      }
+      .text-blue-600 {
+        color: #2563eb;
+      }
+      .underline {
+        text-decoration: underline;
+      }
+      .table-container {
+        margin-top: 1.5rem; /* mt-6 */
+        display: flex;
+        justify-content: center; /* Center the table */
+      }
+      table {
+        width: 90%; /* Increased width for better PDF view, was w-[50%] */
+        border: 1px solid black; /* border-black */
+        border-collapse: collapse; /* border-collapse */
+        font-size: 0.875rem; /* text-sm, assumed for table */
+      }
+      th, td {
+        border: 1px solid black; /* border border-black */
+        padding: 0.25rem; /* px-1 py-1 */
+        text-align: left;
+      }
+      th {
+        background-color: #e5e7eb; /* bg-gray-200 */
+      }
+      .footer {
+        text-align: right; /* text-right */
+        margin-top: 1.5rem; /* mt-6 */
+        font-size: 0.875rem; /* text-sm */
+        padding-right: 2rem;
+      }
+    </style>
   </head>
-  <body class="bg-gray-100 font-sans">
-    <div class="max-w-4xl mx-auto bg-white mt-6 m-2">
-      <div class="flex flex-col items-end ml-9 mb-5">
+  <body>
+    <div class="container">
+      <div class="header">
         <div class="text-sm">
           <p><span class="font-bold">Invoice:</span> {{ invoice_id }}</p>
           <p><span class="font-bold">Generated Date:</span> {{ date }}</p>
         </div>
       </div>
 
-      <div class="flex flex-col md:flex-row max-w-3xl mx-auto text-sm">
-        <div
-          class="border border-black flex-1 md:max-w-[48%] p-3 rounded-l-lg bg-white shadow-sm font-sans text-gray-800"
-        >
-          <p class="text-base font-semibold mb-2 border-b border-gray-300 pb-1">
+      <div class="details-container">
+        <div class="box box-left">
+          <p class="box-header">
             Buyer / Service Provided to
           </p>
 
           <p class="mb-2 leading-snug">
-            <span class="font-semibold text-gray-900">{{ client_name }}</span
-            ><br />
+            <span class="font-semibold text-gray-900">{{ client_name }}</span><br />
             {{ agency_name }}<br />
             <span class="text-xs text-gray-600">
               Address: {{ buyer_address }}
@@ -43,10 +155,7 @@
           </p>
           <p class="mb-1">
             <span class="font-semibold">Email:</span>
-            <a
-              href="mailto:{{ client_email }}"
-              class="text-blue-600 underline hover:text-blue-800"
-            >
+            <a href="mailto:{{ client_email }}" class="text-blue-600 underline">
               {{ client_email }}
             </a>
           </p>
@@ -56,17 +165,13 @@
           </p>
         </div>
 
-        <div
-          class="border border-black flex-1 md:max-w-[48%] p-3 rounded-r-lg bg-white shadow-sm font-sans text-gray-800"
-        >
-          <p class="text-base font-semibold mb-2 border-b border-gray-300 pb-1">
+        <div class="box box-right">
+          <p class="box-header">
             Service Provider
           </p>
 
           <p class="mb-2 leading-snug">
-            <span class="font-semibold text-gray-900">
-              {{ service_provider_name }} </span
-            ><br />
+            <span class="font-semibold text-gray-900">{{ service_provider_name }}</span><br />
             <span class="text-xs text-gray-600">
               Address: {{ service_provider_address }}
             </span>
@@ -82,10 +187,7 @@
           </p>
           <p class="mb-1">
             <span class="font-semibold">Email:</span>
-            <a
-              href="mailto:{{ service_provider_email }}"
-              class="text-blue-600 underline hover:text-blue-800"
-            >
+            <a href="mailto:{{ service_provider_email }}" class="text-blue-600 underline">
               {{ service_provider_email }}
             </a>
           </p>
@@ -96,52 +198,36 @@
         </div>
       </div>
 
-      <div class="overflow-x-auto mt-6">
-        <table
-          class="w-[50%] border border-black border-collapse small-text-table"
-        >
+      <div class="table-container">
+        <table>
           <thead>
-            <tr class="bg-gray-200 text-sm">
-              <th class="border border-black px-1 py-1">SL No</th>
-              <th class="border border-black px-1 py-1">
-                Service Description with HSN Code
-              </th>
-              <th class="border border-black px-1 py-1">Candidate Name</th>
-              <th class="border border-black px-1 py-1">Job Title</th>
-              <th class="border border-black px-1 py-1">Date of Joining</th>
-              <th class="border border-black px-1 py-1">CTC</th>
-              <th class="border border-black px-1 py-1">
-                Recruitment Service Fee (% of CTC)
-              </th>
-              <th class="border border-black px-1 py-1">
-                Recruitment Service Fee
-              </th>
+            <tr>
+              <th>SL No</th>
+              <th>Service Description with HSN Code</th>
+              <th>Candidate Name</th>
+              <th>Job Title</th>
+              <th>Date of Joining</th>
+              <th>CTC</th>
+              <th>Recruitment Service Fee (% of CTC)</th>
+              <th>Recruitment Service Fee</th>
             </tr>
           </thead>
           <tbody>
-            <tr class="text-sm">
-              <td class="border border-black px-1 py-1">1</td>
-              <td class="border border-black px-1 py-1">
-                {{ service_description }}
-              </td>
-              <td class="border border-black px-1 py-1">
-                {{ candidate_name }}
-              </td>
-              <td class="border border-black px-1 py-1">{{ job_title }}</td>
-              <td class="border border-black px-1 py-1">
-                {{ date_of_joining }}
-              </td>
-              <td class="border border-black px-1 py-1">{{ ctc }}</td>
-              <td class="border border-black px-1 py-1">
-                {{ service_fee_percentage }}
-              </td>
-              <td class="border border-black px-1 py-1">{{ sub_total }}</td>
+            <tr>
+              <td>1</td>
+              <td>{{ service_description }}</td>
+              <td>{{ candidate_name }}</td>
+              <td>{{ job_title }}</td>
+              <td>{{ date_of_joining }}</td>
+              <td>{{ ctc }}</td>
+              <td>{{ service_fee_percentage }}</td>
+              <td>{{ sub_total }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div class="text-right mt-6 text-sm">
+      <div class="footer">
         <p>Sub-Total: {{ sub_total }}</p>
 
         {% if igst == 0 %}

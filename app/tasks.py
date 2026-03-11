@@ -232,3 +232,13 @@ This is a reminder for your invoice of ₹{invoice.final_price} scheduled on {in
     except Exception as e:
         self.retry(exc=e, countdown=60, max_retries=3)
         return f"Retrying due to error: {e}"
+
+
+@shared_task(bind=True)
+def hold_reminder_notifications(self):
+    try:
+        process_hold_reminder_notifications()
+        return "Hold reminder notifications task executed successfully"
+    except Exception as e:
+        self.retry(exc=e, countdown=60, max_retries=3)
+        return f"Hold reminder notifications task failed: {e}"

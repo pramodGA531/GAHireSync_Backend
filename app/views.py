@@ -19,7 +19,7 @@ import html2text
 from django.db.models import Count, Prefetch
 from django.db import IntegrityError
 from decimal import ROUND_HALF_UP
-
+import os
 
 frontend_url = os.environ["FRONTENDURL"]
 from datetime import date
@@ -37,6 +37,16 @@ class GetUserDetails(APIView):
                 "is_verified": user.is_verified,
                 "profile": user.profile.url if user.profile else None,
             }
+
+            if user.role == "manager":
+                try:
+                    manager_profile = ManagerProfile.objects.get(user=user)
+                    data["target_in_amount"] = manager_profile.target_in_amount
+                    data["target_in_positions"] = manager_profile.target_in_positions
+                except ManagerProfile.DoesNotExist:
+                    data["target_in_amount"] = 0
+                    data["target_in_positions"] = 0
+
             return Response({"data": data}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -80,19 +90,28 @@ class OrganizationTermsView(APIView):
                             "payment_within": terms.payment_within,
                             "is_negotiated": terms.is_negotiated,
                             "service_fee_type": terms.service_fee_type,
+                            "id": terms.id,
                         }
                     )
 
                 # Include negotiated terms if they exist and are accepted
                 try:
                     negotiated = NegotiationRequests.objects.filter(
-                        client_organization=connection, status="accepted"
-                    ).first()
+                        client_organization=connection
+                    ).last()
                     if negotiated:
                         today = date.today()
+                        # Add negotiated terms if they are pending, accepted (and not expired), or rejected
                         if (
-                            not negotiated.expiry_date
-                            or negotiated.expiry_date >= today
+                            negotiated.status == "pending"
+                            or (
+                                negotiated.status == "accepted"
+                                and (
+                                    not negotiated.expiry_date
+                                    or negotiated.expiry_date >= today
+                                )
+                            )
+                            or negotiated.status == "rejected"
                         ):
                             terms_list.append(
                                 {
@@ -105,6 +124,8 @@ class OrganizationTermsView(APIView):
                                     "payment_within": negotiated.payment_within,
                                     "interest_percentage": negotiated.interest_percentage,
                                     "is_negotiated": True,
+                                    "status": negotiated.status,
+                                    "reason": negotiated.reason,
                                 }
                             )
                 except Exception as neg_e:
@@ -305,15 +326,25 @@ class NegotiateTermsView(APIView):
 
         try:
             data = request.data
+            ctc_range = data.get("ctc_range")
+            service_fee = service_percentage
+            service_fee_type = data.get("service_fee_type")
+            replacement_clause = data.get("replacement_clause")
+            invoice_after = data.get("invoice_after")
+            payment_within = data.get("payment_within")
+            interest_percentage = request.data.get("interest_percentage")
+            original_term_id = request.data.get("original_term_id")
+
             negotiation_request = NegotiationRequests.objects.create(
                 client_organization=connection,
-                ctc_range=data.get("ctc_range"),
-                service_fee_type=data.get("service_fee_type"),
-                service_fee=service_percentage,
-                replacement_clause=data.get("replacement_clause"),
-                invoice_after=data.get("invoice_after"),
-                payment_within=data.get("payment_within"),
+                ctc_range=ctc_range,
+                service_fee=service_fee,
+                service_fee_type=service_fee_type,
+                replacement_clause=replacement_clause,
+                invoice_after=invoice_after,
+                payment_within=payment_within,
                 interest_percentage=interest_percentage,
+                original_term_id=original_term_id,
             )
             negotiation_link = (
                 f"{frontend_url}/agency/negotiations/{negotiation_request.id}"
@@ -600,6 +631,26 @@ class GetResumeByApplicationId(APIView):
         try:
             job_application = JobApplication.objects.get(id=application_id)
 
+            # Restrict access for clients if job is closed or expired
+            if request.user.role == "client":
+                if job_application.job_location.status in [
+                    "closed",
+                    "expired",
+                ] or job_application.job_location.job_id.status in [
+                    "closed",
+                    "expired",
+                ]:
+                    is_joined = SelectedCandidates.objects.filter(
+                        application=job_application, joining_status="joined"
+                    ).exists()
+                    if not is_joined:
+                        return Response(
+                            {
+                                "error": "Profile access is restricted for closed or expired jobs."
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+
             candidate_resume = job_application.resume
 
             resume_data = CandidateResumeWithoutContactSerializer(candidate_resume).data
@@ -633,10 +684,75 @@ class ViewCandidateProfileAPI(APIView):
             try:
                 candidate_profile = CandidateProfile.objects.get(id=candidate_id)
             except CandidateProfile.DoesNotExist:
-                return Response(
-                    {"error": "Candidate profile not found"},
-                    status=status.HTTP_404_NOT_FOUND,
+                # Fallback: Check if the ID belongs to a CandidateResume and find profile by email
+                resume = CandidateResume.objects.filter(id=candidate_id).first()
+                candidate_profile = None
+                if resume and resume.candidate_email:
+                    candidate_profile = CandidateProfile.objects.filter(
+                        email=resume.candidate_email
+                    ).first()
+
+                if not candidate_profile:
+                    return Response(
+                        {"error": "Candidate profile not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+            # Security Restriction for Clients
+            if request.user.role == "client":
+                # Ensure the candidate has applied to at least one of this client's jobs
+                # and that the access is allowed (job is open OR candidate joined)
+                client_applications = JobApplication.objects.filter(
+                    resume__candidate_email=candidate_profile.email,
+                    job_location__job_id__username=request.user,
                 )
+
+                if not client_applications.exists():
+                    return Response(
+                        {"error": "You do not have permission to view this profile."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                # Check if ANY of the applications allow access
+                access_allowed = False
+                for app in client_applications:
+                    if app.job_location.status not in [
+                        "closed",
+                        "expired",
+                    ] and app.job_location.job_id.status not in ["closed", "expired"]:
+                        access_allowed = True
+                        break
+                    if SelectedCandidates.objects.filter(
+                        application=app, joining_status="joined"
+                    ).exists():
+                        access_allowed = True
+                        break
+                    # Allow access if this application ID is in the suggested_candidates list
+                    # of an ACTIVE ReplacementCandidates record for this client's job location.
+                    # Once the replacement is completed/incomplete, access is blocked again.
+                    if ReplacementCandidates.objects.filter(
+                        replacement_with__job_location=app.job_location,
+                        suggested_candidates__contains=[app.id],
+                        status__in=["pending", "pending_manager_approval"],
+                    ).exists():
+                        access_allowed = True
+                        break
+                    # Also allow if this application is directly the confirmed replacement,
+                    # but only while the replacement is still in progress.
+                    if ReplacementCandidates.objects.filter(
+                        replaced_by=app,
+                        status__in=["pending", "pending_manager_approval"],
+                    ).exists():
+                        access_allowed = True
+                        break
+
+                if not access_allowed:
+                    return Response(
+                        {
+                            "error": "Profile access is restricted for closed or expired jobs."
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
             education = CandidateEducation.objects.filter(candidate=candidate_profile)
             experience = CandidateExperiences.objects.filter(
@@ -653,63 +769,94 @@ class ViewCandidateProfileAPI(APIView):
             salary_string = f"{candidate_profile.expected_salary} Expected / {candidate_profile.current_salary} Current"
             profile_percentage = calculate_profile_percentage(candidate_profile)
 
-            if not candidate_profile.skills == "":
-
-                candidate_data = {
-                    "candidate_name": candidate_profile.name.username,
-                    "skills": (
-                        candidate_profile.skills if candidate_profile.skills else ""
-                    ),
-                    "education": education_data.data,
-                    "experience": experience_data.data,
-                    "salary": salary_string,
-                    "extra_info": candidate_profile.joining_details,
-                    "candidate_phone": candidate_profile.phone_num,
-                    "candidate_email": candidate_profile.email,
-                    "candidate_location": candidate_profile.permanent_address,
-                    "candidate_documents": list(candidate_documents.values()),
-                    "profile_percentage": profile_percentage,
-                }
-
-            else:
-                candidate_data = None
-
-            user = candidate_profile.name
-            applied_jobs_list = []
-
-            all_job_applications = JobApplication.objects.filter(
-                resume__candidate_name=user
+            # Get the latest job application to fetch resume details like Hike and Notice Period
+            latest_application = (
+                JobApplication.objects.filter(
+                    resume__candidate_email=candidate_profile.email
+                )
+                .order_by("-created_at")
+                .first()
             )
-            for job in all_job_applications:
+
+            hike = 0
+            notice_period = 0
+            if latest_application and latest_application.resume:
+                notice_period = latest_application.resume.notice_period
+
+            try:
+                curr_sal = float(candidate_profile.current_salary or 0)
+                exp_sal = float(candidate_profile.expected_salary or 0)
+                if curr_sal > 0 and exp_sal > curr_sal:
+                    hike = ((exp_sal - curr_sal) / curr_sal) * 100
+            except (ValueError, TypeError):
+                hike = 0
+
+            candidate_data = {
+                "candidate_name": candidate_profile.name.username,
+                "skills": (
+                    candidate_profile.skills if candidate_profile.skills else ""
+                ),
+                "education": education_data.data,
+                "experience": experience_data.data,
+                "salary": salary_string,
+                "extra_info": candidate_profile.joining_details,
+                "candidate_phone": candidate_profile.phone_num,
+                "candidate_email": candidate_profile.email,
+                "candidate_location": candidate_profile.permanent_address,
+                "candidate_documents": list(candidate_documents.values()),
+                "profile_percentage": profile_percentage,
+                "hike": round(hike, 2),
+                "notice_period": notice_period,
+                "current_salary": candidate_profile.current_salary,
+                "expected_salary": candidate_profile.expected_salary,
+            }
+
+            applied_jobs_list = []
+            all_job_applications = JobApplication.objects.filter(
+                resume__candidate_email=candidate_profile.email
+            )
+            for application in all_job_applications:
                 try:
-                    job_id = job.job_id.id
-                    title = JobPostings.objects.get(id=job_id).job_title
-                    applied_jobs_list.append({"job_id": job_id, "title": title})
-                except JobPostings.DoesNotExist:
+                    job_posting = application.job_location.job_id
+                    applied_jobs_list.append(
+                        {"job_id": job_posting.id, "title": job_posting.job_title}
+                    )
+                except Exception:
                     continue
 
-            all_feedbacks = []
+            detailed_evaluations = []
             candidate_evaluations = CandidateEvaluation.objects.filter(
                 job_application__in=all_job_applications
-            )
-            for feedback in candidate_evaluations:
-                if feedback.remarks:
-                    try:
-                        interviewer_name = (
-                            feedback.interview_schedule.interviewer.name.username
-                        )
-                    except AttributeError:
-                        interviewer_name = "Unknown"
-                    all_feedbacks.append(
-                        {
-                            "interviewer_name": interviewer_name,
-                            "feedback": feedback.remarks,
-                        }
+            ).order_by("round_num")
+
+            for evaluation in candidate_evaluations:
+                try:
+                    interviewer_name = (
+                        evaluation.interview_schedule.interviewer.name.username
+                        if evaluation.interview_schedule
+                        and evaluation.interview_schedule.interviewer
+                        else "Unknown"
                     )
+                except Exception:
+                    interviewer_name = "Unknown"
+
+                detailed_evaluations.append(
+                    {
+                        "round_num": evaluation.round_num,
+                        "job_title": evaluation.job_application.job_location.job_id.job_title,
+                        "interviewer_name": interviewer_name,
+                        "score": evaluation.score,
+                        "remarks": evaluation.remarks,
+                        "primary_skills_rating": evaluation.primary_skills_rating,
+                        "secondary_skills_ratings": evaluation.secondary_skills_ratings,
+                        "status": evaluation.status,
+                        "comments": evaluation.comments,
+                    }
+                )
 
             return Response(
                 {
-                    "feedback": all_feedbacks,
+                    "feedback": detailed_evaluations,
                     "applied_jobs": applied_jobs_list,
                     "candidate_data": candidate_data,
                 },
@@ -741,7 +888,22 @@ class CandidateStatusForJobView(APIView):
 
         try:
             job_details = get_object_or_404(JobPostings, id=job_id)
-            candidate = get_object_or_404(CandidateProfile, id=candidate_id)
+            try:
+                candidate = CandidateProfile.objects.get(id=candidate_id)
+            except CandidateProfile.DoesNotExist:
+                # Fallback: Check if the ID belongs to a CandidateResume and find profile by email
+                resume = CandidateResume.objects.filter(id=candidate_id).first()
+                candidate = None
+                if resume and resume.candidate_email:
+                    candidate = CandidateProfile.objects.filter(
+                        email=resume.candidate_email
+                    ).first()
+
+                if not candidate:
+                    return Response(
+                        {"error": "Candidate profile not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
 
             is_new_position = (
                 not JobPostings.objects.filter(
@@ -754,16 +916,17 @@ class CandidateStatusForJobView(APIView):
             candidate_skills = (
                 set(candidate.skills.split(",")) if candidate.skills else set()
             )
-            job_skills = set(
-                job_details.primary_skills.split(",")
-                + job_details.secondary_skills.split(",")
+            job_skill_names = set(
+                SkillMetricsModel.objects.filter(job_id=job_details).values_list(
+                    "skill_name", flat=True
+                )
             )
 
-            matched_skills = list(candidate_skills & job_skills)
-            unmatched_skills = list(job_skills - candidate_skills)
+            matched_skills = list(candidate_skills & job_skill_names)
+            unmatched_skills = list(job_skill_names - candidate_skills)
 
             job_application = JobApplication.objects.filter(
-                resume__candidate_name=candidate.name, job_id=job_id
+                resume__candidate_email=candidate.email, job_location__job_id=job_id
             ).first()
             if not job_application:
                 return Response(
@@ -825,7 +988,6 @@ class CandidateStatusForJobView(APIView):
                 "new_position": is_new_position,
                 "job_experience": job_details.years_of_experience,
                 "job_graduation": job_details.qualifications,
-                "num_of_positions": job_details.num_of_positions,
                 "created_by": job_details.username.username,
                 "created_at": job_details.created_at,
                 "all_rounds": total_rounds,
@@ -901,6 +1063,12 @@ Interviewers are waiting to check your profile
 # list of invoices that are generated are placed here
 class Invoices(APIView):
     def get(self, request):
+        print(
+            "DEBUG: Invoices.get called for user:",
+            request.user.email,
+            "User ID:",
+            request.user.id,
+        )
         try:
             invoices = []
             html_list = []
@@ -919,12 +1087,15 @@ class Invoices(APIView):
 
                 invoice_data = [
                     {
+                        "id": invoice.id,
                         "invoice_code": invoice.invoice_code,
                         "payment_status": invoice.payment_status,
                         "scheduled_at": invoice.scheduled_date,
                         "org_email": invoice.organization.manager.email,
                         "html": html["html"],
                         "payment_verification": invoice.payment_verification,
+                        "agency_code": invoice.organization.org_code,
+                        "final_price": invoice.final_price,
                     }
                     for invoice, html in zip(invoices, html_list)
                 ]
@@ -951,6 +1122,7 @@ class Invoices(APIView):
                 if invoices:
                     invoice_data = [
                         {
+                            "id": invoice.id,
                             "invoice_code": invoice.invoice_code,
                             "scheduled_date": invoice.scheduled_date.date(),
                             "invoice_status": invoice.invoice_status,
@@ -959,6 +1131,8 @@ class Invoices(APIView):
                             "org_email": invoice.organization.manager.email,
                             "html": html["html"],
                             "payment_verification": invoice.payment_verification,
+                            "agency_code": invoice.organization.org_code,
+                            "final_price": invoice.final_price,
                         }
                         for invoice, html in zip(invoices, html_list)
                     ]
@@ -971,15 +1145,19 @@ class Invoices(APIView):
                 )
 
             elif request.user.role == "accountant":
-                accountant = Accountants.objects.get(user=request.user)
-                if accountant:
-                    invoices = InvoiceGenerated.objects.filter(
-                        organization=accountant.organization
+                accountant = Accountants.objects.filter(user=request.user).first()
+                if not accountant:
+                    return Response(
+                        {"error": "Accountant profile not found"},
+                        status=status.HTTP_404_NOT_FOUND,
                     )
-                    for invoice in invoices:
-                        context = create_invoice_context(invoice)
-                        html = generate_invoice(context)
-                        html_list.append({"invoice": invoice, "html": html})
+                invoices = InvoiceGenerated.objects.filter(
+                    organization=accountant.organization
+                )
+                for invoice in invoices:
+                    context = create_invoice_context(invoice.id)
+                    html = generate_invoice(context)
+                    html_list.append({"invoice": invoice, "html": html})
 
             else:
                 return Response(
@@ -989,23 +1167,28 @@ class Invoices(APIView):
             if invoices:
                 invoice_data = [
                     {
+                        "id": invoice.id,
                         "invoice_code": invoice.invoice_code,
                         "payment_status": invoice.payment_status,
                         "scheduled_at": invoice.scheduled_date,
                         "org_email": invoice.organization.manager.email,
                         "html": html["html"],
                         "payment_verification": invoice.payment_verification,
+                        "agency_code": invoice.organization.org_code,
+                        "final_price": invoice.final_price,
                     }
                     for invoice, html in zip(invoices, html_list)
                 ]
                 return Response({"invoices": invoice_data}, status=status.HTTP_200_OK)
 
-            return Response(
-                {"error": "No invoices found."}, status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"invoices": []}, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"{e}")
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def put(self, request):
         invoice_id = request.data.get("invoice_id")
@@ -1752,7 +1935,9 @@ class GetNotifications(APIView):
                 )
 
             # Otherwise, return all notifications for the user
-            notifications = Notifications.objects.filter(receiver=request.user)
+            notifications = Notifications.objects.filter(
+                receiver=request.user
+            ).order_by("-created_at")
             serializer = NotificationsSerializer(notifications, many=True)
             return Response({"data": serializer.data}, status=status.HTTP_200_OK)
 
@@ -1918,9 +2103,38 @@ class NotificationStatusChange(APIView):
 
             for notification in notifications:
                 notification.seen = True
+                notification.visited = True
                 notification.save()
             return Response(
                 {"message": "Status updated successfully"}, status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class NotificationVisitedChange(APIView):
+    def put(self, request):
+        try:
+            user = request.user
+            category = request.data.get("category")
+
+            if type(category) == list:
+                notifications = Notifications.objects.filter(
+                    receiver=user, visited=False, category__in=category
+                )
+            else:
+                notifications = Notifications.objects.filter(
+                    receiver=user, visited=False, category=category
+                )
+
+            for notification in notifications:
+                notification.visited = True
+                notification.save()
+            return Response(
+                {"message": "Visited status updated successfully"},
+                status=status.HTTP_200_OK,
             )
 
         except Exception as e:
@@ -1937,6 +2151,23 @@ class CompleteApplicationDetailsView(APIView):
 
             application_id = request.GET.get("application_id")
             application = JobApplication.objects.get(id=application_id)
+
+            # Restrict access for clients if job is closed or expired
+            if request.user.role == "client":
+                if application.job_location.status in [
+                    "closed",
+                    "expired",
+                ] or application.job_location.job_id.status in ["closed", "expired"]:
+                    is_joined = SelectedCandidates.objects.filter(
+                        application=application, joining_status="joined"
+                    ).exists()
+                    if not is_joined:
+                        return Response(
+                            {
+                                "error": "Profile access is restricted for closed or expired jobs."
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
 
             candidate_evaluations = CandidateEvaluation.objects.filter(
                 job_application=application

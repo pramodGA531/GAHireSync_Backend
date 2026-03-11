@@ -112,6 +112,115 @@ class InterviewerDashboardView(APIView):
             )
 
 
+class NewInterviewerDashboardView(APIView):
+    permission_classes = [IsInterviewer]
+
+    def get(self, request):
+        try:
+            user = request.user
+            date_str = request.GET.get("date")
+            try:
+                today = (
+                    datetime.strptime(date_str, "%Y-%m-%d").date()
+                    if date_str
+                    else timezone.localdate()
+                )
+            except ValueError:
+                today = timezone.localdate()
+
+            interviewer_details = InterviewerDetails.objects.filter(name=user)
+            first_details = interviewer_details.first()
+            interviewer_name = (
+                first_details.name.username if first_details else user.username
+            )
+
+            todays_interviews = (
+                InterviewSchedule.objects.filter(
+                    interviewer__in=interviewer_details, scheduled_date=today
+                )
+                .select_related("candidate", "job_location", "job_location__job_id")
+                .order_by("from_time")
+            )
+
+            todays_interviews_list = []
+            for interview in todays_interviews:
+                todays_interviews_list.append(
+                    {
+                        "id": interview.id,
+                        "candidate_name": interview.candidate.candidate_name,
+                        "job_title": interview.job_location.job_id.job_title,
+                        "round_num": interview.round_num,
+                        "from_time": (
+                            interview.from_time.strftime("%H:%M")
+                            if interview.from_time
+                            else "00:00"
+                        ),
+                        "to_time": (
+                            interview.to_time.strftime("%H:%M")
+                            if interview.to_time
+                            else "00:00"
+                        ),
+                        "formatted_time": f"{interview.from_time.strftime('%I:%M %p') if interview.from_time else '00:00'} - {interview.to_time.strftime('%I:%M %p') if interview.to_time else '00:00'}",
+                        "status": interview.status,
+                    }
+                )
+
+            # Missed Interviews (Scheduled date < today AND pending)
+            missed_interviews = (
+                InterviewSchedule.objects.filter(
+                    interviewer__in=interviewer_details,
+                    scheduled_date__lt=today,
+                    status="pending",
+                )
+                .select_related("candidate", "job_location", "job_location__job_id")
+                .order_by("-scheduled_date", "-from_time")
+            )
+
+            missed_list = []
+            for interview in missed_interviews:
+                missed_list.append(
+                    {
+                        "id": interview.id,
+                        "candidate_name": interview.candidate.candidate_name,
+                        "job_title": interview.job_location.job_id.job_title,
+                        "round_name": f"Round {interview.round_num}",
+                        "formatted_time": f"{interview.from_time.strftime('%I:%M %p') if interview.from_time else '00:00'} - {interview.to_time.strftime('%I:%M %p') if interview.to_time else '00:00'} ({interview.scheduled_date.strftime('%d-%m-%Y')})",
+                    }
+                )
+
+            # Total stats
+            assigned_interviews = InterviewSchedule.objects.filter(
+                interviewer__in=interviewer_details
+            )
+            total_assigned = assigned_interviews.count()
+            total_completed = assigned_interviews.filter(status="completed").count()
+            total_pending = assigned_interviews.filter(status="pending").count()
+
+            return Response(
+                {
+                    "interviewer_name": interviewer_name,
+                    "stats": {
+                        "assigned": total_assigned,
+                        "completed": total_completed,
+                        "pending": total_pending,
+                        "today": len(todays_interviews_list),
+                    },
+                    "today_interviews": todays_interviews_list,
+                    "missed_interviews": missed_list,
+                    "pending_reviews": missed_list,  # Using `missed_list` since they represent interviews that have not yet had their review updated
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            import traceback
+
+            print(traceback.format_exc())
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class ScheduledInterviewsView(APIView):
     permission_classes = [IsInterviewer]
     pagination_class = TenResultsPagination
@@ -435,17 +544,19 @@ class PromoteCandidateView(APIView):
                 name__email=application.resume.candidate_email
             )
 
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating=primary_skills,
-                secondary_skills_ratings=secondary_skills,
-                candidate=candidate,
-                round_num=round_num,
-                remarks=remarks,
-                status="SELECTED",
+            remarks, created = CandidateEvaluation.objects.update_or_create(
                 job_application=application,
-                score=score,
-                job_location=application.job_location,
-                interview_schedule=application.next_interview,
+                round_num=round_num,
+                defaults={
+                    "primary_skills_rating": primary_skills,
+                    "secondary_skills_ratings": secondary_skills,
+                    "candidate": candidate,
+                    "remarks": remarks,
+                    "status": "SELECTED",
+                    "score": score,
+                    "job_location": application.job_location,
+                    "interview_schedule": application.next_interview,
+                },
             )
 
             application.next_interview.status = "completed"
@@ -490,6 +601,43 @@ class PromoteCandidateView(APIView):
                     f"Our team will contact you regarding your availability.\n\n"
                     f"Stay tuned!\n\n"
                 ),
+            )
+
+            # Emails for Candidate and Recruiter
+            promo_subject = f"Interview Update: You've qualified for the next round! - {job.job_title}"
+            candidate_promo_body = f"""
+            <html>
+            <body>
+                <p>Dear {customCand.username},</p>
+                <p>Congratulations! We are pleased to inform you that you have successfully cleared <strong>Round {application.round_num-1}</strong> for the position of <strong>{job.job_title}</strong>.</p>
+                <p>Our team will be in touch shortly to schedule your next interview (Round {application.round_num}).</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=promo_subject,
+                body=candidate_promo_body,
+                to_email=[customCand.email],
+            )
+
+            recruiter_promo_subject = (
+                f"Candidate Promoted: {customCand.username} for {job.job_title}"
+            )
+            recruiter_promo_body = f"""
+            <html>
+            <body>
+                <p>Hello,</p>
+                <p>The candidate <strong>{customCand.username}</strong> has cleared <strong>Round {application.round_num-1}</strong> for the position of <strong>{job.job_title}</strong>.</p>
+                <p>Please coordinate with the candidate and interviewer to schedule the next round (Round {application.round_num}).</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=recruiter_promo_subject,
+                body=recruiter_promo_body,
+                to_email=[application.attached_to.email],
             )
 
             # Notification to Manager (Feedback Added)
@@ -542,17 +690,19 @@ class RejectCandidate(APIView):
                 name__username=application.resume.candidate_name
             )
 
-            remarks = CandidateEvaluation.objects.create(
-                primary_skills_rating=primary_skills,
-                secondary_skills_ratings=secondary_skills,
-                candidate=candidate,
-                round_num=round_num,
-                remarks=remarks,
-                status="REJECTED",
+            remarks, created = CandidateEvaluation.objects.update_or_create(
                 job_application=application,
-                score=score,
-                job_location=application.job_location,
-                interview_schedule=application.next_interview,
+                round_num=round_num,
+                defaults={
+                    "primary_skills_rating": primary_skills,
+                    "secondary_skills_ratings": secondary_skills,
+                    "candidate": candidate,
+                    "remarks": remarks,
+                    "status": "REJECTED",
+                    "score": score,
+                    "job_location": application.job_location,
+                    "interview_schedule": application.next_interview,
+                },
             )
             application.next_interview.status = "completed"
             application.next_interview.save()
@@ -591,6 +741,43 @@ class RejectCandidate(APIView):
                     f"After careful consideration following your interview for round {application.next_interview.round_num}, "
                     f"we regret to inform you that we will not be moving forward with your application at this time.\n\n"
                 ),
+            )
+
+            # Emails for Candidate and Recruiter
+            rejection_subject = f"Update on your application for {job.job_title}"
+            candidate_rej_body = f"""
+            <html>
+            <body>
+                <p>Dear {customCand.username},</p>
+                <p>Thank you for giving us the opportunity to interview you for the position of <strong>{job.job_title}</strong>.</p>
+                <p>After careful consideration of your qualifications and our recent interview (Round {application.next_interview.round_num}), we regret to inform you that we will not be moving forward with your application at this time.</p>
+                <p>We wish you every success in your professional endeavors.</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=rejection_subject,
+                body=candidate_rej_body,
+                to_email=[customCand.email],
+            )
+
+            recruiter_rej_subject = (
+                f"Candidate Rejected: {customCand.username} for {job.job_title}"
+            )
+            recruiter_rej_body = f"""
+            <html>
+            <body>
+                <p>Hello,</p>
+                <p>The candidate <strong>{customCand.username}</strong> has been rejected after <strong>Round {application.next_interview.round_num}</strong> for the position of <strong>{job.job_title}</strong>.</p>
+                <p>Best Regards,<br>HireSync Team</p>
+            </body>
+            </html>
+            """
+            send_custom_mail(
+                subject=recruiter_rej_subject,
+                body=recruiter_rej_body,
+                to_email=[application.attached_to.email],
             )
 
             # Notification to Manager (Feedback Added)
@@ -727,17 +914,19 @@ HireSync.
 
             with transaction.atomic():
 
-                CandidateEvaluation.objects.create(
-                    primary_skills_rating=primary_skills,
-                    secondary_skills_ratings=secondary_skills,
-                    candidate=candidate,
-                    round_num=round_num,
-                    remarks=remarks,
-                    status="SELECTED",
+                remarks_obj, created = CandidateEvaluation.objects.update_or_create(
                     job_application=application,
-                    score=score,
-                    job_location=application.job_location,
-                    interview_schedule=application.next_interview,
+                    round_num=round_num,
+                    defaults={
+                        "primary_skills_rating": primary_skills,
+                        "secondary_skills_ratings": secondary_skills,
+                        "candidate": candidate,
+                        "remarks": remarks,
+                        "status": "SELECTED",
+                        "score": score,
+                        "job_location": application.job_location,
+                        "interview_schedule": application.next_interview,
+                    },
                 )
                 application.next_interview.status = "completed"
                 application.next_interview.save()
@@ -794,6 +983,43 @@ HireSync.
                     ),
                 )
 
+                # Emails for Candidate and Recruiter
+                final_subject = f"Interview Process Completed: {job.job_title}"
+                candidate_final_body = f"""
+                <html>
+                <body>
+                    <p>Dear {customCand.username},</p>
+                    <p>We are pleased to inform you that you have <strong>successfully cleared all rounds</strong> of the interview process for the position of <strong>{job.job_title}</strong>.</p>
+                    <p>Your profile is now under final review by the hiring team. We will get back to you shortly with the final decision.</p>
+                    <p>Best Regards,<br>HireSync Team</p>
+                </body>
+                </html>
+                """
+                send_custom_mail(
+                    subject=final_subject,
+                    body=candidate_final_body,
+                    to_email=[customCand.email],
+                )
+
+                recruiter_final_subject = (
+                    f"All Rounds Cleared: {customCand.username} for {job.job_title}"
+                )
+                recruiter_final_body = f"""
+                <html>
+                <body>
+                    <p>Hello,</p>
+                    <p>The candidate <strong>{customCand.username}</strong> has successfully <strong>cleared all interview rounds</strong> for the position of <strong>{job.job_title}</strong>.</p>
+                    <p>The profile is now with the client for final selection. Please follow up with the client for the final update.</p>
+                    <p>Best Regards,<br>HireSync Team</p>
+                </body>
+                </html>
+                """
+                send_custom_mail(
+                    subject=recruiter_final_subject,
+                    body=recruiter_final_body,
+                    to_email=[application.attached_to.email],
+                )
+
                 # Notification to Manager (Feedback Added - All Rounds Cleared)
                 manager = job.organization.manager
                 if manager:
@@ -840,19 +1066,18 @@ class InterviewerAllAlerts(APIView):
     def get(self, request):
         try:
             all_notifications = Notifications.objects.filter(
-                seen=False, receiver=request.user
+                visited=False, receiver=request.user
             )
             new_jobs = 0
             scheduled_interviews = 0
+            upcoming_interviews = 0
             for notification in all_notifications:
                 if notification.category == "assign_interviewer":
                     new_jobs += 1
+                elif notification.category == "schedule_interview":
+                    upcoming_interviews += 1
                 else:
                     scheduled_interviews += 1
-
-            upcoming_interviews = InterviewSchedule.objects.filter(
-                interviewer__name=request.user, status="scheduled"
-            ).count()
 
             data = {
                 "new_jobs": new_jobs,

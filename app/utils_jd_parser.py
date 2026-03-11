@@ -5,6 +5,7 @@ from .utils import extract_text_from_file
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+
 def parse_job_description(file_obj):
     """
     Parses a PDF or DOCX job description file using Gemini to extract structured data.
@@ -16,14 +17,14 @@ def parse_job_description(file_obj):
     try:
         # 1. Extract Text
         text = extract_text_from_file(file_obj)
-        
+
         if not text or "Unsupported file format" in text:
             print("Failed to extract text from file.")
             return {}
 
         # 2. Use Gemini to structure the data
         model = genai.GenerativeModel("gemini-2.5-flash")
-        
+
         prompt = f"""
         You are an expert HR assistant. Your task is to extract structured information from the following Job Description text.
         
@@ -70,7 +71,7 @@ def parse_job_description(file_obj):
         response = model.generate_content(prompt)
         print(response)
         response_text = response.text.strip()
-        
+
         # Clean up if the model adds markdown code blocks despite instructions
         if response_text.startswith("```json"):
             response_text = response_text[7:]
@@ -78,7 +79,7 @@ def parse_job_description(file_obj):
             response_text = response_text[3:]
         if response_text.endswith("```"):
             response_text = response_text[:-3]
-            
+
         structured_data = json.loads(response_text)
         return structured_data
 

@@ -36,10 +36,15 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 frontend_url = os.environ["FRONTENDURL"]
 
 
-def generate_passwrord(length=15):
+def generate_password(length=15):
     alphabet = string.ascii_letters + string.digits
     password = "".join(secrets.choice(alphabet) for _ in range(length))
     return password
+
+
+def generate_passwrord(length=15):
+    """Compatibility wrapper for typoed function name"""
+    return generate_password(length)
 
 
 def extract_text_from_file(file):
@@ -401,8 +406,23 @@ def analyse_resume(jd, resume):
 
 
 def generate_invoice(context):
-    html_content = render_to_string("invoice.html", context=context)
-    return html_content
+    try:
+        with open("debug_invoice.log", "w", encoding="utf-8") as f:
+            f.write(f"Context Keys: {list(context.keys())}\n")
+            f.write(f"Context Date: {context.get('date')}\n")
+            f.write(f"Context GST: {context.get('buyer_gst_no')}\n")
+
+            html_content = render_to_string("invoice.html", context=context)
+            f.write("-" * 20 + "\n")
+            f.write(html_content[:500])  # Log first 500 chars
+
+        if "{{ date }}" in html_content:
+            print("CRITICAL: Template variables NOT rendered!")
+        return html_content
+    except Exception as e:
+        with open("debug_invoice_error.log", "w") as f:
+            f.write(str(e))
+        return "Error generating invoice"
 
 
 class EmailVerificatioinTokenGenerator(PasswordResetTokenGenerator):
@@ -467,7 +487,12 @@ def calculate_profile_percentage(candidate):
 class TenResultsPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
-    max_page_size = 10
+
+
+class LargeResultsPagination(PageNumberPagination):
+    page_size = 1000
+    page_size_query_param = "page_size"
+    max_page_size = 1000
 
 
 def calculate_invoice_amounts(selected_candidate, terms, client_gst, org_gst):
@@ -522,14 +547,14 @@ def create_invoice_context(invoice_id):
         "date": invoice.created_at.date(),
         "service_provider_name": organization.name,
         "candidate_name": selected_candidate.candidate.name,
-        "client_name": job.username.username,
+        "client_name": job.username.username or "",
         "client_email": job.username.email,
         "job_title": job.job_title,
-        "buyer_address": client_details.company_address,
-        "buyer_gst_no": client_details.gst_number,
-        "buyer_contact_number": client_details.contact_number,
-        "service_provider_address": job.organization.company_address,
-        "service_provider_gstin": job.organization.gst_number,
+        "buyer_address": client_details.company_address or "",
+        "buyer_gst_no": client_details.gst_number or "",
+        "buyer_contact_number": client_details.contact_number or "",
+        "service_provider_address": job.organization.company_address or "",
+        "service_provider_gstin": job.organization.gst_number or "",
         "service_provider_contact_person": job.organization.manager,
         "service_provider_email": job.organization.manager.email,
         "service_provider_mobile": job.organization.contact_number,
@@ -587,8 +612,15 @@ def sendemailTemplate(subject, template_name, context, recipient_list):
 def send_custom_mail(subject, body, to_email):
     """
     Sends a basic email. Synchronous on localhost, Asynchronous on others.
+    Automatically detects if body contains HTML tags and sets subtype accordingly.
     """
     try:
+        is_html = (
+            "<html" in body.lower()
+            or "<p" in body.lower()
+            or "<strong>" in body.lower()
+        )
+
         if settings.ENVIRONMENT == "localhost":
             from_email = settings.DEFAULT_FROM_EMAIL
             email = EmailMessage(
@@ -597,11 +629,18 @@ def send_custom_mail(subject, body, to_email):
                 from_email=from_email,
                 to=to_email if isinstance(to_email, list) else [to_email],
             )
+            if is_html:
+                email.content_subtype = "html"
             email.send(fail_silently=False)
         else:
-            from .tasks import send_celery_mail
+            if is_html:
+                from .tasks import send_html_email_task
 
-            send_celery_mail.delay(subject, body, to_email)
+                send_html_email_task.delay(subject, body, to_email)
+            else:
+                from .tasks import send_celery_mail
+
+                send_celery_mail.delay(subject, body, to_email)
     except Exception as e:
         print(f"Failed to send custom email: {e}")
 
@@ -763,7 +802,96 @@ HireSync Team
     )
 
 
+def send_payment_success_email(user, plan, org_plan):
+    """
+    Sends a unique payment success email to the user after Razorpay verification.
+    """
+    subject = "Payment Successful – Welcome to HireSync"
+    message = f"""
+Dear {user.username},
+
+We are pleased to inform you that your payment for the {plan.name} plan has been successfully processed.
+
+Payment Details:
+- Plan: {plan.name}
+- Amount Paid: ₹{org_plan.amount_paid}
+- Payment Reference: {org_plan.payment_reference}
+- Validity: {plan.duration_days} days (Expires on {org_plan.expiry_date.strftime('%Y-%m-%d')})
+
+Your account is now active, and you can enjoy all the premium features of your selected plan.
+
+If you have any questions regarding your subscription, please feel free to contact our support team at support@hiresync.com.
+
+Best regards,
+The HireSync Team
+"""
+    send_custom_mail(
+        subject=subject,
+        body=message,
+        to_email=[user.email],
+    )
+
+
 def convert_pdf_to_images(request):
+    pass
+
+
+def create_candidate_account(candidate_name, candidate_email):
+    """
+    Ensures a candidate has a CustomUser and CandidateProfile.
+    Sends a welcome email with credentials if a new account is created.
+    Returns (user, profile)
+    """
+    from django.db import transaction
+
+    # Check if user already exists
+    user = CustomUser.objects.filter(email=candidate_email).first()
+    is_new_user = False
+    generated_password = None
+
+    with transaction.atomic():
+        if not user:
+            is_new_user = True
+            generated_password = generate_password(8)
+            user = CustomUser.objects.create_user(
+                username=candidate_name,
+                email=candidate_email,
+                password=generated_password,
+                role=CustomUser.CANDIDATE,
+            )
+            user.is_verified = True  # Auto-verify if created via recruiter/client
+            user.save()
+
+        # Ensure CandidateProfile exists
+        profile, created = CandidateProfile.objects.get_or_create(
+            name=user, defaults={"email": candidate_email, "first_name": candidate_name}
+        )
+
+    if is_new_user:
+        # Send welcome email
+        subject = "Account Created on HireSync"
+        message = f"""
+Dear {candidate_name},
+
+Welcome to HireSync! Your candidate account has been successfully created.
+
+Here are your account details:
+Username: {candidate_name}
+Email: {candidate_email}
+Password: {generated_password}
+
+Please log in to your account and change your password for security purposes.
+
+Login Link: {settings.FRONTENDURL}/login
+
+If you have any questions, feel free to contact our support team.
+
+Regards,
+HireSync Team
+"""
+        send_custom_mail(subject=subject, body=message, to_email=[candidate_email])
+
+    return user, profile
     # resume_path = request.GET.get('resume')
     pdf_url = request.GET.get(
         "resume"
@@ -969,7 +1097,7 @@ def update_location_status(location_id):
     try:
         location_instance = JobLocationsModel.objects.get(id=location_id)
         location_instance.positions_closed += 1
-        if location_instance.positions_closed == location_instance.positions:
+        if location_instance.positions_closed >= location_instance.positions:
             location_instance.status = "closed"
             applications = JobApplication.objects.filter(
                 Q(job_location=location_id), ~Q(status__in=["rejected", "selected"])

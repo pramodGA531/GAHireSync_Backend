@@ -69,65 +69,207 @@ class CandidateProfileView(APIView):
             if not request.user.is_authenticated:
                 return Response(
                     {"error": "User is not authenticated"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    status=status.HTTP_401_UNAUTHORIZED,
                 )
 
             if request.user.role != "candidate":
                 return Response(
                     {"error": "You are not allowed to run this"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             user = request.user
             try:
                 candidate_profile = CandidateProfile.objects.get(name=user)
-                data = request.data
+                data = request.data.copy()  # Make mutable Copy
+                # data = request.data
 
-                skills = data.get("skills")
+                # skills = data.get("skills")
 
-                date_str = data.get("date_of_birth", None)
+                # date_str = data.get("date_of_birth", None)
 
-                formatted_date = date_str
+                # formatted_date = date_str
 
-                profile = request.FILES.get("profile", None)
-                resume = request.FILES.get("resume", None)
-                input_data_json = {
-                    "profile": profile,
-                    "resume": resume,
-                    "about": data.get("about", ""),
-                    "first_name": data.get("first_name", ""),
-                    "middle_name": data.get("middle_name", ""),
-                    "last_name": data.get("last_name", " "),
-                    "communication_address": data.get("communication_address", ""),
-                    "permanent_address": data.get("permanent_address", ""),
-                    "phone_num": data.get("phone_num", ""),
-                    "date_of_birth": formatted_date,
-                    "designation": data.get("designation", ""),
-                    "linked_in": data.get("linked_in", None),
-                    "instagram": data.get("instagram", None),
-                    "facebook": data.get("facebook", None),
-                    "blood_group": data.get("blood_group"),
-                    "experience_years": data.get("experience_years", ""),
-                    "skills": skills,
-                }
+                # profile = request.FILES.get("profile", None)
+                # resume = request.FILES.get("resume", None)
+                # input_data_json = {
+                #     "profile": profile,
+                #     "resume": resume,
+                #     "about": data.get("about", ""),
+                #     "first_name": data.get("first_name", ""),
+                #     "middle_name": data.get("middle_name", ""),
+                #     "last_name": data.get("last_name", " "),
+                #     "communication_address": data.get("communication_address", ""),
+                #     "permanent_address": data.get("permanent_address", ""),
+                #     "phone_num": data.get("phone_num", ""),
+                #     "date_of_birth": formatted_date,
+                #     "designation": data.get("designation", ""),
+                #     "linked_in": data.get("linked_in", None),
+                #     "instagram": data.get("instagram", None),
+                #     "facebook": data.get("facebook", None),
+                #     "blood_group": data.get("blood_group"),
+                #     "experience_years": data.get("experience_years", ""),
+                #     "skills": skills,
+                # }
+                # 1. Handle Resume Upload (Save to CandidateResume)
+                resume_file = request.FILES.get("resume")
+                print(f"DEBUG: resume_file: {resume_file}")
+                print(f"DEBUG: data resume before: {data.get('resume')}")
 
-                candidate_profile_serializer = CandidateProfileSerializer(
-                    instance=candidate_profile, data=input_data_json, partial=True
-                )
+                if resume_file:
+                    # Check if CandidateResume exists, else create
+                    existing_resumes = CandidateResume.objects.filter(
+                        candidate_email=user.email
+                    )   
+                    if existing_resumes.exists():
+                        candidate_resume = existing_resumes.first()
+                        # Clean up duplicates if any
+                        if existing_resumes.count() > 1:
+                            existing_resumes.exclude(id=candidate_resume.id).delete()
+                    else:
+                        candidate_resume = CandidateResume.objects.create(
+                            candidate_email=user.email,
+                            candidate_name=f"{user.first_name} {user.last_name}",
+                            contact_number=data.get("phone_num"),
+                        )
+                    candidate_resume.resume = resume_file
+                    # Update other fields if available
+                    if data.get("phone_num"):
+                        candidate_resume.contact_number = data.get("phone_num")
 
-                if candidate_profile_serializer.is_valid():
-                    candidate_profile_serializer.save()
-                    return Response(
-                        {"message": "Candidate Profile updated successfully"},
-                        status=status.HTTP_200_OK,
-                    )
+                    # Store common fields
 
+                    candidate_resume.save()
+
+                    # Also update profile's resume field for backward compatibility if needed,
+                    # or just rely on CandidateResume. For now, updating profile's resume too as per original code
+                    data["resume"] = resume_file
                 else:
-                    print(candidate_profile_serializer.errors)
-                    return Response(
-                        {"error": candidate_profile_serializer.errors},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                    # If no file uploaded, ensure "resume" is not in data (avoid string errors)
+                    if "resume" in data:
+                        print(f"DEBUG: Removing resume from data: {data['resume']}")
+                        del data["resume"]
+
+                print(f"DEBUG: data keys after: {data.keys()}")
+
+                # 2. Handle Skills (Save to CandidateSkills)
+                skills_json = data.get("skills")
+                if skills_json:
+                    import json
+
+                    try:
+                        skills_list = (
+                            json.loads(skills_json)
+                            if isinstance(skills_json, str)
+                            else skills_json
+                        )
+                        CandidateSkills.objects.filter(
+                            candidate=candidate_profile
+                        ).delete()
+                        new_skills = []
+                        for skill_item in skills_list:
+                            # Handle both string and object (label/value) formats
+                            skill_name_val = (
+                                skill_item["value"]
+                                if isinstance(skill_item, dict)
+                                and "value" in skill_item
+                                else str(skill_item)
+                            )
+
+                            new_skills.append(
+                                CandidateSkills(
+                                    candidate=candidate_profile,
+                                    skill_name=skill_name_val,
+                                    # store other metadata if available or default
+                                    metadata={"original": skill_item},
+                                )
+                            )
+                        CandidateSkills.objects.bulk_create(new_skills)
+
+                        # Also update text field for search/compatibility
+                        primary_skills = [s.skill_name for s in new_skills]
+                        data["primary_skills"] = ",".join(
+                            primary_skills
+                        )  # Use comma separated string
+                        data["skills"] = ",".join(
+                            primary_skills
+                        )  # Update main skills field too
+
+                    except json.JSONDecodeError:
+                        pass  # Handle error or log it
+
+                # 3. Handle Experience (Save to CandidateExperiences)
+                experiences_json = data.get("experiences")
+                if experiences_json:
+                    import json
+
+                    try:
+                        experiences_list = (
+                            json.loads(experiences_json)
+                            if isinstance(experiences_json, str)
+                            else experiences_json
+                        )
+
+                        # Replace all experiences - Full Update strategy for experiences list
+                        CandidateExperiences.objects.filter(
+                            candidate=candidate_profile
+                        ).delete()
+
+                        new_experiences = []
+                        for exp in experiences_list:
+                            # Parse dates
+                            from datetime import datetime
+
+                            # Helper to safely parse date or return None
+                            def parse_date(date_str):
+                                if not date_str:
+                                    return None
+                                try:
+                                    return datetime.strptime(
+                                        date_str, "%Y-%m-%d"
+                                    ).date()
+                                except ValueError:
+                                    return None
+
+                            start_date = parse_date(exp.get("startDate"))
+                            end_date = parse_date(exp.get("endDate"))
+
+                            is_working = exp.get("isWorking", False)
+                            # Ensure boolean
+                            if isinstance(is_working, str):
+                                is_working = is_working.lower() == "true"
+
+                            new_experiences.append(
+                                CandidateExperiences(
+                                    candidate=candidate_profile,
+                                    company_name=exp.get("organization"),
+                                    role=(
+                                        exp.get("description")
+                                        if not exp.get("role")
+                                        else exp.get("role")
+                                    ),  # Map description to role? or create role field
+                                    from_date=start_date,
+                                    to_date=end_date,
+                                    is_working=is_working,
+                                )
+                            )
+                        CandidateExperiences.objects.bulk_create(new_experiences)
+
+                    except json.JSONDecodeError:
+                        pass
+
+                # 4. Standard Profile Update
+                # Ensure date_of_birth is formatted
+                if data.get("dob"):
+                    data["date_of_birth"] = data.get("dob")
+
+                serializer = CandidateProfileSerializer(
+                    candidate_profile, data=data, partial=True
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
             except CandidateProfile.DoesNotExist:
                 return Response(
@@ -136,8 +278,10 @@ class CandidateProfileView(APIView):
                 )
 
         except Exception as e:
-            print(str(e))
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            print(f"Candidate Profile Update Error: {str(e)}")
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 # Candidate Experiences  Add or View
@@ -681,7 +825,7 @@ class CandidateAcceptJob(APIView):
             customCand = selected_candidate.candidate.name
             application = selected_candidate.application
             job = application.job_location.job_id
-            manager = job.organization
+            manager = job.organization.manager
             Notifications.objects.create(
                 sender=request.user,
                 receiver=application.attached_to,

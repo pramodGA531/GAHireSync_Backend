@@ -302,6 +302,7 @@ class JobLocationsModel(models.Model):
     OFFICE = "office"
     CLOSED = "closed"
     OPENED = "opened"
+    EXPIRED = "expired"
 
     WORK_CHOICES = [
         (REMOTE, "remote"),
@@ -309,7 +310,7 @@ class JobLocationsModel(models.Model):
         (OFFICE, "office"),
     ]
 
-    STATUS_CHOICES = [(OPENED, "opened"), (CLOSED, "closed")]
+    STATUS_CHOICES = [(OPENED, "opened"), (CLOSED, "closed"), (EXPIRED, "expired")]
 
     job_id = models.ForeignKey(JobPostings, on_delete=models.CASCADE)
     location = models.CharField(max_length=50)
@@ -698,6 +699,7 @@ class JobApplication(models.Model):
     next_interview = models.ForeignKey(
         InterviewSchedule, on_delete=models.CASCADE, blank=True, default=None, null=True
     )
+    is_replacement = models.BooleanField(default=False)
     application_date = models.DateTimeField(auto_now_add=True)
     feedback = models.TextField(blank=True, default=None, null=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -760,6 +762,13 @@ class NegotiationRequests(models.Model):
     accepted_date = models.DateTimeField(auto_now=True)
     reason = models.TextField(null=True, default="", blank=True)
     expiry_date = models.DateField(null=True, blank=True)
+    original_term = models.ForeignKey(
+        "ClientOrganizationTerms",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="negotiation_requests_linked",
+    )
 
     def __str__(self):
         return f"negotiation by {self.client_organization.client.name_of_organization}"
@@ -798,7 +807,20 @@ class CandidateProfile(models.Model):
         return self.name.username
 
     def get_primary_skills_list(self):
-        return self.primary_skills.split(",") if self.primary_skills else []
+        return self.skills.split(",") if self.primary_skills else []
+
+
+class CandidateSkills(models.Model):
+    candidate = models.ForeignKey(
+        CandidateProfile,
+        on_delete=models.CASCADE,
+        related_name="candidate_profile_skills",
+    )
+    skill_name = models.CharField(max_length=100)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"{self.candidate.name.username} - {self.skill_name}"
 
 
 class CandidateEvaluation(models.Model):
@@ -920,9 +942,24 @@ class RecruiterProfile(models.Model):
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="workng_in"
     )
+    target_in_rupees = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00
+    )
+    target_in_positions = models.IntegerField(default=0, blank=True, null=True)
 
     def __str__(self):
         return self.name.username
+
+
+class ManagerProfile(models.Model):
+    user = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, related_name="manager_profile"
+    )
+    target_in_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0.0)
+    target_in_positions = models.IntegerField(default=0)
+
+    def __str__(self):
+        return self.user.username
 
 
 class SelectedCandidates(models.Model):
@@ -1102,11 +1139,14 @@ class ReplacementCandidates(models.Model):
         blank=True,
     )
     replacement_within = models.DateField(blank=True, null=True)
+    suggested_candidates = models.JSONField(default=list, blank=True, null=True)
     status = models.CharField(
         max_length=50,
         default="pending",
         choices=SelectedCandidates.REPLACEMENT_STATUS_CHOICES,
     )
+    # reason = models.TextField(blank=True, null=True)
+    # created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
         return f"{self.replacement_with.resume.candidate_name}'s resume replace"
@@ -1293,6 +1333,7 @@ class Notifications(models.Model):
         REPLACEMENT_REQUEST = "replacement_request", "ReplacementRequest"
         REPLACEMENT_ACCEPTED = "replacement_accepted", "ReplacementAccepted"
         REPLACEMENT_REJECTED = "replacement_rejected", "ReplacementRejected"
+        JOB_ASSIGNED = "job_assigned", "JobAssigned"
 
     sender = models.ForeignKey(
         CustomUser,
@@ -1309,6 +1350,7 @@ class Notifications(models.Model):
     )
     subject = models.CharField(max_length=255)
     seen = models.BooleanField(default=False)  # If Not Seen Then Need
+    visited = models.BooleanField(default=False)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.CharField(
